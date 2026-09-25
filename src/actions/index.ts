@@ -9,6 +9,7 @@ import { deleteTapeImage, uploadImage } from '../lib/services/images';
 import { setEngagement } from '../lib/services/engagement';
 import { CommentError, createComment, deleteOwnComment, listComments } from '../lib/services/comments';
 import { moderateComment, setCommentBan, setUserRole } from '../lib/services/admin-community';
+import { continueReindex, enqueueFullReindex } from '../lib/services/search-admin';
 import { normalizeThai } from '../lib/thai';
 
 async function runCatalog<T>(action: () => Promise<T>): Promise<T> {
@@ -71,6 +72,10 @@ export const server = {
     users: {
       setRole: defineAdminAction({ input: z.object({ id: z.string().min(1), role: z.enum(['member', 'admin']) }), handler: ({ id, role }, context) => runComment(() => setUserRole(env.DB, context.user.id, id, role, env.ADMIN_EMAILS || '')) }),
       setCommentBan: defineAdminAction({ input: z.object({ id: z.string().min(1), banned: z.boolean() }), handler: ({ id, banned }) => runComment(() => setCommentBan(env.DB, id, banned)) }),
+    },
+    search: {
+      continue: defineAdminAction({ input: z.object({}), handler: () => continueReindex(env.DB) }),
+      rebuild: defineAdminAction({ input: z.object({}), handler: () => enqueueFullReindex(env.DB) }),
     },
     artists: {
       create: defineAdminAction({ input: z.object({ name: z.string().trim().min(1).max(200) }), handler: (input, context) => runCatalog(() => createArtist(env.DB, context.user.id, input.name)) }),

@@ -206,6 +206,8 @@ small { font-size: 13px; }
 .admin-filters { display: flex; gap: 12px; margin-top: 24px; border-bottom: 1px solid var(--rule); }
 .admin-filters a { padding: 8px 4px; color: var(--text-muted); border-bottom: 2px solid transparent; }
 .admin-filters a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+.reindex-control { padding: 16px 0; }
+.reindex-control > div { display: flex; flex-wrap: wrap; gap: 8px; }
 .engagement-counts span + span { border-left: 1px solid var(--border); padding-left: 12px; }
 .track-side { margin: 16px 0 24px; }
 .track-side h3 { color: var(--text-muted); }

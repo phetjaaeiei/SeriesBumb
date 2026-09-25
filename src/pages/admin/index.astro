@@ -1,6 +1,7 @@
 ---
 import { env } from 'cloudflare:workers';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
+import ReindexControl from '../../components/admin/ReindexControl';
 
 interface StatsRow {
   tapeCount: number;
@@ -11,11 +12,15 @@ interface StatsRow {
 }
 let stats: StatsRow = { tapeCount: 0, publishedTapeCount: 0, songCount: 0, userCount: 0, imageBytes: 0 };
 let dbBytes: number | null = null;
+let pendingReindex = 0;
+let rebuilding = false;
 try {
   const row = await env.DB.prepare('SELECT tapeCount, publishedTapeCount, songCount, userCount, imageBytes FROM site_stats WHERE id = 1').first<StatsRow>();
   if (row) stats = row;
   const probe = await env.DB.prepare('SELECT 1').run();
   dbBytes = probe.meta.size_after ?? null;
+  pendingReindex = (await env.DB.prepare('SELECT COUNT(*) AS count FROM search_queue').first<{ count: number }>())?.count ?? 0;
+  rebuilding = (await env.DB.prepare('SELECT reindexCursor FROM site_stats WHERE id = 1').first<{ reindexCursor: string | null }>())?.reindexCursor != null;
 } catch {
   // The dashboard shell remains useful before local migrations.
 }
@@ -42,4 +47,5 @@ const imageRatio = Math.min(stats.imageBytes / (10 * gigabyte), 1);
       <li><a href="/admin/collections">จัดการ Collection</a></li>
     </ul>
   </section>
+  <section class="section" aria-labelledby="search-index-title"><div class="section-heading"><h2 id="search-index-title">ดัชนีค้นหา</h2></div><ReindexControl initialPending={pendingReindex} initialRebuilding={rebuilding} client:only="react" /></section>
 </AdminLayout>

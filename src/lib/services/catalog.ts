@@ -3,6 +3,7 @@ import type { ReleaseType } from '../../db/enums';
 import { decadeOf, toCeYear, yearSortOf } from '../format';
 import { slugCandidates, SLUG_MAX, SLUG_RE } from '../slug';
 import { normalizeThai, thaiSortKey } from '../thai';
+import { reindexArtistDependents, reindexLabelDependents } from './search-admin';
 
 type EntityTable = 'artist' | 'label' | 'genre' | 'song' | 'tape' | 'collection';
 type SearchKind = Exclude<EntityTable, 'genre'>;
@@ -190,7 +191,7 @@ export async function saveArtist(db: D1Database, userId: string, input: {
   members?: { name: string; role?: string; years?: string | null; isCurrent?: boolean }[];
 }) {
   const name = requiredName(input.name, 'ชื่อศิลปิน');
-  const old = await db.prepare('SELECT slug, publishedTapeCount FROM artist WHERE id = ?').bind(input.id).first<{ slug: string; publishedTapeCount: number }>();
+  const old = await db.prepare('SELECT slug, name, publishedTapeCount FROM artist WHERE id = ?').bind(input.id).first<{ slug: string; name: string; publishedTapeCount: number }>();
   if (!old) throw new Error('ไม่พบศิลปินนี้');
   const slug = await uniqueSlug(db, 'artist', name, input.slug || undefined, input.id);
   const members = (input.members ?? []).slice(0, 40).map((member, position) => ({ id: crypto.randomUUID(), name: requiredName(member.name, 'ชื่อสมาชิก'), role: member.role || '', years: member.years || null, isCurrent: Number(!!member.isCurrent), position }));
@@ -202,6 +203,7 @@ export async function saveArtist(db: D1Database, userId: string, input: {
     ...indexStatements(db, 'artist', input.id, name, [name, input.nameAlt, ...members.map(member => member.name)].filter(Boolean).join(' | '), old.publishedTapeCount > 0),
     ...redirectStatements(db, `/artists/${old.slug}`, `/artists/${slug}`),
   ]);
+  if (name !== old.name) await reindexArtistDependents(db, input.id);
   return { id: input.id, slug };
 }
 
@@ -210,7 +212,7 @@ export async function saveLabel(db: D1Database, userId: string, input: {
   description?: string; logoKey?: string | null;
 }) {
   const name = requiredName(input.name, 'ชื่อค่าย');
-  const old = await db.prepare('SELECT slug, publishedTapeCount FROM label WHERE id = ?').bind(input.id).first<{ slug: string; publishedTapeCount: number }>();
+  const old = await db.prepare('SELECT slug, name, publishedTapeCount FROM label WHERE id = ?').bind(input.id).first<{ slug: string; name: string; publishedTapeCount: number }>();
   if (!old) throw new Error('ไม่พบค่ายนี้');
   const slug = await uniqueSlug(db, 'label', name, input.slug || undefined, input.id);
   await db.batch([
@@ -218,6 +220,7 @@ export async function saveLabel(db: D1Database, userId: string, input: {
     ...indexStatements(db, 'label', input.id, name, [name, input.nameAlt].filter(Boolean).join(' | '), old.publishedTapeCount > 0),
     ...redirectStatements(db, `/labels/${old.slug}`, `/labels/${slug}`),
   ]);
+  if (name !== old.name) await reindexLabelDependents(db, input.id);
   return { id: input.id, slug };
 }
 
