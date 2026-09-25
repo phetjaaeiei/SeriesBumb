@@ -20,6 +20,7 @@ export default [
     rules: {
       ...react.configs.flat.recommended.rules,
       'react/no-danger': 'error',
+      'react/react-in-jsx-scope': 'off',
     },
   },
 ];

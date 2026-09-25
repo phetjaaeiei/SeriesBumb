@@ -1,0 +1,22 @@
+---
+import { env } from 'cloudflare:workers';
+import AdminLayout from '../../../components/layout/AdminLayout.astro';
+import QuickCreate from '../../../components/admin/QuickCreate';
+type Kind = 'tapes' | 'songs' | 'artists' | 'labels' | 'genres' | 'collections';
+const tableMap = { tapes: 'tape', songs: 'song', artists: 'artist', labels: 'label', genres: 'genre', collections: 'collection' } as const;
+const labelMap = { tapes: 'เทป', songs: 'เพลง', artists: 'ศิลปิน', labels: 'ค่ายเพลง', genres: 'แนวเพลง', collections: 'Collection' } as const;
+const kind = Astro.params.kind as Kind;
+if (!Object.hasOwn(tableMap, kind)) return Astro.rewrite('/404');
+const table = tableMap[kind];
+const nameColumn = kind === 'artists' || kind === 'labels' || kind === 'genres' ? 'name' : 'title';
+const order = kind === 'genres' || kind === 'collections' ? 'position, id' : kind === 'artists' || kind === 'labels' ? 'nameSort, id' : 'updatedAt DESC, id DESC';
+const rows = (await env.DB.prepare(`SELECT id, slug, ${nameColumn} AS title${kind === 'tapes' || kind === 'collections' ? ', status' : ''} FROM ${table} ORDER BY ${order} LIMIT 100`).all<{ id: string; slug: string; title: string; status?: string }>()).results;
+---
+<AdminLayout title={`จัดการ${labelMap[kind]}`}>
+  <h1>จัดการ{labelMap[kind]}</h1>
+  <p class="page-lede">เพิ่มข้อมูลและเปิดแก้ไขรายการในคลัง</p>
+  <QuickCreate kind={kind} client:only="react" />
+  <section class="section" aria-labelledby="records-heading"><div class="section-heading"><h2 id="records-heading">รายการ{labelMap[kind]}</h2></div>
+    {rows.length ? <table class="data-table"><thead><tr><th scope="col">ชื่อ</th><th scope="col">ลิงก์</th><th scope="col">สถานะ</th></tr></thead><tbody>{rows.map(row => <tr><td><a href={`/admin/${kind}/${row.id}`}>{row.title}</a></td><td class="mono">{row.slug}</td><td>{row.status === 'draft' ? 'ร่าง' : row.status === 'published' ? 'เผยแพร่' : '—'}</td></tr>)}</tbody></table> : <p class="empty-state">ยังไม่มีรายการ</p>}
+  </section>
+</AdminLayout>
