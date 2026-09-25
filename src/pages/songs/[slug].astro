@@ -6,6 +6,9 @@ import InfoBox from '../../components/ui/InfoBox.astro';
 import Tabs from '../../components/ui/Tabs.astro';
 import { formatYear } from '../../lib/format';
 import { imageUrl } from '../../lib/urls';
+import EngagementButton from '../../components/islands/EngagementButton';
+import Comments from '../../components/islands/Comments';
+import { listComments } from '../../lib/services/comments';
 
 const slug = Astro.params.slug ?? '';
 const admin = Astro.locals.user?.role === 'admin';
@@ -21,19 +24,22 @@ const ogImage = firstOg && env.IMAGE_BASE_URL ? imageUrl(firstOg, env.IMAGE_BASE
 const tabs = [{ id: 'tapes', label: 'อยู่ในเทป' }];
 if (song.lyrics) tabs.push({ id: 'lyrics', label: 'เนื้อเพลง' });
 tabs.push({ id: 'comments', label: `คอมเมนต์ (${song.commentCount})` });
+const viewerId = Astro.locals.user?.id;
+const liked = song.publishedTapeCount > 0 && viewerId ? (await env.DB.prepare('SELECT 1 AS value FROM song_like WHERE userId = ? AND songId = ?').bind(viewerId, song.id).first<{ value: number }>()) !== null : false;
+const firstComments = song.publishedTapeCount > 0 ? await listComments(env.DB, { songId: song.id }, null, viewerId) : null;
 ---
 <BaseLayout title={song.title} description={`เพลง ${song.title} โดย ${singerNames} อยู่ใน ${song.publishedTapeCount} เทป | ซีรี่ย์บั้ม เทปเพลง`} canonicalPath={`/songs/${slug}`} ogImage={ogImage} noindex={song.publishedTapeCount === 0}>
   {song.publishedTapeCount === 0 && <p class="draft-banner">ยังไม่อยู่ในเทปเผยแพร่ · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
   <h1>{song.title}</h1>{song.titleAlt && <p class="subheading">{song.titleAlt}</p>}
   <InfoBox items={[{ label: 'ผู้ร้อง', value: singerNames }, { label: 'คำร้อง', value: song.lyricist }, { label: 'ทำนอง', value: song.composer }, { label: 'เรียบเรียง', value: song.arranger }]} />
-  <p class="engagement-counts">ถูกใจ <strong class="mono">{song.likeCount}</strong></p>
+  {song.publishedTapeCount > 0 && <p class="engagement-counts"><EngagementButton kind="songLike" targetId={song.id} initialValue={liked} initialCount={song.likeCount} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /></p>}
   {song.notes && <p class="long-text section soft">{song.notes}</p>}
   <Tabs tabs={tabs}>
     <section id="tapes" class="tab-panel" data-tab-panel><h2>อยู่ในเทป</h2>
       {tapes.results.length ? <table class="data-table"><thead><tr><th scope="col">เทป</th><th scope="col">ปี</th><th scope="col">ตำแหน่ง</th></tr></thead><tbody>{tapes.results.map(row => <tr><td><a href={`/tapes/${encodeURIComponent(row.slug)}#songs`}>{row.title}</a></td><td class="mono">{formatYear(row.year)}</td><td class="mono">หน้า {row.side} #{row.position}</td></tr>)}</tbody></table> : <p class="empty-state">ยังไม่มีเทปเผยแพร่ที่มีเพลงนี้</p>}
     </section>
     {song.lyrics && <section id="lyrics" class="tab-panel" data-tab-panel><h2>เนื้อเพลง</h2><p class="long-text">{song.lyrics}</p></section>}
-    <section id="comments" class="tab-panel" data-tab-panel><h2>คอมเมนต์</h2><p class="empty-state">ระบบคอมเมนต์กำลังจัดเตรียม</p></section>
+    <section id="comments" class="tab-panel" data-tab-panel><h2>คอมเมนต์</h2>{firstComments ? <Comments songId={song.id} initialItems={firstComments.items} initialCursor={firstComments.nextCursor} initialCount={song.commentCount} authenticated={Boolean(viewerId)} banned={Boolean(Astro.locals.user?.commentBanned)} loginNext={Astro.url.pathname} client:visible /> : <p class="empty-state">เพลงนี้ยังไม่อยู่ในเทปที่เผยแพร่</p>}</section>
   </Tabs>
   <CreditLine createdByName={song.createdByName} createdAt={song.createdAt} updatedByName={song.updatedByName} updatedAt={song.updatedAt} />
 </BaseLayout>

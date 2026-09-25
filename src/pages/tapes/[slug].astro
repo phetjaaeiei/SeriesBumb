@@ -9,6 +9,9 @@ import Tag from '../../components/ui/Tag.astro';
 import { formatDuration, formatYear, releaseTypeLabel } from '../../lib/format';
 import { getTapeBySlug } from '../../lib/queries/tapes';
 import { imageUrl } from '../../lib/urls';
+import EngagementButton from '../../components/islands/EngagementButton';
+import Comments from '../../components/islands/Comments';
+import { listComments } from '../../lib/services/comments';
 
 const slug = Astro.params.slug ?? '';
 const isAdmin = Astro.locals.user?.role === 'admin';
@@ -28,6 +31,9 @@ const items = [
 ];
 const sides = ['A', 'B', 'C', 'D'].filter(side => tape.tracks.some(track => track.side === side));
 const collections = await env.DB.prepare(`SELECT c.slug, c.title FROM collection_item ci JOIN collection c ON c.id = ci.collectionId WHERE ci.tapeId = ? AND c.status = 'published' ORDER BY c.position`).bind(tape.id).all<{ slug: string; title: string }>();
+const viewerId = Astro.locals.user?.id;
+const engagement = !unpublished && viewerId ? await env.DB.prepare('SELECT EXISTS(SELECT 1 FROM tape_like WHERE userId = ? AND tapeId = ?) AS liked, EXISTS(SELECT 1 FROM tape_owner WHERE userId = ? AND tapeId = ?) AS owned').bind(viewerId, tape.id, viewerId, tape.id).first<{ liked: number; owned: number }>() : null;
+const firstComments = !unpublished ? await listComments(env.DB, { tapeId: tape.id }, null, viewerId) : null;
 ---
 <BaseLayout title={tape.title} description={description} canonicalPath={`/tapes/${slug}`} ogImage={ogImage} ogImageAlt={`ภาพแชร์เทป ${tape.title}`} ogType="music.album" noindex={unpublished}>
   {unpublished && <p class="draft-banner">ยังไม่เผยแพร่ · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
@@ -41,7 +47,7 @@ const collections = await env.DB.prepare(`SELECT c.slug, c.title FROM collection
         {tape.isRare ? <Tag tone="accent">หายาก</Tag> : null}
         {tape.publishedAt && Date.now() - tape.publishedAt < 14 * 24 * 60 * 60 * 1000 ? <Tag>ใหม่</Tag> : null}
       </div>
-      {!unpublished && <div class="engagement-counts"><span>ถูกใจ <strong class="mono">{tape.likeCount}</strong></span><span>มีเทปนี้ <strong class="mono">{tape.ownerCount}</strong> คน</span></div>}
+      {!unpublished && <div class="engagement-counts"><EngagementButton kind="tapeLike" targetId={tape.id} initialValue={Boolean(engagement?.liked)} initialCount={tape.likeCount} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /><EngagementButton kind="tapeOwned" targetId={tape.id} initialValue={Boolean(engagement?.owned)} initialCount={tape.ownerCount} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /></div>}
     </div>
     <div class="entity-art">
       {cover && env.IMAGE_BASE_URL ? <img src={imageUrl(cover.fullKey, env.IMAGE_BASE_URL)} width={cover.width} height={cover.height} alt={`ปกหน้า ${tape.title} – ${artistNames}`} decoding="async" /> : <Placeholder label={`ยังไม่มีรูปปก ${tape.title}`} />}
@@ -68,7 +74,7 @@ const collections = await env.DB.prepare(`SELECT c.slug, c.title FROM collection
     </section>
     <section id="comments" class="tab-panel" data-tab-panel>
       <h2>คอมเมนต์</h2>
-      <p class="empty-state">ระบบคอมเมนต์กำลังจัดเตรียม</p>
+      {unpublished ? <p class="empty-state">เผยแพร่เทปก่อนจึงเปิดคอมเมนต์ได้</p> : <Comments tapeId={tape.id} initialItems={firstComments!.items} initialCursor={firstComments!.nextCursor} initialCount={tape.commentCount} authenticated={Boolean(viewerId)} banned={Boolean(Astro.locals.user?.commentBanned)} loginNext={Astro.url.pathname} client:visible />}
     </section>
   </Tabs>
   <CreditLine createdByName={tape.createdByName} createdAt={tape.createdAt} updatedByName={tape.updatedByName} updatedAt={tape.updatedAt} />

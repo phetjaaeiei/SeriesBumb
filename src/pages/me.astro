@@ -1,0 +1,60 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../components/layout/BaseLayout.astro';
+import Tabs from '../components/ui/Tabs.astro';
+import Placeholder from '../components/ui/Placeholder.astro';
+import { decodeCursor, encodeCursor } from '../lib/queries/cursor';
+import { formatYear } from '../lib/format';
+import { imageUrl } from '../lib/urls';
+
+const user = Astro.locals.user;
+if (!user) return Astro.redirect('/login?next=%2Fme', 302);
+const userId = user.id;
+type Tab = 'liked-tapes' | 'liked-songs' | 'owned';
+type TapeEntry = { id: string; createdAt: number; slug: string; title: string; year: number | null; coverThumbKey: string | null };
+type SongEntry = { id: string; createdAt: number; slug: string; title: string; publishedTapeCount: number };
+const requestedTab = Astro.url.searchParams.get('tab');
+const activeTab: Tab = requestedTab === 'liked-songs' || requestedTab === 'owned' ? requestedTab : 'liked-tapes';
+const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
+
+async function tapePage(table: 'tape_like' | 'tape_owner', pageCursor: typeof cursor) {
+  const extra = pageCursor ? 'AND (e.createdAt, e.tapeId) < (?, ?)' : '';
+  const rows = (await env.DB.prepare(`SELECT e.tapeId AS id, e.createdAt, t.slug, t.title, t.year, t.coverThumbKey FROM ${table} e JOIN tape t ON t.id = e.tapeId WHERE e.userId = ? AND t.status = 'published' ${extra} ORDER BY e.createdAt DESC, e.tapeId DESC LIMIT 49`).bind(userId, ...(pageCursor ? [pageCursor.key, pageCursor.id] : [])).all<TapeEntry>()).results;
+  const items = rows.slice(0, 48);
+  const last = items.at(-1);
+  return { items, next: rows.length > 48 && last ? encodeCursor('new', last.createdAt, last.id) : null };
+}
+
+async function songPage(pageCursor: typeof cursor) {
+  const extra = pageCursor ? 'AND (e.createdAt, e.songId) < (?, ?)' : '';
+  const rows = (await env.DB.prepare(`SELECT e.songId AS id, e.createdAt, s.slug, s.title, s.publishedTapeCount FROM song_like e JOIN song s ON s.id = e.songId WHERE e.userId = ? AND s.publishedTapeCount > 0 ${extra} ORDER BY e.createdAt DESC, e.songId DESC LIMIT 49`).bind(userId, ...(pageCursor ? [pageCursor.key, pageCursor.id] : [])).all<SongEntry>()).results;
+  const items = rows.slice(0, 48);
+  const last = items.at(-1);
+  return { items, next: rows.length > 48 && last ? encodeCursor('new', last.createdAt, last.id) : null };
+}
+
+const [likedTapes, likedSongs, owned] = await Promise.all([
+  tapePage('tape_like', activeTab === 'liked-tapes' ? cursor : null),
+  songPage(activeTab === 'liked-songs' ? cursor : null),
+  tapePage('tape_owner', activeTab === 'owned' ? cursor : null),
+]);
+const nextLink = (tab: Tab, value: string) => `/me?tab=${tab}&cursor=${encodeURIComponent(value)}#${tab}`;
+---
+<BaseLayout title="ของฉัน" noindex>
+  <h1>ของฉัน</h1>
+  <p class="page-lede">เทปและเพลงที่คุณบันทึกไว้</p>
+  <Tabs tabs={[{ id: 'liked-tapes', label: 'เทปที่ถูกใจ' }, { id: 'liked-songs', label: 'เพลงที่ถูกใจ' }, { id: 'owned', label: 'เทปที่มี' }]}>
+    <section id="liked-tapes" class="tab-panel" data-tab-panel><h2>เทปที่ถูกใจ</h2>
+      {likedTapes.items.length ? <ul class="saved-list">{likedTapes.items.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`} class="saved-item"><span class="saved-cover">{item.coverThumbKey && env.IMAGE_BASE_URL ? <img src={imageUrl(item.coverThumbKey, env.IMAGE_BASE_URL)} alt="" loading="lazy" /> : <Placeholder label="ไม่มีรูป" />}</span><span><strong>{item.title}</strong><small>{formatYear(item.year)}</small></span></a></li>)}</ul> : <p class="empty-state">ยังไม่มีเทปที่ถูกใจ <a href="/tapes">เลือกดูเทปในคลัง</a></p>}
+      {likedTapes.next && <p class="pagination"><a class="button" href={nextLink('liked-tapes', likedTapes.next)} rel="nofollow">หน้าถัดไป</a></p>}
+    </section>
+    <section id="liked-songs" class="tab-panel" data-tab-panel><h2>เพลงที่ถูกใจ</h2>
+      {likedSongs.items.length ? <ul class="saved-list">{likedSongs.items.map(item => <li><a href={`/songs/${encodeURIComponent(item.slug)}`} class="saved-item"><span><strong>{item.title}</strong><small>อยู่ในเทป {item.publishedTapeCount.toLocaleString('th-TH')} ชุด</small></span></a></li>)}</ul> : <p class="empty-state">ยังไม่มีเพลงที่ถูกใจ <a href="/search">ค้นหาเพลง</a></p>}
+      {likedSongs.next && <p class="pagination"><a class="button" href={nextLink('liked-songs', likedSongs.next)} rel="nofollow">หน้าถัดไป</a></p>}
+    </section>
+    <section id="owned" class="tab-panel" data-tab-panel><h2>เทปที่มี</h2>
+      {owned.items.length ? <ul class="saved-list">{owned.items.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`} class="saved-item"><span class="saved-cover">{item.coverThumbKey && env.IMAGE_BASE_URL ? <img src={imageUrl(item.coverThumbKey, env.IMAGE_BASE_URL)} alt="" loading="lazy" /> : <Placeholder label="ไม่มีรูป" />}</span><span><strong>{item.title}</strong><small>{formatYear(item.year)}</small></span></a></li>)}</ul> : <p class="empty-state">ยังไม่ได้บันทึกเทปที่มี <a href="/tapes">เลือกดูเทปในคลัง</a></p>}
+      {owned.next && <p class="pagination"><a class="button" href={nextLink('owned', owned.next)} rel="nofollow">หน้าถัดไป</a></p>}
+    </section>
+  </Tabs>
+</BaseLayout>
