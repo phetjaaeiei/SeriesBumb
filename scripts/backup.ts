@@ -83,12 +83,15 @@ function main(): void {
   const parsed = options(process.argv.slice(2));
   if (!parsed) return;
   const { db, out } = parsed;
+  const foreignKeyErrors = query(db, 'PRAGMA foreign_key_check').results;
+  if (foreignKeyErrors.length) throw new Error(`Source D1 has ${foreignKeyErrors.length} foreign key violation(s); repair it before backing up.`);
   const schemas = tableSchemas(db);
   mkdirSync(dirname(out), { recursive: true, mode: 0o700 });
   mkdirSync(out, { mode: 0o700 }); // Refuse to overwrite an earlier backup.
   const tables: BackupTable[] = schemas.map(schema => ({ ...schema, count: 0, chunks: [] }));
   for (const table of tables) backupTable(db, out, table);
   if (!sameSchema(schemas, tableSchemas(db))) throw new Error('D1 schema changed during backup. Start again.');
+  if (query(db, 'PRAGMA foreign_key_check').results.length) throw new Error('D1 foreign keys changed during backup. Start again.');
   const manifest: Manifest = { format, createdAt: new Date().toISOString(), sourceDatabase: db.database, tables };
   atomicJson(join(out, 'manifest.json'), manifest); // Complete marker: written only after all chunks succeed.
   console.log(`Backup complete: ${out}`);
