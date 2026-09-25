@@ -309,6 +309,7 @@ export const comment = sqliteTable('comment', {
   createdAt: integer('createdAt').notNull(),
   deletedAt: integer('deletedAt'),
   deletedBy: text('deletedBy').references(() => user.id, { onDelete: 'set null' }),
+  deletedByAdmin: integer('deletedByAdmin', { mode: 'boolean' }).notNull().default(false),
 }, (table) => [
   check('comment_exactly_one_target', sql`(${table.tapeId} IS NOT NULL) <> (${table.songId} IS NOT NULL)`),
   index('comment_tape_created_id_idx').on(table.tapeId, table.createdAt, table.id),

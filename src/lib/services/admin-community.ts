@@ -19,16 +19,15 @@ export async function setCommentBan(db: D1Database, targetId: string, banned: bo
 }
 
 export async function moderateComment(db: D1Database, adminId: string, commentId: string, restore: boolean) {
-  const row = await db.prepare('SELECT id, tapeId, songId, deletedAt, deletedBy FROM comment WHERE id = ?').bind(commentId).first<{ id: string; tapeId: string | null; songId: string | null; deletedAt: number | null; deletedBy: string | null }>();
+  const row = await db.prepare('SELECT id, tapeId, songId, deletedAt, deletedByAdmin FROM comment WHERE id = ?').bind(commentId).first<{ id: string; tapeId: string | null; songId: string | null; deletedAt: number | null; deletedByAdmin: number }>();
   if (!row) throw new CommentError('ไม่พบคอมเมนต์นี้', 'NOT_FOUND');
   if (restore) {
-    if (row.deletedAt === null || !row.deletedBy) throw new CommentError('คอมเมนต์นี้ยังไม่ถูกลบ');
-    const deleter = await db.prepare('SELECT role FROM user WHERE id = ?').bind(row.deletedBy).first<{ role: string }>();
-    if (deleter?.role !== 'admin') throw new CommentError('กู้คืนได้เฉพาะคอมเมนต์ที่แอดมินลบ');
+    if (row.deletedAt === null) throw new CommentError('คอมเมนต์นี้ยังไม่ถูกลบ');
+    if (!row.deletedByAdmin) throw new CommentError('กู้คืนได้เฉพาะคอมเมนต์ที่แอดมินลบ');
   }
   const changed = restore
-    ? await db.prepare('UPDATE comment SET deletedAt = NULL, deletedBy = NULL WHERE id = ? AND deletedAt IS NOT NULL').bind(commentId).run()
-    : await db.prepare('UPDATE comment SET deletedAt = ?, deletedBy = ? WHERE id = ? AND deletedAt IS NULL').bind(Date.now(), adminId, commentId).run();
+    ? await db.prepare('UPDATE comment SET deletedAt = NULL, deletedBy = NULL, deletedByAdmin = 0 WHERE id = ? AND deletedAt IS NOT NULL AND deletedByAdmin = 1').bind(commentId).run()
+    : await db.prepare('UPDATE comment SET deletedAt = ?, deletedBy = ?, deletedByAdmin = 1 WHERE id = ? AND deletedAt IS NULL').bind(Date.now(), adminId, commentId).run();
   if (!changed.meta.changes) throw new CommentError('สถานะคอมเมนต์เปลี่ยนไปแล้ว');
   const table = row.tapeId ? 'tape' : 'song';
   const column = row.tapeId ? 'tapeId' : 'songId';

@@ -88,7 +88,7 @@ export async function createComment(db: D1Database, userId: string, role: 'membe
 export async function deleteOwnComment(db: D1Database, userId: string, commentId: string) {
   const row = await db.prepare('SELECT tapeId, songId FROM comment WHERE id = ? AND userId = ? AND deletedAt IS NULL').bind(commentId, userId).first<{ tapeId: string | null; songId: string | null }>();
   if (!row) throw new CommentError('ไม่พบคอมเมนต์นี้', 'NOT_FOUND');
-  const result = await db.prepare('UPDATE comment SET deletedAt = ?, deletedBy = ? WHERE id = ? AND userId = ? AND deletedAt IS NULL').bind(Date.now(), userId, commentId, userId).run();
+  const result = await db.prepare('UPDATE comment SET deletedAt = ?, deletedBy = ?, deletedByAdmin = 0 WHERE id = ? AND userId = ? AND deletedAt IS NULL').bind(Date.now(), userId, commentId, userId).run();
   if (!result.meta.changes) throw new CommentError('ไม่พบคอมเมนต์นี้', 'NOT_FOUND');
   const config = targetConfig(row.tapeId ? { tapeId: row.tapeId } : { songId: row.songId! });
   await db.prepare(`UPDATE ${config.table} SET commentCount = (SELECT COUNT(*) FROM comment WHERE ${config.column} = ? AND deletedAt IS NULL) WHERE id = ?`).bind(config.id, config.id).run();

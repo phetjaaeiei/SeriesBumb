@@ -15,6 +15,13 @@
       "when": 1790333655496,
       "tag": "0001_search_fts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790355939311,
+      "tag": "0002_outgoing_hairball",
+      "breakpoints": true
     }
   ]
 }

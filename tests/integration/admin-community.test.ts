@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { moderateComment, setCommentBan, setUserRole } from '../../src/lib/services/admin-community';
 import { createTapeDraft, saveTape } from '../../src/lib/services/catalog';
-import { createComment } from '../../src/lib/services/comments';
+import { createComment, deleteOwnComment } from '../../src/lib/services/comments';
 
 describe('admin community controls', () => {
   it('protects bootstrap and self roles, bans members, and moderates comments', async () => {
@@ -26,5 +26,15 @@ describe('admin community controls', () => {
     expect((await env.DB.prepare('SELECT commentCount FROM tape WHERE id = ?').bind(draft.id).first<{ commentCount: number }>())?.commentCount).toBe(0);
     expect(await moderateComment(env.DB, adminId, comment.id, true)).toEqual({ id: comment.id, deleted: false });
     expect((await env.DB.prepare('SELECT commentCount FROM tape WHERE id = ?').bind(draft.id).first<{ commentCount: number }>())?.commentCount).toBe(1);
+
+    const own = await createComment(env.DB, memberId, 'member', { tapeId: draft.id }, 'ลบเอง');
+    await deleteOwnComment(env.DB, memberId, own.id);
+    await setUserRole(env.DB, adminId, memberId, 'admin', 'bootstrap@example.com');
+    await expect(moderateComment(env.DB, adminId, own.id, true)).rejects.toThrow('เฉพาะคอมเมนต์ที่แอดมินลบ');
+
+    const adminComment = await createComment(env.DB, adminId, 'admin', { tapeId: draft.id }, 'คอมเมนต์จากแอดมิน');
+    await moderateComment(env.DB, memberId, adminComment.id, false);
+    await setUserRole(env.DB, adminId, memberId, 'member', 'bootstrap@example.com');
+    expect(await moderateComment(env.DB, adminId, adminComment.id, true)).toEqual({ id: adminComment.id, deleted: false });
   });
 });

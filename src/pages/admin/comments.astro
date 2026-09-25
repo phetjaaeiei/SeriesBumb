@@ -8,15 +8,15 @@ const kind = Astro.url.searchParams.get('kind') === 'tape' ? 'tape' : Astro.url.
 const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
 const kindWhere = kind === 'tape' ? 'AND c.tapeId IS NOT NULL' : kind === 'song' ? 'AND c.songId IS NOT NULL' : '';
 const page = cursor ? 'AND (c.createdAt, c.id) < (?, ?)' : '';
-type QueryRow = Omit<AdminCommentRow, 'canRestore' | 'targetUrl' | 'targetTitle'> & { tapeSlug: string | null; tapeTitle: string | null; songSlug: string | null; songTitle: string | null; deletedByRole: string | null };
-const all = (await env.DB.prepare(`SELECT c.id, c.body, c.createdAt, c.deletedAt, u.name AS authorName, u.email AS authorEmail,
-  t.slug AS tapeSlug, t.title AS tapeTitle, s.slug AS songSlug, s.title AS songTitle, deleter.role AS deletedByRole
+type QueryRow = Omit<AdminCommentRow, 'canRestore' | 'targetUrl' | 'targetTitle'> & { tapeSlug: string | null; tapeTitle: string | null; songSlug: string | null; songTitle: string | null; deletedByAdmin: number };
+const all = (await env.DB.prepare(`SELECT c.id, c.body, c.createdAt, c.deletedAt, c.deletedByAdmin, u.name AS authorName, u.email AS authorEmail,
+  t.slug AS tapeSlug, t.title AS tapeTitle, s.slug AS songSlug, s.title AS songTitle
   FROM comment c JOIN user u ON u.id = c.userId LEFT JOIN tape t ON t.id = c.tapeId LEFT JOIN song s ON s.id = c.songId
-  LEFT JOIN user deleter ON deleter.id = c.deletedBy WHERE 1 = 1 ${kindWhere} ${page}
+  WHERE 1 = 1 ${kindWhere} ${page}
   ORDER BY c.createdAt DESC, c.id DESC LIMIT 51`).bind(...(cursor ? [cursor.key, cursor.id] : [])).all<QueryRow>()).results;
 const rows: AdminCommentRow[] = all.slice(0, 50).map(row => ({
   id: row.id, body: row.body, createdAt: row.createdAt, deletedAt: row.deletedAt,
-  authorName: row.authorName, authorEmail: row.authorEmail, canRestore: row.deletedByRole === 'admin',
+  authorName: row.authorName, authorEmail: row.authorEmail, canRestore: Boolean(row.deletedByAdmin),
   targetTitle: row.tapeTitle || row.songTitle, targetUrl: row.tapeSlug ? `/tapes/${encodeURIComponent(row.tapeSlug)}` : row.songSlug ? `/songs/${encodeURIComponent(row.songSlug)}` : null,
 }));
 const last = rows.at(-1);
