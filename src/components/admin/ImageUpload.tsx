@@ -10,6 +10,8 @@ interface Props {
   entityId: string;
   onUploaded: (value: { key: string; thumbKey?: string; imageId?: string; kind?: ImageKind }) => void;
   onBusyChange?: (busy: boolean) => void;
+  onBeforeUpload?: () => Promise<string>;
+  disabled?: boolean;
 }
 
 function uploadInput(entityType: EntityType, entityId: string, variant: 'full' | 'thumb', file: File, width: number, height: number, uuid?: string, kind?: ImageKind) {
@@ -25,24 +27,29 @@ function uploadInput(entityType: EntityType, entityId: string, variant: 'full' |
   return form;
 }
 
-export default function ImageUpload({ entityType, entityId, onUploaded, onBusyChange }: Props) {
+export default function ImageUpload({ entityType, entityId, onUploaded, onBusyChange, onBeforeUpload, disabled = false }: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [kind, setKind] = useState<ImageKind>('front');
 
   async function upload(files: File[]) {
-    if (!files.length || busy) return;
+    if (!files.length || busy || disabled) return;
     setBusy(true);
     onBusyChange?.(true);
     setMessage('');
+    let uploadEntityId = entityId;
     for (const [index, source] of files.entries()) {
       try {
         setMessage(`กำลังอัปโหลดรูป ${index + 1}/${files.length}…`);
+        if (!uploadEntityId) {
+          if (!onBeforeUpload) throw new Error('บันทึกรายการก่อนเพิ่มรูป');
+          uploadEntityId = await onBeforeUpload();
+        }
         const full = await resizeImage(source, entityType === 'tapes' ? 1600 : 1200);
         const thumb = await resizeImage(source, 480);
-        const first = await actions.admin.images.upload(uploadInput(entityType, entityId, 'full', full.file, full.width, full.height));
+        const first = await actions.admin.images.upload(uploadInput(entityType, uploadEntityId, 'full', full.file, full.width, full.height));
         if (first.error || !first.data) throw new Error(first.error?.message || 'อัปโหลดรูปเต็มไม่สำเร็จ');
-        const second = await actions.admin.images.upload(uploadInput(entityType, entityId, 'thumb', thumb.file, thumb.width, thumb.height, first.data.uuid, kind));
+        const second = await actions.admin.images.upload(uploadInput(entityType, uploadEntityId, 'thumb', thumb.file, thumb.width, thumb.height, first.data.uuid, kind));
         if (second.error || !second.data) throw new Error(second.error?.message || 'อัปโหลดรูปย่อไม่สำเร็จ');
         onUploaded({ key: second.data.fullKey || first.data.key, thumbKey: second.data.thumbKey, imageId: second.data.imageId, kind });
       } catch (error) {
@@ -58,8 +65,8 @@ export default function ImageUpload({ entityType, entityId, onUploaded, onBusyCh
   }
 
   return <div className="image-upload">
-    {entityType === 'tapes' && <label className="admin-field">ประเภทภาพ<select className="field" value={kind} onChange={event => setKind(event.target.value as ImageKind)}><option value="front">ปกหน้า</option><option value="back">ปกหลัง</option><option value="inside">ด้านใน</option><option value="cassette">ตลับเทป</option><option value="other">อื่น ๆ</option></select></label>}
-    <label className="admin-field">{entityType === 'tapes' ? 'เพิ่มรูปเทป' : 'เลือกรูป'}<input className="field" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple={entityType === 'tapes'} disabled={busy} onChange={event => { const files = Array.from(event.target.files || []); event.target.value = ''; void upload(files); }} /></label>
+    {entityType === 'tapes' && <label className="admin-field">ประเภทภาพ<select className="field" value={kind} disabled={busy || disabled} onChange={event => setKind(event.target.value as ImageKind)}><option value="front">ปกหน้า</option><option value="back">ปกหลัง</option><option value="inside">ด้านใน</option><option value="cassette">ตลับเทป</option><option value="other">อื่น ๆ</option></select></label>}
+    <label className="admin-field">{entityType === 'tapes' ? 'เพิ่มรูปเทป' : 'เลือกรูป'}<input className="field" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple={entityType === 'tapes'} disabled={busy || disabled} onChange={event => { const files = Array.from(event.target.files || []); event.target.value = ''; void upload(files); }} /></label>
     <p className="help-text">รูปจะถูกย่อบนเครื่องก่อนอัปโหลด รองรับ JPEG, PNG, WebP และ HEIC ที่เบราว์เซอร์เปิดได้</p>
     {message && <p className="help-text" role="status">{message}</p>}
   </div>;

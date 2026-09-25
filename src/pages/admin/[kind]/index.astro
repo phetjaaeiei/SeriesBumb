@@ -1,7 +1,6 @@
 ---
 import { env } from 'cloudflare:workers';
 import AdminLayout from '../../../components/layout/AdminLayout.astro';
-import QuickCreate from '../../../components/admin/QuickCreate';
 import { getAdminCatalogPage, type AdminCatalogKind } from '../../../lib/queries/admin-catalog';
 
 const labelMap = { tapes: 'เทป', songs: 'เพลง', artists: 'ศิลปิน', labels: 'ค่ายเพลง', genres: 'แนวเพลง', collections: 'Collection' } as const;
@@ -25,9 +24,8 @@ const hasUnlinked = kind === 'songs' || kind === 'artists';
 const hasFilters = Boolean(query || (hasStatus && status !== 'all') || (hasUnlinked && unlinked));
 ---
 <AdminLayout title={`จัดการ${labelMap[kind]}`}>
-  <h1>จัดการ{labelMap[kind]}</h1>
+  <div class="admin-catalog-title"><h1>จัดการ{labelMap[kind]}</h1><a class="button button-primary" href={`/admin/${kind}/new`}>เพิ่ม{labelMap[kind]}</a></div>
   <p class="page-lede">เพิ่มข้อมูลและเปิดแก้ไขรายการในคลัง</p>
-  <QuickCreate kind={kind} client:only="react" />
   <section class="section" aria-labelledby="records-heading">
     <div class="section-heading"><h2 id="records-heading">รายการ{labelMap[kind]}</h2></div>
     <form class="admin-catalog-filters" method="get" action={`/admin/${kind}`} role="search">
@@ -62,6 +60,7 @@ const hasFilters = Boolean(query || (hasStatus && status !== 'all') || (hasUnlin
 </AdminLayout>
 
 <style>
+  .admin-catalog-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
   .admin-catalog-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 12px; margin-bottom: 20px; }
   .admin-catalog-filters label { display: grid; gap: 4px; color: var(--label); font-size: 13px; }
   .admin-catalog-search { flex: 1 1 220px; }

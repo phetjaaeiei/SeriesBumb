@@ -1,6 +1,6 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Reorder, useDragControls, useReducedMotion } from 'motion/react';
 import ImageUpload from './ImageUpload';
 import { imageUrl } from '../../lib/urls';
@@ -154,6 +154,12 @@ function TapeImageItem({ image, index, count, isCover, canDelete, imageBase, bus
 
 export default function AdminEditor({ kind, record, artistIds, genreIds, tracks, members, items, images, selected, imageBase }: Props) {
   const [fields, setFields] = useState<Row>(record);
+  const [id, setId] = useState(String(record.id || ''));
+  const idRef = useRef(id);
+  const creatingRef = useRef<Promise<string> | null>(null);
+  const savingRef = useRef(false);
+  const uploadingRef = useRef(false);
+  const [savedSlug, setSavedSlug] = useState(String(record.slug || ''));
   const [artists, setArtists] = useState(artistIds);
   const [genres, setGenres] = useState(genreIds);
   const [trackRows, setTrackRows] = useState<TrackRow[]>(() => tracks.map(track => ({ ...track, clientId: crypto.randomUUID(), durationText: formatDuration(track.durationSec ?? null) })));
@@ -169,12 +175,37 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [trackAnnouncement, setTrackAnnouncement] = useState('');
-  const id = String(record.id);
   const get = (key: string) => String(fields[key] ?? '');
   const set = (key: string, value: string | number | null) => setFields(previous => ({ ...previous, [key]: value }));
   const choose = (ids: string[], choice: Choice | undefined, setter: (ids: string[]) => void) => { setter(ids); if (choice) setChoices(previous => [...previous.filter(item => item.id !== choice.id), choice]); };
-  const publicPath = kind === 'genres' ? `/genres/${get('slug')}` : `/${kind}/${get('slug')}`;
+  const publicPath = kind === 'genres' ? `/genres/${encodeURIComponent(savedSlug)}` : `/${kind}/${encodeURIComponent(savedSlug)}`;
   const coverImageId = imageRows.find(image => image.kind === 'front')?.id || imageRows[0]?.id;
+
+  async function ensureCreated(): Promise<string> {
+    if (idRef.current) return idRef.current;
+    if (creatingRef.current) return creatingRef.current;
+    const pending = (async () => {
+      const name = get(kind === 'artists' || kind === 'labels' || kind === 'genres' ? 'name' : 'title').trim();
+      if (!name && kind !== 'tapes') throw new Error('กรุณากรอกชื่อก่อนบันทึก');
+      const response = kind === 'tapes' ? await actions.admin.tapes.createDraft({ title: name || undefined })
+        : kind === 'songs' ? await actions.admin.songs.create({ title: name, artistIds: artists })
+        : kind === 'artists' ? await actions.admin.artists.create({ name })
+        : kind === 'labels' ? await actions.admin.labels.create({ name })
+        : kind === 'genres' ? await actions.admin.genres.create({ name })
+        : await actions.admin.collections.create({ title: name });
+      if (response.error || !response.data) throw new Error(response.error?.message || 'สร้างรายการไม่สำเร็จ');
+      const nextId = response.data.id;
+      idRef.current = nextId;
+      setId(nextId);
+      setSavedSlug(response.data.slug);
+      setFields(previous => previous.slug ? previous : { ...previous, slug: response.data.slug });
+      window.history.replaceState(null, '', `/admin/${kind}/${nextId}`);
+      return nextId;
+    })();
+    creatingRef.current = pending;
+    try { return await pending; }
+    finally { creatingRef.current = null; }
+  }
 
   function moveImage(imageId: string, direction: -1 | 1) {
     const index = imageRows.findIndex(image => image.id === imageId);
@@ -196,6 +227,8 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
   }
 
   async function save(status?: 'draft' | 'published') {
+    if (savingRef.current || uploadingRef.current) return;
+    savingRef.current = true;
     setBusy(true); setMessage(''); setError('');
     try {
       if (!get(kind === 'artists' || kind === 'labels' || kind === 'genres' ? 'name' : 'title').trim()) throw new Error('กรุณากรอกชื่อก่อนบันทึก');
@@ -209,7 +242,9 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
       }
       if (kind === 'collections' && itemRows.some(item => !item.tapeId)) throw new Error('กรุณาเลือกเทปให้ครบทุกแถว');
       if (kind === 'artists' && memberRows.some(member => !member.name.trim())) throw new Error('กรุณากรอกชื่อสมาชิกให้ครบทุกแถว');
-      const customSlug = get('slug') !== String(record.slug) ? get('slug') : undefined;
+      const id = await ensureCreated();
+      const requestedSlug = get('slug').trim();
+      const customSlug = requestedSlug && requestedSlug !== savedSlug ? requestedSlug : undefined;
       let nextOgKey: string | null | undefined;
       let nextOgSourceId: string | null | undefined;
       let nextOgSourceTitle: string | null | undefined;
@@ -253,7 +288,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
         members: memberRows.map(member => ({ name: member.name, role: member.role || '', years: member.years || null, isCurrent: Boolean(member.isCurrent) })),
       }) : kind === 'labels' ? await actions.admin.labels.save({
         id, name: get('name'), nameAlt: get('nameAlt') || null, slug: customSlug, description: get('description'), logoKey: get('logoKey') || null,
-      }) : kind === 'genres' ? await actions.admin.genres.save({ id, name: get('name'), slug: customSlug, position: Number(get('position')) })
+      }) : kind === 'genres' ? await actions.admin.genres.save({ id, name: get('name'), slug: customSlug, position: fields.position == null ? undefined : Number(get('position')) })
         : await actions.admin.collections.save({
           id, title: get('title'), slug: customSlug, description: get('description'), coverKey: get('coverKey') || null,
           isFeatured: Boolean(fields.isFeatured), status: status || (get('status') as 'draft' | 'published'), items: itemRows,
@@ -261,13 +296,14 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
       if (response.error || !response.data) throw new Error(response.error?.message || 'บันทึกไม่สำเร็จ');
       const newSlug = response.data.slug;
       set('slug', newSlug);
+      setSavedSlug(newSlug);
       if (status) set('status', status);
       if (kind === 'tapes' && nextOgKey !== undefined) setFields(previous => ({ ...previous, ogImageKey: nextOgKey, ogSourceImageId: nextOgSourceId || null, ogSourceTitle: nextOgSourceTitle || null }));
       if (kind === 'tapes') setImageDirty(false);
       setMessage(ogWarning ? `บันทึกแล้ว · ${ogWarning}` : 'บันทึกแล้ว');
       if (newSlug !== record.slug) window.history.replaceState(null, '', `/admin/${kind}/${id}`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'บันทึกไม่สำเร็จ ลองอีกครั้ง'); }
-    finally { setBusy(false); }
+    finally { savingRef.current = false; setBusy(false); }
   }
 
   async function removeImage(imageId: string) {
@@ -297,11 +333,11 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
   }
 
   return <div className="admin-editor">
-    <div className="editor-toolbar"><span className="mono muted">ID {id}</span><a className="button" href={publicPath} target="_blank" rel="noreferrer">ดูตัวอย่าง ↗</a></div>
+    <div className="editor-toolbar"><span className="mono muted">{id ? `ID ${id}` : 'รายการใหม่'}</span>{id && savedSlug && <a className="button" href={publicPath} target="_blank" rel="noreferrer">ดูตัวอย่าง ↗</a>}</div>
     <div className="editor-section"><h2>ข้อมูลพื้นฐาน</h2><div className="admin-form-grid">
       {(kind === 'artists' || kind === 'labels' || kind === 'genres') ? <Field label="ชื่อ" value={get('name')} onChange={value => set('name', value)} maxLength={200} required /> : <Field label={kind === 'songs' ? 'ชื่อเพลง' : kind === 'tapes' ? 'ชื่อชุดเทป' : 'ชื่อ Collection'} value={get('title')} onChange={value => set('title', value)} maxLength={200} required />}
       {kind !== 'genres' && <Field label="ชื่อรอง / ภาษาอังกฤษ" value={get('nameAlt') || get('titleAlt')} onChange={value => set(kind === 'artists' || kind === 'labels' ? 'nameAlt' : 'titleAlt', value)} maxLength={200} />}
-      <Field label="Slug" value={get('slug')} onChange={value => set('slug', value)} maxLength={80} help="หากเปลี่ยน slug ลิงก์เดิมจะ redirect มาที่ใหม่" />
+      <Field label="Slug" value={get('slug')} onChange={value => set('slug', value)} maxLength={80} help={id ? 'หากเปลี่ยน slug ลิงก์เดิมจะ redirect มาที่ใหม่' : 'เว้นว่างเพื่อสร้างลิงก์อัตโนมัติ'} />
       {kind === 'tapes' && <><Field label="ปีที่ออก (พ.ศ. หรือ ค.ศ.)" type="number" value={get('year')} onChange={value => set('year', value)} /><label className="admin-field"><span>ประเภทเทป</span><select className="field" value={get('releaseType')} onChange={event => set('releaseType', event.target.value)}><option value="album">อัลบั้ม</option><option value="compilation">รวมศิลปิน</option><option value="soundtrack">เพลงประกอบ</option><option value="single">ซิงเกิล</option><option value="other">อื่น ๆ</option></select></label><Field label="รหัสแคตตาล็อก" value={get('catalogNo')} onChange={value => set('catalogNo', value)} maxLength={50} /><Field label="ลิงก์รีวิว Facebook" type="url" value={get('reelUrl')} onChange={value => set('reelUrl', value)} /></>}
       {kind === 'artists' && <><label className="admin-field"><span>ประเภทศิลปิน</span><select className="field" value={get('artistType')} onChange={event => set('artistType', event.target.value)}><option value="">ไม่ระบุ</option><option value="band">วงดนตรี</option><option value="solo">ศิลปินเดี่ยว</option><option value="group">กลุ่ม / ดูโอ</option></select></label><label className="admin-field"><span>สถานะ</span><select className="field" value={get('status')} onChange={event => set('status', event.target.value)}><option value="unknown">ไม่ทราบ</option><option value="active">ยังทำงาน</option><option value="inactive">เลิกทำงาน</option><option value="hiatus">พักวง</option><option value="deceased">เสียชีวิต</option></select></label><label className="admin-field"><span>จังหวัด</span><select className="field" value={get('province')} onChange={event => set('province', event.target.value)}><option value="">ไม่ระบุ</option>{PROVINCES_BY_REGION.map(region => <optgroup key={region.region} label={region.region}>{region.provinces.map(province => <option key={province} value={province}>{province}</option>)}</optgroup>)}</select></label><Field label="ช่วงปีที่ทำงาน" value={get('yearsActive')} onChange={value => set('yearsActive', value)} maxLength={100} /></>}
       {kind === 'songs' && <><Field label="คำร้อง" value={get('lyricist')} onChange={value => set('lyricist', value)} maxLength={200} /><Field label="ทำนอง" value={get('composer')} onChange={value => set('composer', value)} maxLength={200} /><Field label="เรียบเรียง" value={get('arranger')} onChange={value => set('arranger', value)} maxLength={200} /><Area label="เนื้อเพลง" value={get('lyrics')} onChange={value => set('lyrics', value)} maxLength={10000} /><Area label="บันทึก" value={get('notes')} onChange={value => set('notes', value)} maxLength={1000} /></>}
@@ -360,7 +396,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
         {imageError && <p className="error-text" role="alert">{imageError}</p>}
       </>}
       {kind !== 'tapes' && get(kind === 'artists' ? 'imageKey' : kind === 'labels' ? 'logoKey' : 'coverKey') && imageBase && <div className="admin-image"><img src={imageUrl(get(kind === 'artists' ? 'imageKey' : kind === 'labels' ? 'logoKey' : 'coverKey'), imageBase)} alt="รูปปัจจุบัน" /></div>}
-      <ImageUpload entityType={kind as 'tapes' | 'artists' | 'labels' | 'collections'} entityId={id} onBusyChange={setImageUploading} onUploaded={result => {
+      {(id || kind === 'tapes') ? <ImageUpload entityType={kind as 'tapes' | 'artists' | 'labels' | 'collections'} entityId={id} onBeforeUpload={kind === 'tapes' ? ensureCreated : undefined} disabled={busy} onBusyChange={value => { uploadingRef.current = value; setImageUploading(value); }} onUploaded={result => {
         if (kind === 'tapes') {
           const imageId = result.imageId;
           if (!imageId) { setImageError('อัปโหลดแล้ว แต่แสดงรูปใหม่ไม่ได้ กรุณาโหลดหน้าใหม่'); return; }
@@ -368,12 +404,12 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
           setImageError('');
           setImageAnnouncement('เพิ่มรูปใหม่แล้ว');
         } else set(kind === 'artists' ? 'imageKey' : kind === 'labels' ? 'logoKey' : 'coverKey', result.key);
-      }} />
+      }} /> : <p className="help-text">บันทึกรายการก่อนเพิ่มรูป</p>}
     </div>}
 
     <div className="editor-actions">
       {kind === 'tapes' || kind === 'collections' ? <><button className="button" type="button" disabled={busy || imageUploading} onClick={() => void save('draft')}>บันทึกร่าง</button><button className="button button-primary" type="button" disabled={busy || imageUploading} onClick={() => void save(get('status') === 'published' ? 'draft' : 'published')}>{busy ? 'กำลังบันทึก…' : get('status') === 'published' ? 'ยกเลิกเผยแพร่' : 'เผยแพร่'}</button></> : <button className="button button-primary" type="button" disabled={busy || imageUploading} onClick={() => void save()}>{busy ? 'กำลังบันทึก…' : 'บันทึก'}</button>}
-      <button className="button button-danger" type="button" disabled={busy || imageUploading} onClick={() => void removeEntity()}>ลบรายการ</button>
+      {id && <button className="button button-danger" type="button" disabled={busy || imageUploading} onClick={() => void removeEntity()}>ลบรายการ</button>}
       {message && <span className="success-text" role="status">{message}</span>}
       {error && <span className="error-text" role="alert">{error}</span>}
     </div>

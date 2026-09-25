@@ -1,0 +1,20 @@
+---
+import { env } from 'cloudflare:workers';
+import AdminLayout from '../../../components/layout/AdminLayout.astro';
+import AdminEditor from '../../../components/admin/AdminEditor';
+
+type Kind = 'tapes' | 'songs' | 'artists' | 'labels' | 'genres' | 'collections';
+type Row = Record<string, string | number | null>;
+const labelMap = { tapes: 'เทป', songs: 'เพลง', artists: 'ศิลปิน', labels: 'ค่ายเพลง', genres: 'แนวเพลง', collections: 'Collection' } as const;
+const kind = Astro.params.kind as Kind;
+if (!Object.hasOwn(labelMap, kind)) return Astro.rewrite('/404');
+const record: Row = {
+  id: '', slug: '', title: '', name: '', position: null,
+  releaseType: 'album', status: kind === 'artists' ? 'unknown' : 'draft',
+};
+---
+<AdminLayout title={`เพิ่ม${labelMap[kind]}`}>
+  <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><a href={`/admin/${kind}`}>{labelMap[kind]}</a><span>/</span><span>เพิ่มรายการ</span></nav>
+  <h1>เพิ่ม{labelMap[kind]}</h1>
+  <AdminEditor kind={kind} record={record} artistIds={[]} genreIds={[]} tracks={[]} members={[]} items={[]} images={[]} selected={[]} imageBase={env.IMAGE_BASE_URL || ''} client:only="react" />
+</AdminLayout>
