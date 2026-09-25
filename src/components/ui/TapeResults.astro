@@ -6,10 +6,19 @@ const { items, nextCursor, path, params, view = 'table', showLabel = true, empty
 const nextParams = new URLSearchParams(params);
 if (nextCursor) nextParams.set('cursor', nextCursor);
 const nextUrl = nextCursor ? `${path}?${nextParams}` : null;
+const partialParams = new URLSearchParams(nextParams);
+const [section, slug] = path.split('/').filter(Boolean);
+if (section === 'decades' && slug) partialParams.set('decade', slug);
+if (section === 'genres' && slug) partialParams.set('genre', slug);
+if (section === 'labels' && slug) partialParams.set('label', slug);
+if (section === 'artists' && slug) partialParams.set('artist', slug);
+if (view === 'grid') partialParams.set('view', 'grid');
+const partialUrl = `/partials/tapes?${partialParams}`;
 ---
 {items.length ? (
-  <>
+  <div data-tape-results>
     <TapeList items={items} view={view} showLabel={showLabel} />
-    {nextUrl && <nav class="pagination" aria-label="หน้าถัดไป"><a class="button" href={nextUrl} rel="nofollow">หน้าถัดไป →</a></nav>}
-  </>
+    {nextUrl && <nav class="pagination" aria-label="หน้าถัดไป" data-load-more><a class="button" href={nextUrl} data-partial-url={partialUrl} rel="nofollow">โหลดเพิ่ม →</a></nav>}
+  </div>
 ) : <p class="empty-state">{emptyText}</p>}
+<script>import '../../scripts/load-more';</script>
