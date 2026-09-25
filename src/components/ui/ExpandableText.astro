@@ -1,0 +1,15 @@
+---
+interface Props { text: string; id: string; className?: string }
+const { text, id, className } = Astro.props;
+---
+<div class:list={['expandable-text', className]} data-expandable>
+  <p id={id} class="long-text" data-expandable-content>{text}</p>
+  <button class="expandable-toggle" type="button" aria-controls={id} aria-expanded="false" data-expandable-toggle hidden>อ่านต่อ</button>
+</div>
+<script>import '../../scripts/bio-expand';</script>
+
+<style>
+  .expandable-toggle { min-height: 40px; padding: 4px 0; border: 0; background: transparent; color: var(--accent); cursor: pointer; font: inherit; }
+  .expandable-toggle:hover { text-decoration: underline; }
+  .expandable-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+</style>

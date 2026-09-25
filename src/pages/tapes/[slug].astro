@@ -6,6 +6,7 @@ import InfoBox from '../../components/ui/InfoBox.astro';
 import Placeholder from '../../components/ui/Placeholder.astro';
 import Tabs from '../../components/ui/Tabs.astro';
 import Tag from '../../components/ui/Tag.astro';
+import ExpandableText from '../../components/ui/ExpandableText.astro';
 import { formatDuration, formatYear, releaseTypeLabel } from '../../lib/format';
 import { getTapeBySlug } from '../../lib/queries/tapes';
 import { imageUrl } from '../../lib/urls';
@@ -97,7 +98,7 @@ const firstComments = !unpublished ? await listComments(env.DB, { tapeId: tape.i
     </section>
     <section id="details" class="tab-panel" data-tab-panel>
       <h2>รายละเอียด</h2>
-      {tape.description ? <p class="long-text">{tape.description}</p> : <p class="empty-state">ยังไม่มีรายละเอียดเพิ่มเติม</p>}
+      {tape.description ? <ExpandableText text={tape.description} id="tape-description" /> : <p class="empty-state">ยังไม่มีรายละเอียดเพิ่มเติม</p>}
       {tape.reelUrl && <a href={tape.reelUrl} target="_blank" rel="noopener noreferrer">ดูรีวิวบนเพจ</a>}
     </section>
     <section id="collections" class="tab-panel" data-tab-panel>

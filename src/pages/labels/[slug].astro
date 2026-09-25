@@ -5,6 +5,7 @@ import CreditLine from '../../components/layout/CreditLine.astro';
 import InfoBox from '../../components/ui/InfoBox.astro';
 import Placeholder from '../../components/ui/Placeholder.astro';
 import TapeResults from '../../components/ui/TapeResults.astro';
+import ExpandableText from '../../components/ui/ExpandableText.astro';
 import { getTapePage } from '../../lib/queries/tapes';
 import { imageUrl } from '../../lib/urls';
 const slug = Astro.params.slug ?? '';
@@ -24,7 +25,7 @@ const nextParams = new URLSearchParams(Astro.url.searchParams); nextParams.delet
     <InfoBox items={[{ label: 'จำนวนเทป', value: `${label.publishedTapeCount} เทป` }, { label: 'ช่วงปี', value: years }]} />
     <div class="entity-art">{label.logoKey && env.IMAGE_BASE_URL ? <img src={imageUrl(label.logoKey, env.IMAGE_BASE_URL)} width="160" height="160" loading="lazy" decoding="async" alt={`โลโก้ ${label.name}`} /> : <Placeholder label={`ยังไม่มีโลโก้ ${label.name}`} />}</div>
   </div>
-  {label.description && <p class="long-text section soft">{label.description}</p>}
+  {label.description && <ExpandableText text={label.description} id="label-description" className="section soft" />}
   <section class="section" aria-labelledby="tapes-title"><div class="section-heading"><h2 id="tapes-title">เทปจากค่ายนี้</h2><nav class="view-switch"><a href={`/labels/${slug}`} aria-current={sort === 'new' ? 'page' : undefined}>เพิ่มล่าสุด</a><a href={`/labels/${slug}?sort=year`} aria-current={sort === 'year' ? 'page' : undefined}>ปีเก่าไปใหม่</a></nav></div><TapeResults items={page.items} nextCursor={page.nextCursor} path={`/labels/${slug}`} params={nextParams} showLabel={false} /></section>
   <CreditLine createdByName={label.createdByName} createdAt={label.createdAt} updatedByName={label.updatedByName} updatedAt={label.updatedAt} />
 </BaseLayout>

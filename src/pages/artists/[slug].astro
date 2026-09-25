@@ -6,6 +6,7 @@ import InfoBox from '../../components/ui/InfoBox.astro';
 import Placeholder from '../../components/ui/Placeholder.astro';
 import Tabs from '../../components/ui/Tabs.astro';
 import TapeResults from '../../components/ui/TapeResults.astro';
+import ExpandableText from '../../components/ui/ExpandableText.astro';
 import { artistStatusLabel, artistTypeLabel, formatYear } from '../../lib/format';
 import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
 import { getTapePage } from '../../lib/queries/tapes';
@@ -71,7 +72,7 @@ tabs.push({ id: 'songs', label: 'เพลงที่ร้อง' });
     ]} />
     <div class="entity-art">{artist.imageKey && env.IMAGE_BASE_URL ? <img src={imageUrl(artist.imageKey, env.IMAGE_BASE_URL)} width="240" height="240" loading="lazy" decoding="async" alt={`รูป ${artist.name}`} /> : <Placeholder label={`ยังไม่มีรูป ${artist.name}`} />}</div>
   </div>
-  {artist.bio && <p class="long-text section soft">{artist.bio}</p>}
+  {artist.bio && <ExpandableText text={artist.bio} id="artist-bio" className="section soft" />}
   <Tabs tabs={tabs}>
     <section id="discography" class="tab-panel" data-tab-panel><h2>ผลงาน</h2><TapeResults items={page.items} nextCursor={page.nextCursor} path={`/artists/${slug}`} params={new URLSearchParams()} showLabel={false} /></section>
     {artist.artistType !== 'solo' && members.results.length > 0 && <section id="members" class="tab-panel" data-tab-panel>

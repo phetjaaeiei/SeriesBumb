@@ -1,6 +1,7 @@
 ---
 import { env } from 'cloudflare:workers';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
+import ExpandableText from '../../components/ui/ExpandableText.astro';
 import CreditLine from '../../components/layout/CreditLine.astro';
 import Placeholder from '../../components/ui/Placeholder.astro';
 import { imageUrl } from '../../lib/urls';
@@ -15,7 +16,7 @@ const coverKey = collection.coverKey || items.find(item => item.coverThumbKey)?.
   {collection.status !== 'published' && <p class="draft-banner">ยังไม่เผยแพร่ · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
   <h1>{collection.title}</h1>
   <div class="entity-top">
-    <div>{collection.description ? <p class="long-text soft">{collection.description}</p> : <p class="soft">เทปที่คัดไว้ใน Collection นี้</p>}</div>
+    <div>{collection.description ? <ExpandableText text={collection.description} id="collection-description" className="soft" /> : <p class="soft">เทปที่คัดไว้ใน Collection นี้</p>}</div>
     <div class="entity-art">{coverKey && env.IMAGE_BASE_URL ? <img src={imageUrl(coverKey, env.IMAGE_BASE_URL)} width="240" height="240" loading="lazy" decoding="async" alt={`ปก Collection ${collection.title}`} /> : <Placeholder label="ยังไม่มีรูปปก" />}</div>
   </div>
   <section class="section" aria-labelledby="items-title"><div class="section-heading"><h2 id="items-title">เทปใน Collection</h2></div>
