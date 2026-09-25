@@ -2,9 +2,10 @@ import { jsonParam } from '../../db/client';
 import type { ReleaseType } from '../../db/enums';
 import { decadeOf, toCeYear, yearSortOf } from '../format';
 import { slugCandidates, SLUG_MAX, SLUG_RE } from '../slug';
-import { normalizeThai, thaiSortKey } from '../thai';
+import { thaiSortKey } from '../thai';
 import { reindexArtistDependents, reindexLabelDependents } from './search-admin';
 import { CatalogError } from './catalog-delete';
+import { normalizeSearchField, searchDocument } from '../search';
 import type { ImageKind } from './images';
 
 type EntityTable = 'artist' | 'label' | 'genre' | 'song' | 'tape' | 'collection';
@@ -32,9 +33,9 @@ async function uniqueSlug(db: D1Database, table: EntityTable, name: string, desi
 }
 
 function indexStatements(db: D1Database, kind: SearchKind, refId: string, name: string, text: string, isPublic: boolean): D1PreparedStatement[] {
-  const normalized = normalizeThai(text);
+  const normalized = searchDocument(text.split(' | '));
   return [
-    db.prepare(`INSERT INTO search_doc (kind, refId, isPublic, nameKey) VALUES (?, ?, ?, ?) ON CONFLICT(kind, refId) DO UPDATE SET isPublic = excluded.isPublic, nameKey = excluded.nameKey`).bind(kind, refId, Number(isPublic), normalizeThai(name)),
+    db.prepare(`INSERT INTO search_doc (kind, refId, isPublic, nameKey) VALUES (?, ?, ?, ?) ON CONFLICT(kind, refId) DO UPDATE SET isPublic = excluded.isPublic, nameKey = excluded.nameKey`).bind(kind, refId, Number(isPublic), normalizeSearchField(name)),
     db.prepare('DELETE FROM search_fts WHERE rowid = (SELECT docId FROM search_doc WHERE kind = ? AND refId = ?)').bind(kind, refId),
     db.prepare('INSERT INTO search_fts (rowid, text) SELECT docId, ? FROM search_doc WHERE kind = ? AND refId = ?').bind(normalized, kind, refId),
   ];

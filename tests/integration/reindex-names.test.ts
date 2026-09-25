@@ -22,6 +22,9 @@ describe('dependent search indexing', () => {
     expect(renamedArtistResults.some(row => row.kind === 'song')).toBe(true);
     await saveLabel(env.DB, userId, { id: label.id, name: `ค่ายใหม่${suffix}` });
     expect((await searchPublic(env.DB, `ค่ายใหม่${suffix}`)).some(row => row.kind === 'tape')).toBe(true);
+    await saveLabel(env.DB, userId, { id: label.id, name: `ค่ายซีรี่ย์${suffix}` });
+    expect((await searchPublic(env.DB, 'ค่ายซีรีย์')).some(row => row.kind === 'tape')).toBe(true);
+    expect((await searchPublic(env.DB, 'ค่าย ซีรีย์')).some(row => row.kind === 'tape')).toBe(true);
     await env.DB.prepare("DELETE FROM search_fts WHERE rowid = (SELECT docId FROM search_doc WHERE kind = 'tape' AND refId = ?)").bind(tape.id).run();
     expect((await searchPublic(env.DB, `เทปทดสอบ${suffix}`)).some(row => row.kind === 'tape')).toBe(false);
     const rebuilt = await enqueueFullReindex(env.DB);

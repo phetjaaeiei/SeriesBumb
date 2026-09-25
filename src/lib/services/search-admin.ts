@@ -1,12 +1,12 @@
 import { jsonParam } from '../../db/client';
-import { normalizeThai } from '../thai';
+import { normalizeSearchField, searchDocument } from '../search';
 
 type Kind = 'tape' | 'song' | 'artist' | 'label' | 'collection';
 interface Ref { kind: Kind; refId: string }
 interface Doc extends Ref { nameKey: string; text: string; isPublic: number }
 
 function doc(kind: Kind, refId: string, name: string, parts: (string | null | undefined)[], isPublic: boolean): Doc {
-  return { kind, refId, nameKey: normalizeThai(name), text: normalizeThai(parts.filter(Boolean).join(' | ')), isPublic: Number(isPublic) };
+  return { kind, refId, nameKey: normalizeSearchField(name), text: searchDocument(parts), isPublic: Number(isPublic) };
 }
 
 async function loadDocuments(db: D1Database, refs: Ref[]): Promise<Doc[]> {
