@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SeriesBumb artist page mockup</title>
+<!-- Approved in brainstorming 2026-09-25. Reference only: layout and tokens are normative in the spec (section 9). -->
+<!-- Deviation in the spec: the "คอมเมนต์" tab is replaced by "เพลงที่ร้อง" (comments exist only on tapes and songs). -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;500&family=IBM+Plex+Sans+Thai:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#14110e;padding:24px 16px}
+.ar{max-width:1120px;margin:0 auto;background:#14110e;color:#e6dfd3;font-family:'IBM Plex Sans Thai';font-size:14px;border:1px solid #2e2720;border-radius:8px;overflow:hidden}
+.hd{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid #2e2720}
+.lg{font-family:'Noto Serif Thai';font-size:20px;color:#f0e6d2;font-variant:small-caps;letter-spacing:.5px}
+.sr{background:#1c1814;border:1px solid #3a322a;color:#8f8474;border-radius:4px;padding:5px 10px;font-size:13px;flex:1;max-width:320px}
+.wr{display:grid;grid-template-columns:208px minmax(0,1fr)}
+.sb{border-right:1px solid #2e2720;padding:14px 12px;font-size:13px;line-height:1.9}
+.sb .t{font-family:'Noto Serif Thai';color:#f0e6d2;margin-top:8px}
+.sb span{color:#a89c8a;display:block;padding-left:8px;cursor:pointer}
+.sb span:hover{color:#d4a24c}
+.mn{padding:16px 24px;min-width:0}
+.h1{font-family:'Noto Serif Thai';font-size:28px;color:#f0e6d2;margin:0 0 10px;font-weight:500}
+.top{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:24px}
+.ib{display:grid;grid-template-columns:auto minmax(0,1fr) auto minmax(0,1fr);gap:6px 12px;font-size:14px}
+.k{color:#8f8474;font-size:13px}
+.ln{color:#d4a24c;cursor:pointer}
+.tabs{display:flex;gap:4px;border-bottom:1px solid #3a322a;margin-top:18px}
+.tb{background:none;border:none;border-bottom:2px solid transparent;color:#a89c8a;font-family:'IBM Plex Sans Thai';font-size:14px;padding:8px 12px;cursor:pointer}
+.tb.on{color:#f0e6d2;border-bottom-color:#d4a24c}
+.fl{display:flex;gap:6px;margin:12px 0 8px;flex-wrap:wrap}
+.fb{background:none;border:1px solid #3a322a;color:#a89c8a;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:'IBM Plex Sans Thai'}
+.fb.on{border-color:#d4a24c;color:#d4a24c}
+table.dg{width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed}
+.dg th{text-align:left;color:#8f8474;font-weight:400;font-size:13px;padding:6px 8px;border-bottom:1px solid #3a322a}
+.dg td{padding:8px;border-bottom:1px solid #241f1a}
+.dg tr:hover td{background:#1c1814}
+.mo{font-family:'IBM Plex Mono';font-size:13px;color:#a89c8a}
+.ft{display:flex;justify-content:space-between;font-size:13px;color:#8f8474;border-top:1px solid #2e2720;margin-top:16px;padding-top:10px}
+@media (max-width:1023px){.wr{grid-template-columns:1fr}.sb{display:none}.top{grid-template-columns:1fr}.ib{grid-template-columns:auto minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<div class="ar">
+<div class="hd">
+<span class="lg">ซีรี่ย์บั้ม · คลังเทปเพลง</span>
+<span class="sr">ค้นหาเทป เพลง ศิลปิน</span>
+<span style="font-size:13px;color:#d4a24c">เข้าสู่ระบบ</span>
+</div>
+<div class="wr">
+<nav class="sb">
+<div class="t">เทป</div><span>ตามตัวอักษร</span><span>ตามยุค</span><span>ตามแนวเพลง</span>
+<div class="t">ศิลปิน</div><span>ตามตัวอักษร</span><span>ตามจังหวัด</span>
+<div class="t">ค่ายเพลง</div><span>ทั้งหมด</span>
+<div class="t">Collection</div><span>ชุดคัดสรร</span>
+<div class="t">อื่นๆ</div><span>สุ่มเทป</span><span>เพิ่มล่าสุด</span>
+</nav>
+<main class="mn">
+<div class="top">
+<div>
+<div class="h1">วงตัวอย่าง</div>
+<div class="ib">
+<span class="k">ประเภท</span><span>วงดนตรี</span>
+<span class="k">สถานะ</span><span style="color:#d9785f">แยกวง</span>
+<span class="k">มาจาก</span><span class="ln">เพชรบูรณ์</span>
+<span class="k">ปีที่ทำงาน</span><span class="mo" style="color:#e6dfd3">1994–2003, 2015–2018</span>
+<span class="k">แนวเพลง</span><span>ป็อปร็อก, อัลเทอร์เนทีฟ</span>
+<span class="k">ค่ายล่าสุด</span><span class="ln">ค่ายตัวอย่าง</span>
+</div>
+</div>
+<div style="height:240px;background:#231e19;border:1px solid #3a322a;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#6f6558;font-size:12px">รูปศิลปิน 240px</div>
+</div>
+<p style="font-size:15px;line-height:1.7;color:#c9c0b2;margin:14px 0 0">วงป็อปร็อกจากหล่มสัก เริ่มจากเล่นดนตรีในงานวัด ก่อนออกเทปชุดแรกกับค่ายเล็กในปี 2537… <span class="ln">อ่านต่อ</span></p>
+<div class="tabs" id="tabs">
+<button class="tb on" data-t="d">ผลงาน</button>
+<button class="tb" data-t="m">สมาชิก</button>
+<button class="tb" data-t="s">เพลงที่ร้อง</button>
+</div>
+<div id="pd">
+<div class="fl" id="flt">
+<button class="fb on" data-f="all">ทั้งหมด</button>
+<button class="fb" data-f="อัลบั้ม">อัลบั้ม</button>
+<button class="fb" data-f="รวมฮิต">รวมฮิต</button>
+<button class="fb" data-f="เพลงประกอบ">เพลงประกอบ</button>
+</div>
+<table class="dg">
+<colgroup><col style="width:46%"><col style="width:22%"><col style="width:14%"><col style="width:18%"></colgroup>
+<thead><tr><th>ชื่อชุด</th><th>ประเภท</th><th>ปี</th><th>มีเทปนี้</th></tr></thead>
+<tbody id="rows">
+<tr data-k="อัลบั้ม"><td class="ln">หน้าร้อน</td><td>อัลบั้ม</td><td class="mo">1994</td><td class="mo">342 คน</td></tr>
+<tr data-k="อัลบั้ม"><td class="ln">ทางกลับบ้าน</td><td>อัลบั้ม</td><td class="mo">1996</td><td class="mo">218 คน</td></tr>
+<tr data-k="เพลงประกอบ"><td class="ln">เพลงประกอบละคร ฝนแรก</td><td>เพลงประกอบ</td><td class="mo">1998</td><td class="mo">57 คน</td></tr>
+<tr data-k="รวมฮิต"><td class="ln">รวมฮิต 10 ปี</td><td>รวมฮิต</td><td class="mo">2003</td><td class="mo">96 คน</td></tr>
+</tbody>
+</table>
+</div>
+<div id="pm" style="display:none;padding-top:12px">
+<table class="dg"><colgroup><col style="width:45%"><col style="width:55%"></colgroup><tbody>
+<tr><td>สมชาย ตัวอย่าง</td><td style="color:#a89c8a">ร้องนำ, กีตาร์ (1994–2003, 2015–2018)</td></tr>
+<tr><td>สมหญิง ตัวอย่าง</td><td style="color:#a89c8a">เบส (1994–2003)</td></tr>
+<tr><td>สมศักดิ์ ตัวอย่าง</td><td style="color:#a89c8a">กลอง (1996–2003)</td></tr>
+</tbody></table>
+</div>
+<div id="ps" style="display:none;padding:14px 0;color:#a89c8a;font-size:13px">ตารางเพลงที่ร้อง (ชื่อเพลง, อยู่ในเทปแรก, ปี)</div>
+<div class="ft"><span>เพิ่มโดย แอดมินบั้ม · 2026-09-25</span><span>แก้ไขล่าสุดโดย แอดมินบั้ม · 2026-09-25</span></div>
+</main>
+</div>
+</div>
+<script>
+const panes={d:'pd',m:'pm',s:'ps'};
+document.querySelectorAll('#tabs .tb').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#tabs .tb').forEach(x=>x.classList.toggle('on',x===b));Object.entries(panes).forEach(([k,id])=>{document.getElementById(id).style.display=k===b.dataset.t?'block':'none'})}));
+document.querySelectorAll('#flt .fb').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#flt .fb').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('#rows tr').forEach(r=>{r.style.display=(b.dataset.f==='all'||r.dataset.k===b.dataset.f)?'':'none'})}));
+</script>
+</body>
+</html>
