@@ -163,6 +163,19 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
     finally { setBusy(false); }
   }
 
+  async function removeEntity() {
+    const label = get(kind === 'artists' || kind === 'labels' || kind === 'genres' ? 'name' : 'title');
+    const confirmation = kind === 'tapes' ? window.prompt(`พิมพ์ชื่อ “${label}” เพื่อยืนยันการลบ`) : undefined;
+    if (kind === 'tapes' && confirmation !== label) return;
+    if (kind !== 'tapes' && !window.confirm(`ลบ ${label} ออกจากคลัง?`)) return;
+    setBusy(true); setError('');
+    try {
+      const response = await actions.admin.deleteCatalog({ kind, id, confirmation: confirmation || undefined });
+      if (response.error) throw new Error(response.error.message);
+      window.location.assign(`/admin/${kind}`);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'ลบรายการไม่สำเร็จ'); setBusy(false); }
+  }
+
   return <div className="admin-editor">
     <div className="editor-toolbar"><span className="mono muted">ID {id}</span><a className="button" href={publicPath} target="_blank" rel="noreferrer">ดูตัวอย่าง ↗</a></div>
     <div className="editor-section"><h2>ข้อมูลพื้นฐาน</h2><div className="admin-form-grid">
@@ -189,6 +202,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
 
     <div className="editor-actions">
       {kind === 'tapes' || kind === 'collections' ? <><button className="button" type="button" disabled={busy} onClick={() => void save('draft')}>บันทึกร่าง</button><button className="button button-primary" type="button" disabled={busy} onClick={() => void save(get('status') === 'published' ? 'draft' : 'published')}>{busy ? 'กำลังบันทึก…' : get('status') === 'published' ? 'ยกเลิกเผยแพร่' : 'เผยแพร่'}</button></> : <button className="button button-primary" type="button" disabled={busy} onClick={() => void save()}>{busy ? 'กำลังบันทึก…' : 'บันทึก'}</button>}
+      <button className="button button-danger" type="button" disabled={busy} onClick={() => void removeEntity()}>ลบรายการ</button>
       {message && <span className="success-text" role="status">{message}</span>}
       {error && <span className="error-text" role="alert">{error}</span>}
     </div>

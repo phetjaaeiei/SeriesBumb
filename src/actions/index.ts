@@ -10,11 +10,13 @@ import { setEngagement } from '../lib/services/engagement';
 import { CommentError, createComment, deleteOwnComment, listComments } from '../lib/services/comments';
 import { moderateComment, setCommentBan, setUserRole } from '../lib/services/admin-community';
 import { continueReindex, enqueueFullReindex } from '../lib/services/search-admin';
+import { CatalogError, deleteCatalogEntity } from '../lib/services/catalog-delete';
 import { normalizeThai } from '../lib/thai';
 
 async function runCatalog<T>(action: () => Promise<T>): Promise<T> {
   try { return await action(); }
   catch (error) {
+    if (error instanceof CatalogError) throw new ActionError({ code: 'BAD_REQUEST', message: error.message });
     console.error('Catalog action failed', error instanceof Error ? error.message : 'unknown');
     throw new ActionError({ code: 'BAD_REQUEST', message: 'บันทึกไม่สำเร็จ ตรวจข้อมูลแล้วลองอีกครั้ง' });
   }
@@ -55,6 +57,10 @@ export const server = {
     health: defineAdminAction({
       input: z.object({}),
       handler: (_input, context) => ({ ok: true, userId: context.user.id }),
+    }),
+    deleteCatalog: defineAdminAction({
+      input: z.object({ kind: z.enum(['tapes', 'songs', 'artists', 'labels', 'genres', 'collections']), id: z.uuid(), confirmation: z.string().max(200).optional() }),
+      handler: (input, context) => runCatalog(() => deleteCatalogEntity(env.DB, env.BUCKET, input.kind, input.id, input.confirmation, promise => context.locals.cfContext.waitUntil(promise))),
     }),
     lookup: defineAdminAction({
       input: z.object({ kind: z.enum(['artists', 'labels', 'genres', 'songs', 'tapes']), query: z.string().trim().min(2).max(80) }),
