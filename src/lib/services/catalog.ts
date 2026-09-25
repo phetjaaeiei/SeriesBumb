@@ -16,14 +16,14 @@ function requiredName(value: string, label: string): string {
   return name;
 }
 
-async function uniqueSlug(db: D1Database, table: EntityTable, name: string, desired?: string | null, id?: string): Promise<string> {
+async function uniqueSlug(db: D1Database, table: EntityTable, name: string, desired?: string | null, id?: string, options?: { year?: number | null; qualifierSlug?: string | null }): Promise<string> {
   if (desired) {
     if (!SLUG_RE.test(desired) || [...desired].length > SLUG_MAX) throw new Error('รูปแบบลิงก์ไม่ถูกต้อง');
     const row = await db.prepare(`SELECT id FROM ${table} WHERE slug = ?`).bind(desired).first<{ id: string }>();
     if (row && row.id !== id) throw new Error('ลิงก์นี้ถูกใช้แล้ว');
     return desired;
   }
-  const candidates = slugCandidates(name);
+  const candidates = slugCandidates(name, options);
   for (const candidate of candidates) {
     const row = await db.prepare(`SELECT id FROM ${table} WHERE slug = ?`).bind(candidate).first<{ id: string }>();
     if (!row || row.id === id) return candidate;
@@ -134,7 +134,7 @@ export interface TapeSaveInput {
 
 export async function saveTape(db: D1Database, userId: string, input: TapeSaveInput, bucket?: R2Bucket, waitUntil?: (promise: Promise<unknown>) => void) {
   const title = requiredName(input.title, 'ชื่อเทป');
-  const current = await db.prepare('SELECT id, slug, status, publishedAt, labelId, coverImageId, ogImageKey, ogImageBytes, ogSourceImageId, ogSourceTitle FROM tape WHERE id = ?').bind(input.id).first<{ id: string; slug: string; status: 'draft' | 'published'; publishedAt: number | null; labelId: string | null; coverImageId: string | null; ogImageKey: string | null; ogImageBytes: number; ogSourceImageId: string | null; ogSourceTitle: string | null }>();
+  const current = await db.prepare('SELECT id, slug, slugLocked, status, publishedAt, labelId, coverImageId, ogImageKey, ogImageBytes, ogSourceImageId, ogSourceTitle FROM tape WHERE id = ?').bind(input.id).first<{ id: string; slug: string; slugLocked: number; status: 'draft' | 'published'; publishedAt: number | null; labelId: string | null; coverImageId: string | null; ogImageKey: string | null; ogImageBytes: number; ogSourceImageId: string | null; ogSourceTitle: string | null }>();
   if (!current) throw new Error('ไม่พบเทปนี้');
   const artistIds = [...new Set(input.artistIds ?? [])];
   const genreIds = [...new Set(input.genreIds ?? [])];
@@ -166,7 +166,16 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
   const affectedLabels = [...new Set([current.labelId, input.labelId].filter((value): value is string => !!value))];
   const year = input.year == null ? null : toCeYear(input.year);
   if (year != null && (year < 1950 || year > new Date().getFullYear() + 1)) throw new Error('ปีที่ออกเทปไม่ถูกต้อง');
-  const slug = await uniqueSlug(db, 'tape', title, input.slug || undefined, input.id);
+  const names = artistIds.length ? await db.prepare(`SELECT id, name, slug FROM artist WHERE id IN (${artistIds.map(() => '?').join(',')})`).bind(...artistIds).all<{ id: string; name: string; slug: string }>() : { results: [] as { id: string; name: string; slug: string }[] };
+  const customSlug = input.slug || undefined;
+  const autoSlug = current.publishedAt === null && !current.slugLocked && !customSlug;
+  const slug = customSlug || autoSlug
+    ? await uniqueSlug(db, 'tape', title, customSlug, input.id, {
+      year,
+      qualifierSlug: names.results.find(row => row.id === artistIds[0])?.slug,
+    })
+    : current.slug;
+  const slugLocked = customSlug ? 1 : current.slugLocked;
   const nextOgKey = input.ogImageKey === undefined ? current.ogImageKey : input.ogImageKey;
   let nextOgBytes = current.ogImageBytes;
   if (nextOgKey !== current.ogImageKey) {
@@ -181,7 +190,6 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
   const nextOgSourceTitle = nextOgKey ? input.ogSourceTitle === undefined ? current.ogSourceTitle : input.ogSourceTitle : null;
   const now = Date.now();
   const publishedAt = input.status === 'published' ? current.publishedAt ?? now : current.publishedAt;
-  const names = artistIds.length ? await db.prepare(`SELECT name FROM artist WHERE id IN (${artistIds.map(() => '?').join(',')})`).bind(...artistIds).all<{ name: string }>() : { results: [] as { name: string }[] };
   const labelName = input.labelId ? await db.prepare('SELECT name FROM label WHERE id = ?').bind(input.labelId).first<{ name: string }>() : null;
   const searchText = [title, input.titleAlt, ...names.results.map(row => row.name), labelName?.name, input.catalogNo].filter(Boolean).join(' | ');
   const relationPublished = Number(input.status === 'published');
@@ -191,7 +199,7 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
       position = (SELECT CAST(json_extract(value, '$.position') AS INTEGER) FROM json_each(?1) WHERE json_extract(value, '$.id') = tape_image.id)
       WHERE tapeId = ?2 AND id IN (SELECT json_extract(value, '$.id') FROM json_each(?1))`)
       .bind(jsonParam(input.images.map((image, position) => ({ ...image, position }))), input.id)] : []),
-    db.prepare(`UPDATE tape SET slug = ?, slugLocked = ?, title = ?, titleAlt = ?, titleSort = ?, labelId = ?, year = ?, yearSort = ?, decade = ?, releaseType = ?, catalogNo = ?, description = ?, reelUrl = ?, isRare = ?, status = ?, publishedAt = ?, coverImageId = ?, coverThumbKey = ?, ogImageKey = ?, ogImageBytes = ?, ogSourceImageId = ?, ogSourceTitle = ?, updatedBy = ?, updatedAt = ? WHERE id = ?`).bind(slug, Number(!!input.slug), title, input.titleAlt || null, thaiSortKey(title), input.labelId || null, year, yearSortOf(year), decadeOf(year), input.releaseType, input.catalogNo || null, input.description || '', input.reelUrl || null, Number(!!input.isRare), input.status, publishedAt, cover?.id || null, cover?.thumbKey || null, nextOgKey, nextOgBytes, nextOgSourceImageId, nextOgSourceTitle, userId, now, input.id),
+    db.prepare(`UPDATE tape SET slug = ?, slugLocked = ?, title = ?, titleAlt = ?, titleSort = ?, labelId = ?, year = ?, yearSort = ?, decade = ?, releaseType = ?, catalogNo = ?, description = ?, reelUrl = ?, isRare = ?, status = ?, publishedAt = ?, coverImageId = ?, coverThumbKey = ?, ogImageKey = ?, ogImageBytes = ?, ogSourceImageId = ?, ogSourceTitle = ?, updatedBy = ?, updatedAt = ? WHERE id = ?`).bind(slug, slugLocked, title, input.titleAlt || null, thaiSortKey(title), input.labelId || null, year, yearSortOf(year), decadeOf(year), input.releaseType, input.catalogNo || null, input.description || '', input.reelUrl || null, Number(!!input.isRare), input.status, publishedAt, cover?.id || null, cover?.thumbKey || null, nextOgKey, nextOgBytes, nextOgSourceImageId, nextOgSourceTitle, userId, now, input.id),
     db.prepare('DELETE FROM tape_artist WHERE tapeId = ?').bind(input.id),
     db.prepare('INSERT INTO tape_artist (tapeId, artistId, position, isPublished, yearSort) SELECT ?, value, CAST(key AS INTEGER), ?, ? FROM json_each(?)').bind(input.id, relationPublished, yearSortOf(year), jsonParam(artistIds)),
     db.prepare('DELETE FROM tape_genre WHERE tapeId = ?').bind(input.id),
@@ -230,7 +238,7 @@ export async function saveArtist(db: D1Database, userId: string, input: {
   const name = requiredName(input.name, 'ชื่อศิลปิน');
   const old = await db.prepare('SELECT slug, name, publishedTapeCount FROM artist WHERE id = ?').bind(input.id).first<{ slug: string; name: string; publishedTapeCount: number }>();
   if (!old) throw new Error('ไม่พบศิลปินนี้');
-  const slug = await uniqueSlug(db, 'artist', name, input.slug || undefined, input.id);
+  const slug = input.slug ? await uniqueSlug(db, 'artist', name, input.slug, input.id) : old.slug;
   const members = (input.members ?? []).slice(0, 40).map((member, position) => ({ id: crypto.randomUUID(), name: requiredName(member.name, 'ชื่อสมาชิก'), role: member.role || '', years: member.years || null, isCurrent: Number(!!member.isCurrent), position }));
   const now = Date.now();
   await db.batch([
@@ -251,7 +259,7 @@ export async function saveLabel(db: D1Database, userId: string, input: {
   const name = requiredName(input.name, 'ชื่อค่าย');
   const old = await db.prepare('SELECT slug, name, publishedTapeCount FROM label WHERE id = ?').bind(input.id).first<{ slug: string; name: string; publishedTapeCount: number }>();
   if (!old) throw new Error('ไม่พบค่ายนี้');
-  const slug = await uniqueSlug(db, 'label', name, input.slug || undefined, input.id);
+  const slug = input.slug ? await uniqueSlug(db, 'label', name, input.slug, input.id) : old.slug;
   await db.batch([
     db.prepare('UPDATE label SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, description = ?, logoKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, name, input.nameAlt || null, thaiSortKey(name), input.description || '', input.logoKey || null, userId, Date.now(), input.id),
     ...indexStatements(db, 'label', input.id, name, [name, input.nameAlt].filter(Boolean).join(' | '), old.publishedTapeCount > 0),
@@ -269,7 +277,7 @@ export async function saveSong(db: D1Database, userId: string, input: {
   const title = requiredName(input.title, 'ชื่อเพลง');
   const old = await db.prepare('SELECT slug, publishedTapeCount FROM song WHERE id = ?').bind(input.id).first<{ slug: string; publishedTapeCount: number }>();
   if (!old) throw new Error('ไม่พบเพลงนี้');
-  const slug = await uniqueSlug(db, 'song', title, input.slug || undefined, input.id);
+  const slug = input.slug ? await uniqueSlug(db, 'song', title, input.slug, input.id) : old.slug;
   const oldArtists = await db.prepare('SELECT artistId FROM song_artist WHERE songId = ?').bind(input.id).all<{ artistId: string }>();
   const artistIds = [...new Set(input.artistIds ?? [])].slice(0, 20);
   const affectedArtists = [...new Set([...oldArtists.results.map(row => row.artistId), ...artistIds])];
@@ -291,7 +299,7 @@ export async function saveGenre(db: D1Database, input: { id: string; name: strin
   const name = requiredName(input.name, 'ชื่อแนวเพลง');
   const old = await db.prepare('SELECT slug FROM genre WHERE id = ?').bind(input.id).first<{ slug: string }>();
   if (!old) throw new Error('ไม่พบแนวเพลงนี้');
-  const slug = await uniqueSlug(db, 'genre', name, input.slug || undefined, input.id);
+  const slug = input.slug ? await uniqueSlug(db, 'genre', name, input.slug, input.id) : old.slug;
   await db.batch([
     db.prepare('UPDATE genre SET name = ?, slug = ?, position = COALESCE(?, position) WHERE id = ?').bind(name, slug, input.position ?? null, input.id),
     ...redirectStatements(db, `/genres/${old.slug}`, `/genres/${slug}`),
@@ -319,7 +327,7 @@ export async function saveCollection(db: D1Database, userId: string, input: {
   const title = requiredName(input.title, 'ชื่อ Collection');
   const old = await db.prepare('SELECT slug FROM collection WHERE id = ?').bind(input.id).first<{ slug: string }>();
   if (!old) throw new Error('ไม่พบ Collection นี้');
-  const slug = await uniqueSlug(db, 'collection', title, input.slug || undefined, input.id);
+  const slug = input.slug ? await uniqueSlug(db, 'collection', title, input.slug, input.id) : old.slug;
   const items = (input.items ?? []).slice(0, 100).map((item, position) => ({ tapeId: item.tapeId, note: item.note || null, position }));
   await db.batch([
     db.prepare('UPDATE collection SET slug = ?, title = ?, description = ?, coverKey = ?, isFeatured = ?, status = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, title, input.description || '', input.coverKey || null, Number(!!input.isFeatured), input.status, userId, Date.now(), input.id),
