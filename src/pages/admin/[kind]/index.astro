@@ -2,21 +2,76 @@
 import { env } from 'cloudflare:workers';
 import AdminLayout from '../../../components/layout/AdminLayout.astro';
 import QuickCreate from '../../../components/admin/QuickCreate';
-type Kind = 'tapes' | 'songs' | 'artists' | 'labels' | 'genres' | 'collections';
-const tableMap = { tapes: 'tape', songs: 'song', artists: 'artist', labels: 'label', genres: 'genre', collections: 'collection' } as const;
+import { getAdminCatalogPage, type AdminCatalogKind } from '../../../lib/queries/admin-catalog';
+
 const labelMap = { tapes: 'เทป', songs: 'เพลง', artists: 'ศิลปิน', labels: 'ค่ายเพลง', genres: 'แนวเพลง', collections: 'Collection' } as const;
-const kind = Astro.params.kind as Kind;
-if (!Object.hasOwn(tableMap, kind)) return Astro.rewrite('/404');
-const table = tableMap[kind];
-const nameColumn = kind === 'artists' || kind === 'labels' || kind === 'genres' ? 'name' : 'title';
-const order = kind === 'genres' || kind === 'collections' ? 'position, id' : kind === 'artists' || kind === 'labels' ? 'nameSort, id' : 'updatedAt DESC, id DESC';
-const rows = (await env.DB.prepare(`SELECT id, slug, ${nameColumn} AS title${kind === 'tapes' || kind === 'collections' ? ', status' : ''} FROM ${table} ORDER BY ${order} LIMIT 100`).all<{ id: string; slug: string; title: string; status?: string }>()).results;
+const kind = Astro.params.kind as AdminCatalogKind;
+if (!Object.hasOwn(labelMap, kind)) return Astro.rewrite('/404');
+
+const query = (Astro.url.searchParams.get('q') || '').trim().slice(0, 100);
+const requestedStatus = Astro.url.searchParams.get('status');
+const status = requestedStatus === 'draft' || requestedStatus === 'published' ? requestedStatus : 'all';
+const unlinked = Astro.url.searchParams.get('unlinked') === '1';
+const { items, nextCursor } = await getAdminCatalogPage(env.DB, {
+  kind, query, status, unlinked, cursor: Astro.url.searchParams.get('cursor'),
+});
+const nextParams = new URLSearchParams();
+if (query) nextParams.set('q', query);
+if (status !== 'all') nextParams.set('status', status);
+if (unlinked) nextParams.set('unlinked', '1');
+if (nextCursor) nextParams.set('cursor', nextCursor);
+const hasStatus = kind === 'tapes' || kind === 'collections';
+const hasUnlinked = kind === 'songs' || kind === 'artists';
+const hasFilters = Boolean(query || (hasStatus && status !== 'all') || (hasUnlinked && unlinked));
 ---
 <AdminLayout title={`จัดการ${labelMap[kind]}`}>
   <h1>จัดการ{labelMap[kind]}</h1>
   <p class="page-lede">เพิ่มข้อมูลและเปิดแก้ไขรายการในคลัง</p>
   <QuickCreate kind={kind} client:only="react" />
-  <section class="section" aria-labelledby="records-heading"><div class="section-heading"><h2 id="records-heading">รายการ{labelMap[kind]}</h2></div>
-    {rows.length ? <table class="data-table"><thead><tr><th scope="col">ชื่อ</th><th scope="col">ลิงก์</th><th scope="col">สถานะ</th></tr></thead><tbody>{rows.map(row => <tr><td><a href={`/admin/${kind}/${row.id}`}>{row.title}</a></td><td class="mono">{row.slug}</td><td>{row.status === 'draft' ? 'ร่าง' : row.status === 'published' ? 'เผยแพร่' : '—'}</td></tr>)}</tbody></table> : <p class="empty-state">ยังไม่มีรายการ</p>}
+  <section class="section" aria-labelledby="records-heading">
+    <div class="section-heading"><h2 id="records-heading">รายการ{labelMap[kind]}</h2></div>
+    <form class="admin-catalog-filters" method="get" action={`/admin/${kind}`} role="search">
+      <label class="admin-catalog-search">ค้นหา{labelMap[kind]}
+        <input class="field" type="search" name="q" value={query} maxlength="100" placeholder={`ชื่อ${labelMap[kind]}`} />
+      </label>
+      {hasStatus && <label>สถานะ
+        <select class="field" name="status">
+          <option value="all" selected={status === 'all'}>ทั้งหมด</option>
+          <option value="draft" selected={status === 'draft'}>ร่าง</option>
+          <option value="published" selected={status === 'published'}>เผยแพร่</option>
+        </select>
+      </label>}
+      {hasUnlinked && <label>การเชื่อมกับเทป
+        <select class="field" name="unlinked">
+          <option value="0" selected={!unlinked}>ทั้งหมด</option>
+          <option value="1" selected={unlinked}>ไม่อยู่ในเทปใด</option>
+        </select>
+      </label>}
+      <div class="admin-catalog-actions"><button class="button" type="submit">ค้นหารายการ</button>{hasFilters && <a href={`/admin/${kind}`}>ล้างตัวกรอง</a>}</div>
+    </form>
+    {items.length ? <div class="table-wrap"><table class="data-table">
+      <thead><tr><th scope="col">ชื่อ</th><th scope="col">ลิงก์</th>{hasStatus && <th scope="col">สถานะ</th>}</tr></thead>
+      <tbody>{items.map(row => <tr>
+        <td><a href={`/admin/${kind}/${row.id}`}>{row.title}</a></td>
+        <td class="mono">{row.slug}</td>
+        {hasStatus && <td>{row.status === 'draft' ? 'ร่าง' : 'เผยแพร่'}</td>}
+      </tr>)}</tbody>
+    </table></div> : <p class="empty-state">{hasFilters ? 'ไม่พบรายการที่ตรงกับเงื่อนไข' : 'ยังไม่มีรายการ'}</p>}
+    {nextCursor && <nav class="pagination" aria-label="หน้ารายการ"><a class="button" href={`/admin/${kind}?${nextParams.toString()}`}>หน้าถัดไป</a></nav>}
   </section>
 </AdminLayout>
+
+<style>
+  .admin-catalog-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 12px; margin-bottom: 20px; }
+  .admin-catalog-filters label { display: grid; gap: 4px; color: var(--label); font-size: 13px; }
+  .admin-catalog-search { flex: 1 1 220px; }
+  .admin-catalog-filters label:not(.admin-catalog-search) { min-width: 160px; }
+  .admin-catalog-actions { display: flex; align-items: center; gap: 12px; min-height: 40px; }
+  .admin-catalog-actions a { font-size: 13px; }
+  .data-table td:first-child { min-width: 180px; }
+  .data-table td:nth-child(2) { overflow-wrap: anywhere; }
+  @media (max-width: 639px) {
+    .admin-catalog-filters label:not(.admin-catalog-search) { flex: 1 1 150px; }
+    .admin-catalog-actions { width: 100%; }
+  }
+</style>
