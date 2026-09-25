@@ -1494,7 +1494,8 @@ tests/unit, tests/integration, tests/e2e
 1. **Google OAuth client** (Google Cloud Console, Web application)
    - Authorized redirect URIs: `{SITE_URL}/api/auth/callback/google` และ `http://localhost:4321/api/auth/callback/google`
    - OAuth consent screen: External, scopes `openid` `email` `profile` แล้วกด Publish app → In production (scope พื้นฐานไม่ต้องผ่าน verification)
-2. **R2:** ผูกวิธีชำระเงินในบัญชี Cloudflare (จำเป็นสำหรับการเปิดใช้) แล้ว `wrangler r2 bucket create seriesbumb-images` เปิด r2.dev public access → ได้ `IMAGE_BASE_URL`
+2. **R2:** ผูกวิธีชำระเงินในบัญชี Cloudflare (จำเป็นสำหรับการเปิดใช้ — ผู้ใช้ยืนยันแล้ว 2026-09-25 หลังเทียบทางเลือกที่ไม่ต้องผูกบัตรอย่าง ImageKit/Cloudinary) แล้ว `wrangler r2 bucket create seriesbumb-images` เปิด r2.dev public access → ได้ `IMAGE_BASE_URL`
+   - ตั้ง Billing notifications / budget alert ใน Cloudflare dashboard (เช่นแจ้งเตือนเมื่อค่าใช้จ่ายเกิน $1) เพราะ R2 ไม่มีเพดานวงเงิน มีแค่การแจ้งเตือน — ใช้คู่กับแถบเตือน 80% ใน `/admin`
 3. **D1:** `wrangler d1 create seriesbumb` ใส่ id ใน `wrangler.jsonc`
 4. **secrets:** `wrangler secret put` สำหรับ secrets ในข้อ 6.2
 5. **migrations:** `wrangler d1 migrations apply seriesbumb --remote`
