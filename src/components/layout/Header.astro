@@ -1,5 +1,6 @@
 ---
 import type { SessionUser } from '../../lib/types';
+import CassetteIcon from '../ui/CassetteIcon.astro';
 interface Props { user: SessionUser | null }
 const { user } = Astro.props;
 let avatarUrl: string | null = null;
@@ -19,7 +20,10 @@ const displayName = user?.name.slice(0, 50) ?? '';
     <button class="mobile-nav-button icon-button" type="button" data-mobile-nav-open aria-label="เปิดเมนูหมวดหมู่" aria-controls="mobile-nav-dialog" aria-expanded="false" hidden>
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
     </button>
-    <a class="brand" href="/">ซีรี่ย์บั้ม · คลังเทปเพลง</a>
+    <a class="brand" href="/" aria-label="ซีรี่ย์บั้ม คลังเทปเพลงไทย หน้าแรก">
+      <CassetteIcon class="brand-icon" />
+      <span class="brand-copy"><strong>ซีรี่ย์บั้ม</strong><span>คลังเทปเพลงไทย</span></span>
+    </a>
     <div class="header-spacer"></div>
     <form class="header-search" action="/search" method="get" role="search">
       <label class="search-field">

@@ -85,8 +85,13 @@ small { font-size: 13px; }
 
 .site-header { position: relative; border-bottom: 1px solid var(--rule); }
 .header-inner { min-height: 56px; max-width: 1120px; margin: auto; padding: 0 16px; display: flex; align-items: center; gap: 16px; }
-.brand { display: inline-flex; align-items: center; flex: 0 0 auto; color: var(--heading); font: 500 18px/1.25 var(--font-display); font-variant: small-caps; letter-spacing: .01em; white-space: nowrap; }
+.brand { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 9px; color: var(--heading); white-space: nowrap; }
+.brand-icon { width: 28px; height: 28px; flex: 0 0 28px; color: var(--accent); }
+.brand-copy { display: flex; flex-direction: column; line-height: 1.15; }
+.brand-copy strong { font: 500 17px/1.2 var(--font-display); }
+.brand-copy > span { color: var(--text-muted); font: 400 13px/1.2 var(--font-body); }
 .brand:hover { color: var(--accent); text-decoration: none; }
+.brand:hover .brand-copy > span { color: var(--text-soft); }
 .header-spacer { flex: 1; }
 .header-search { width: min(320px, 32vw); }
 .search-field { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 0 10px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: 4px; }
@@ -360,7 +365,10 @@ progress.usage-meter.danger::-moz-progress-bar { background: var(--status); }
 @media (max-width: 639px) {
   body { font-size: 15px; }
   .header-inner { gap: 6px; padding: 0 12px; }
-  .brand { min-width: 0; max-width: calc(100vw - 154px); overflow: hidden; text-overflow: ellipsis; font-size: 16px; }
+  .brand { min-width: 0; max-width: calc(100vw - 154px); gap: 6px; }
+  .brand-icon { width: 24px; height: 24px; flex-basis: 24px; }
+  .brand-copy strong { font-size: 16px; }
+  .brand-copy > span { display: none; }
   .header-search { display: none; }
   .mobile-search { display: block; width: 44px; height: 44px; flex: 0 0 44px; }
   .mobile-search summary { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 4px; list-style: none; cursor: pointer; }
