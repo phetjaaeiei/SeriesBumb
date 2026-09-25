@@ -78,16 +78,7 @@ export async function uploadImage(db: D1Database, bucket: R2Bucket, input: Uploa
     return { uuid, key, fullKey, thumbKey: key };
   }
 
-  if (variant === 'og') {
-    const old = await db.prepare('SELECT ogImageKey, ogImageBytes FROM tape WHERE id = ?').bind(entityId).first<{ ogImageKey: string | null; ogImageBytes: number }>();
-    await db.batch([
-      db.prepare('UPDATE tape SET ogImageKey = ?, ogImageBytes = ? WHERE id = ?').bind(key, file.size, entityId),
-      db.prepare('UPDATE site_stats SET imageBytes = imageBytes + ?, updatedAt = ? WHERE id = 1').bind(file.size - (old?.ogImageBytes ?? 0), Date.now()),
-    ]);
-    if (old?.ogImageKey && old.ogImageKey !== key) {
-      try { await bucket.delete(old.ogImageKey); } catch { console.error('Unable to remove replaced share image'); }
-    }
-  }
+  // OG uploads are attached by saveTape in the same batch as the title and cover.
   return { uuid, key };
 }
 

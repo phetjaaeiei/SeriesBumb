@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import ImageUpload from './ImageUpload';
 import { imageUrl } from '../../lib/urls';
 import { PROVINCES, PROVINCE_NAMES, REGIONS } from '../../lib/provinces';
+import { createOgImage } from '../../lib/client/og-image';
 
 type Kind = 'tapes' | 'songs' | 'artists' | 'labels' | 'genres' | 'collections';
 type LookupKind = 'artists' | 'labels' | 'genres' | 'songs' | 'tapes';
@@ -116,6 +117,28 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
       if (kind === 'collections' && itemRows.some(item => !item.tapeId)) throw new Error('กรุณาเลือกเทปให้ครบทุกแถว');
       if (kind === 'artists' && memberRows.some(member => !member.name.trim())) throw new Error('กรุณากรอกชื่อสมาชิกให้ครบทุกแถว');
       const customSlug = get('slug') !== String(record.slug) ? get('slug') : undefined;
+      let nextOgKey: string | null | undefined;
+      let nextOgSourceId: string | null | undefined;
+      let nextOgSourceTitle: string | null | undefined;
+      let ogWarning = '';
+      if (kind === 'tapes') {
+        const cover = imageRows.find(image => image.kind === 'front') || imageRows[0];
+        if (!cover) nextOgKey = null;
+        else if (!get('ogImageKey') || cover.id !== get('ogSourceImageId') || get('title') !== get('ogSourceTitle')) {
+          try {
+            const response = await fetch(`/admin/api/image/${encodeURIComponent(cover.id)}`);
+            if (!response.ok) throw new Error('โหลดปกไม่สำเร็จ');
+            const generated = await createOgImage(await response.blob(), get('title'));
+            const form = new FormData();
+            form.set('entityType', 'tapes'); form.set('entityId', id); form.set('variant', 'og'); form.set('file', generated);
+            const uploaded = await actions.admin.images.upload(form);
+            if (uploaded.error || !uploaded.data) throw new Error(uploaded.error?.message || 'อัปโหลดภาพแชร์ไม่สำเร็จ');
+            nextOgKey = uploaded.data.key;
+            nextOgSourceId = cover.id;
+            nextOgSourceTitle = get('title');
+          } catch { nextOgKey = null; nextOgSourceId = null; nextOgSourceTitle = null; ogWarning = 'ภาพแชร์ใช้รูปสำรอง'; }
+        }
+      }
       const response = kind === 'tapes' ? await actions.admin.tapes.save({
         id, title: get('title'), titleAlt: get('titleAlt') || null, slug: customSlug,
         year: get('year') ? Number(get('year')) : null,
@@ -123,7 +146,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
         catalogNo: get('catalogNo') || null, description: get('description'), reelUrl: get('reelUrl') || null,
         isRare: Boolean(fields.isRare), labelId: get('labelId') || null, artistIds: artists, genreIds: genres,
         tracks: trackRows.map(track => ({ ...track, position: trackRows.filter(row => row.side === track.side).findIndex(row => row === track) + 1, durationSec: track.durationSec || null })),
-        status: status || (get('status') as 'draft' | 'published'),
+        status: status || (get('status') as 'draft' | 'published'), ogImageKey: nextOgKey, ogSourceImageId: nextOgSourceId, ogSourceTitle: nextOgSourceTitle,
       }) : kind === 'songs' ? await actions.admin.songs.save({
         id, title: get('title'), titleAlt: get('titleAlt') || null, slug: customSlug, artistIds: artists,
         lyricist: get('lyricist') || null, composer: get('composer') || null, arranger: get('arranger') || null,
@@ -145,7 +168,8 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
       const newSlug = response.data.slug;
       set('slug', newSlug);
       if (status) set('status', status);
-      setMessage('บันทึกแล้ว');
+      if (kind === 'tapes' && nextOgKey !== undefined) setFields(previous => ({ ...previous, ogImageKey: nextOgKey, ogSourceImageId: nextOgSourceId || null, ogSourceTitle: nextOgSourceTitle || null }));
+      setMessage(ogWarning ? `บันทึกแล้ว · ${ogWarning}` : 'บันทึกแล้ว');
       if (newSlug !== record.slug) window.history.replaceState(null, '', `/admin/${kind}/${id}`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'บันทึกไม่สำเร็จ ลองอีกครั้ง'); }
     finally { setBusy(false); }

@@ -1,6 +1,6 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 type Kind = 'tapeLike' | 'songLike' | 'tapeOwned';
 interface Props { kind: Kind; targetId: string; initialValue: boolean; initialCount: number; authenticated: boolean; loginNext: string }
@@ -10,6 +10,8 @@ export default function EngagementButton({ kind, targetId, initialValue, initial
   const [count, setCount] = useState(initialCount);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
   const label = kind === 'tapeOwned' ? 'มีเทปนี้' : 'ถูกใจ';
 
   async function toggle() {
@@ -31,5 +33,5 @@ export default function EngagementButton({ kind, targetId, initialValue, initial
     } finally { setBusy(false); }
   }
 
-  return <span className="engagement-control"><button type="button" className="engagement-button" aria-pressed={value} disabled={busy} onClick={() => void toggle()}>{label} <strong className="mono">{count.toLocaleString('th-TH')}</strong></button>{error && <span className="error-text" role="alert">{error}</span>}</span>;
+  return <span className="engagement-control"><button type="button" className="engagement-button" aria-pressed={value} disabled={!ready || busy} onClick={() => void toggle()}>{label} <strong className="mono">{count.toLocaleString('th-TH')}</strong></button>{error && <span className="error-text" role="alert">{error}</span>}</span>;
 }

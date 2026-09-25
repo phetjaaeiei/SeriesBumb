@@ -29,11 +29,11 @@ export default function ImageUpload({ entityType, entityId, onUploaded }: Props)
   const [message, setMessage] = useState('');
   const [kind, setKind] = useState<ImageKind>('front');
 
-  async function upload(files: FileList | null) {
-    if (!files?.length || busy) return;
+  async function upload(files: File[]) {
+    if (!files.length || busy) return;
     setBusy(true);
     setMessage('');
-    for (const [index, source] of Array.from(files).entries()) {
+    for (const [index, source] of files.entries()) {
       try {
         setMessage(`กำลังอัปโหลดรูป ${index + 1}/${files.length}…`);
         const full = await resizeImage(source, entityType === 'tapes' ? 1600 : 1200);
@@ -55,7 +55,7 @@ export default function ImageUpload({ entityType, entityId, onUploaded }: Props)
 
   return <div className="image-upload">
     {entityType === 'tapes' && <label className="admin-field">ประเภทภาพ<select className="field" value={kind} onChange={event => setKind(event.target.value as ImageKind)}><option value="front">ปกหน้า</option><option value="back">ปกหลัง</option><option value="inside">ด้านใน</option><option value="cassette">ตลับเทป</option><option value="other">อื่น ๆ</option></select></label>}
-    <label className="admin-field">{entityType === 'tapes' ? 'เพิ่มรูปเทป' : 'เลือกรูป'}<input className="field" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple={entityType === 'tapes'} disabled={busy} onChange={event => { void upload(event.target.files); event.target.value = ''; }} /></label>
+    <label className="admin-field">{entityType === 'tapes' ? 'เพิ่มรูปเทป' : 'เลือกรูป'}<input className="field" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple={entityType === 'tapes'} disabled={busy} onChange={event => { const files = Array.from(event.target.files || []); event.target.value = ''; void upload(files); }} /></label>
     <p className="help-text">รูปจะถูกย่อบนเครื่องก่อนอัปโหลด รองรับ JPEG, PNG, WebP และ HEIC ที่เบราว์เซอร์เปิดได้</p>
     {message && <p className="help-text" role="status">{message}</p>}
   </div>;

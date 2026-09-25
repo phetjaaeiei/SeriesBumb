@@ -42,7 +42,7 @@ export const tapeSaveSchema = z.object({
   isRare: z.boolean().optional(), labelId: uuid.nullable().optional(), artistIds: ids.optional(),
   genreIds: z.array(uuid).max(20).optional(),
   tracks: z.array(z.object({ songId: uuid, side: z.enum(SIDES), position: z.number().int().min(1), durationSec: z.number().int().min(1).max(3599).nullable().optional(), note: optionalText(50) })).max(60).optional(),
-  status: z.enum(TAPE_STATUSES), ogImageKey: optionalText(400),
+  status: z.enum(TAPE_STATUSES), ogImageKey: optionalText(400), ogSourceImageId: uuid.nullable().optional(), ogSourceTitle: optionalText(200),
 });
 
 export const collectionSaveSchema = z.object({

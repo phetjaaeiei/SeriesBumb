@@ -1,6 +1,6 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
-import React, { useState, type SyntheticEvent } from 'react';
+import React, { useEffect, useState, type SyntheticEvent } from 'react';
 import type { CommentDto } from '../../lib/services/comments';
 
 interface Props {
@@ -22,6 +22,8 @@ export default function Comments({ tapeId, songId, initialItems, initialCursor, 
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -69,7 +71,7 @@ export default function Comments({ tapeId, songId, initialItems, initialCursor, 
     {cursor && <button className="button" type="button" disabled={busy} onClick={() => void loadMore()}>{busy ? 'กำลังโหลด…' : 'ดูคอมเมนต์เพิ่ม'}</button>}
     {!authenticated ? <p className="comment-login"><a href={`/login?next=${encodeURIComponent(loginNext)}`}>เข้าสู่ระบบเพื่อคอมเมนต์</a></p>
       : banned ? <p className="error-text">บัญชีนี้ถูกระงับการคอมเมนต์</p>
-        : <form className="comment-form" onSubmit={event => void submit(event)}><label htmlFor="comment-body">เขียนคอมเมนต์</label><p className="help-text">ชื่อและรูปโปรไฟล์ Google ของคุณจะแสดงต่อสาธารณะพร้อมคอมเมนต์</p><textarea className="field" id="comment-body" value={body} onChange={event => setBody(event.target.value)} maxLength={3000} rows={4} required /><button className="button button-primary" type="submit" disabled={busy || !body.trim()}>{busy ? 'กำลังส่ง…' : 'ส่งคอมเมนต์'}</button></form>}
+        : <form className="comment-form" onSubmit={event => void submit(event)}><label htmlFor="comment-body">เขียนคอมเมนต์</label><p className="help-text">ชื่อและรูปโปรไฟล์ Google ของคุณจะแสดงต่อสาธารณะพร้อมคอมเมนต์</p><textarea className="field" id="comment-body" value={body} onChange={event => setBody(event.target.value)} maxLength={3000} rows={4} required disabled={!ready} /><button className="button button-primary" type="submit" disabled={!ready || busy || !body.trim()}>{busy ? 'กำลังส่ง…' : 'ส่งคอมเมนต์'}</button></form>}
     {error && <p className="error-text" role="alert">{error}</p>}
   </div>;
 }

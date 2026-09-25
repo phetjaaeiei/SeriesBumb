@@ -125,11 +125,13 @@ export interface TapeSaveInput {
   tracks?: { songId: string; side: 'A' | 'B' | 'C' | 'D'; position: number; durationSec?: number | null; note?: string | null }[];
   status: 'draft' | 'published';
   ogImageKey?: string | null;
+  ogSourceImageId?: string | null;
+  ogSourceTitle?: string | null;
 }
 
-export async function saveTape(db: D1Database, userId: string, input: TapeSaveInput) {
+export async function saveTape(db: D1Database, userId: string, input: TapeSaveInput, bucket?: R2Bucket, waitUntil?: (promise: Promise<unknown>) => void) {
   const title = requiredName(input.title, 'ชื่อเทป');
-  const current = await db.prepare('SELECT id, slug, status, publishedAt, labelId, coverImageId, ogImageKey FROM tape WHERE id = ?').bind(input.id).first<{ id: string; slug: string; status: 'draft' | 'published'; publishedAt: number | null; labelId: string | null; coverImageId: string | null; ogImageKey: string | null }>();
+  const current = await db.prepare('SELECT id, slug, status, publishedAt, labelId, coverImageId, ogImageKey, ogImageBytes, ogSourceImageId, ogSourceTitle FROM tape WHERE id = ?').bind(input.id).first<{ id: string; slug: string; status: 'draft' | 'published'; publishedAt: number | null; labelId: string | null; coverImageId: string | null; ogImageKey: string | null; ogImageBytes: number; ogSourceImageId: string | null; ogSourceTitle: string | null }>();
   if (!current) throw new Error('ไม่พบเทปนี้');
   const artistIds = [...new Set(input.artistIds ?? [])];
   const genreIds = [...new Set(input.genreIds ?? [])];
@@ -152,6 +154,18 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
   const year = input.year == null ? null : toCeYear(input.year);
   if (year != null && (year < 1950 || year > new Date().getFullYear() + 1)) throw new Error('ปีที่ออกเทปไม่ถูกต้อง');
   const slug = await uniqueSlug(db, 'tape', title, input.slug || undefined, input.id);
+  const nextOgKey = input.ogImageKey === undefined ? current.ogImageKey : input.ogImageKey;
+  let nextOgBytes = current.ogImageBytes;
+  if (nextOgKey !== current.ogImageKey) {
+    if (nextOgKey) {
+      if (!bucket || !nextOgKey.startsWith(`tapes/${input.id}/`) || !/-og\.jpg$/u.test(nextOgKey)) throw new Error('รูปแชร์ไม่ถูกต้อง');
+      const object = await bucket.head(nextOgKey);
+      if (!object || object.size > 3 * 1024 * 1024) throw new Error('ไม่พบรูปแชร์ที่อัปโหลด');
+      nextOgBytes = object.size;
+    } else nextOgBytes = 0;
+  }
+  const nextOgSourceImageId = nextOgKey ? input.ogSourceImageId === undefined ? current.ogSourceImageId : input.ogSourceImageId : null;
+  const nextOgSourceTitle = nextOgKey ? input.ogSourceTitle === undefined ? current.ogSourceTitle : input.ogSourceTitle : null;
   const now = Date.now();
   const publishedAt = input.status === 'published' ? current.publishedAt ?? now : current.publishedAt;
   const names = artistIds.length ? await db.prepare(`SELECT name FROM artist WHERE id IN (${artistIds.map(() => '?').join(',')})`).bind(...artistIds).all<{ name: string }>() : { results: [] as { name: string }[] };
@@ -159,7 +173,7 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
   const searchText = [title, input.titleAlt, ...names.results.map(row => row.name), labelName?.name, input.catalogNo].filter(Boolean).join(' | ');
   const relationPublished = Number(input.status === 'published');
   const statements: D1PreparedStatement[] = [
-    db.prepare(`UPDATE tape SET slug = ?, slugLocked = ?, title = ?, titleAlt = ?, titleSort = ?, labelId = ?, year = ?, yearSort = ?, decade = ?, releaseType = ?, catalogNo = ?, description = ?, reelUrl = ?, isRare = ?, status = ?, publishedAt = ?, coverImageId = ?, coverThumbKey = ?, ogImageKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?`).bind(slug, Number(!!input.slug), title, input.titleAlt || null, thaiSortKey(title), input.labelId || null, year, yearSortOf(year), decadeOf(year), input.releaseType, input.catalogNo || null, input.description || '', input.reelUrl || null, Number(!!input.isRare), input.status, publishedAt, cover?.id || null, cover?.thumbKey || null, input.ogImageKey ?? current.ogImageKey, userId, now, input.id),
+    db.prepare(`UPDATE tape SET slug = ?, slugLocked = ?, title = ?, titleAlt = ?, titleSort = ?, labelId = ?, year = ?, yearSort = ?, decade = ?, releaseType = ?, catalogNo = ?, description = ?, reelUrl = ?, isRare = ?, status = ?, publishedAt = ?, coverImageId = ?, coverThumbKey = ?, ogImageKey = ?, ogImageBytes = ?, ogSourceImageId = ?, ogSourceTitle = ?, updatedBy = ?, updatedAt = ? WHERE id = ?`).bind(slug, Number(!!input.slug), title, input.titleAlt || null, thaiSortKey(title), input.labelId || null, year, yearSortOf(year), decadeOf(year), input.releaseType, input.catalogNo || null, input.description || '', input.reelUrl || null, Number(!!input.isRare), input.status, publishedAt, cover?.id || null, cover?.thumbKey || null, nextOgKey, nextOgBytes, nextOgSourceImageId, nextOgSourceTitle, userId, now, input.id),
     db.prepare('DELETE FROM tape_artist WHERE tapeId = ?').bind(input.id),
     db.prepare('INSERT INTO tape_artist (tapeId, artistId, position, isPublished, yearSort) SELECT ?, value, CAST(key AS INTEGER), ?, ? FROM json_each(?)').bind(input.id, relationPublished, yearSortOf(year), jsonParam(artistIds)),
     db.prepare('DELETE FROM tape_genre WHERE tapeId = ?').bind(input.id),
@@ -169,6 +183,7 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
       SELECT json_extract(value,'$.id'), ?, json_extract(value,'$.songId'), json_extract(value,'$.side'), json_extract(value,'$.position'), json_extract(value,'$.durationSec'), json_extract(value,'$.note') FROM json_each(?)`).bind(input.id, jsonParam(tracks.map(track => ({ ...track, id: crypto.randomUUID() })))),
     db.prepare('UPDATE site_stats SET publishedTapeCount = publishedTapeCount + ?, updatedAt = ? WHERE id = 1').bind(Number(input.status === 'published') - Number(current.status === 'published'), now),
   ];
+  if (nextOgBytes !== current.ogImageBytes) statements.push(db.prepare('UPDATE site_stats SET imageBytes = MAX(0, imageBytes + ?), updatedAt = ? WHERE id = 1').bind(nextOgBytes - current.ogImageBytes, now));
   if (affectedSongs.length) statements.push(db.prepare(`UPDATE song SET publishedTapeCount = (SELECT COUNT(DISTINCT t.id) FROM tape_track tt JOIN tape t ON t.id = tt.tapeId WHERE tt.songId = song.id AND t.status = 'published') WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedSongs)));
   if (affectedArtists.length) statements.push(db.prepare(`UPDATE artist SET publishedTapeCount = (SELECT COUNT(DISTINCT tapeId) FROM (SELECT ta.tapeId FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId WHERE ta.artistId = artist.id AND t.status = 'published' UNION SELECT tt.tapeId FROM song_artist sa JOIN tape_track tt ON tt.songId = sa.songId JOIN tape t ON t.id = tt.tapeId WHERE sa.artistId = artist.id AND t.status = 'published')) WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedArtists)));
   if (affectedLabels.length) statements.push(db.prepare(`UPDATE label SET publishedTapeCount = (SELECT COUNT(*) FROM tape WHERE labelId = label.id AND status = 'published') WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedLabels)));
@@ -179,6 +194,10 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
   if (affectedLabels.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 THEN 1 ELSE 0 END FROM label WHERE id = search_doc.refId) WHERE kind = 'label' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedLabels)));
   statements.push(...redirectStatements(db, `/tapes/${current.slug}`, `/tapes/${slug}`));
   await db.batch(statements);
+  if (current.ogImageKey && current.ogImageKey !== nextOgKey && bucket) {
+    if (waitUntil) waitUntil(bucket.delete(current.ogImageKey));
+    else await bucket.delete(current.ogImageKey);
+  }
   return { id: input.id, slug, status: input.status };
 }
 

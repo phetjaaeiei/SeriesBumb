@@ -101,7 +101,7 @@ export const server = {
     },
     tapes: {
       createDraft: defineAdminAction({ input: z.object({ title: z.string().max(200).optional() }), handler: (input, context) => runCatalog(() => createTapeDraft(env.DB, context.user.id, input.title)) }),
-      save: defineAdminAction({ input: tapeSaveSchema, handler: (input, context) => runCatalog(() => saveTape(env.DB, context.user.id, input)) }),
+      save: defineAdminAction({ input: tapeSaveSchema, handler: (input, context) => runCatalog(() => saveTape(env.DB, context.user.id, input, env.BUCKET, promise => context.locals.cfContext.waitUntil(promise))) }),
     },
     collections: {
       create: defineAdminAction({ input: z.object({ title: z.string().trim().min(1).max(200) }), handler: (input, context) => runCatalog(() => createCollection(env.DB, context.user.id, input.title)) }),
