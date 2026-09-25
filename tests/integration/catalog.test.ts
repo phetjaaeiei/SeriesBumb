@@ -1,11 +1,33 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { getTapeBySlug, getTapePage } from '../../src/lib/queries/tapes';
+import { thaiSortKey } from '../../src/lib/thai';
 
 const db = env.DB;
 const now = Date.now();
 
 describe('public tape reads', () => {
+  it('filters title-sorted tapes by Thai, Latin, and numeric first letters', async () => {
+    const marker = crypto.randomUUID();
+    const fixtures = [
+      ['thai', 'เก็บรัก', 'published'],
+      ['latin', 'ABBA', 'published'],
+      ['numeric', '123 เพลง', 'published'],
+      ['draft', 'กาลเวลา', 'draft'],
+    ] as const;
+    for (const [suffix, title, status] of fixtures) {
+      await db.prepare('INSERT INTO tape (id, slug, title, titleSort, releaseType, status, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(`${marker}-${suffix}`, `${marker}-${suffix}`, title, thaiSortKey(title), 'album', status, status === 'published' ? now : null, now, now).run();
+    }
+    const thai = await getTapePage(db, { sort: 'title', letter: 'ก' });
+    expect(thai.items.map(item => item.id)).toContain(`${marker}-thai`);
+    expect(thai.items.map(item => item.id)).not.toContain(`${marker}-draft`);
+    const latin = await getTapePage(db, { sort: 'title', letter: 'A' });
+    expect(latin.items.map(item => item.id)).toContain(`${marker}-latin`);
+    const numeric = await getTapePage(db, { sort: 'title', letter: '0-9' });
+    expect(numeric.items.map(item => item.id)).toContain(`${marker}-numeric`);
+  });
+
   it('paginates published tapes by keyset and never includes a draft', async () => {
     const marker = crypto.randomUUID();
     const artistId = crypto.randomUUID();

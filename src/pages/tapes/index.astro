@@ -6,6 +6,7 @@ import TapeResults from '../../components/ui/TapeResults.astro';
 import { RELEASE_TYPES, type ReleaseType } from '../../db/enums';
 import { getTapePage } from '../../lib/queries/tapes';
 import type { CatalogSort } from '../../lib/queries/cursor';
+import { CATALOG_LETTERS } from '../../lib/thai';
 
 const params = Astro.url.searchParams;
 const decadeText = params.get('decade');
@@ -17,12 +18,16 @@ const genre = genres.find(item => item.slug === params.get('genre'));
 const allowedSorts = genre || (decade && releaseType) || releaseType ? ['new'] : decade ? ['new', 'year'] : ['new', 'year', 'title'];
 const sort: CatalogSort = allowedSorts.includes(params.get('sort') ?? '') ? params.get('sort') as CatalogSort : 'new';
 const view = params.get('view') === 'grid' ? 'grid' : 'table';
-const page = await getTapePage(env.DB, { sort, decade, genreId: genre?.id, releaseType, cursor: params.get('cursor') });
+const showLetters = sort === 'title' && !decade && !genre && !releaseType;
+const requestedLetter = params.get('l');
+const letter = showLetters && requestedLetter && CATALOG_LETTERS.includes(requestedLetter) ? requestedLetter : null;
+const page = await getTapePage(env.DB, { sort, decade, genreId: genre?.id, releaseType, letter, cursor: params.get('cursor') });
 const canonicalParams = new URLSearchParams();
 if (decade) canonicalParams.set('decade', `${decade}s`);
 if (genre) canonicalParams.set('genre', genre.slug);
 if (releaseType) canonicalParams.set('type', releaseType);
 if (sort !== 'new') canonicalParams.set('sort', sort);
+if (letter) canonicalParams.set('l', letter);
 const canonicalPath = `/tapes${canonicalParams.size ? `?${canonicalParams}` : ''}`;
 const tableParams = new URLSearchParams(params); tableParams.delete('view'); tableParams.delete('cursor');
 const gridParams = new URLSearchParams(tableParams); gridParams.set('view', 'grid');
@@ -32,6 +37,10 @@ const gridParams = new URLSearchParams(tableParams); gridParams.set('view', 'gri
   <p class="page-lede">เลือกดูตามยุค แนวเพลง หรือเรียงรายการในคลัง</p>
   <div class="section">
     <FilterBar params={params} genres={genres} sorts={allowedSorts as CatalogSort[]} />
+    {showLetters && <nav class="letter-bar" aria-label="ตัวอักษรชื่อเทป">
+      <a href={`/tapes?sort=title${view === 'grid' ? '&view=grid' : ''}`} aria-current={!letter ? 'page' : undefined}>ทั้งหมด</a>
+      {CATALOG_LETTERS.map(value => <a href={`/tapes?sort=title&l=${encodeURIComponent(value)}${view === 'grid' ? '&view=grid' : ''}`} aria-current={letter === value ? 'page' : undefined}>{value}</a>)}
+    </nav>}
     <div class="section-heading">
       <h2>รายการเทป</h2>
       <nav class="view-switch" aria-label="มุมมองรายการ">

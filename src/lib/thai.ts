@@ -1,4 +1,6 @@
 /** Shared normalization for stored sort keys, search documents, and slugs. */
+export const CATALOG_LETTERS = [...'กขคฆงจฉชซญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรลวศษสหฬอฮ', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '0-9'];
+
 export function normalizeThai(s: string): string {
   return s
     .normalize('NFC')

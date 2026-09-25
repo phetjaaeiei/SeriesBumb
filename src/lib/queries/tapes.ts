@@ -86,7 +86,11 @@ export async function getTapePage(db: D1Database, options: TapePageOptions = {})
   if (options.releaseType) { where.push('t.releaseType = ?'); bindings.push(options.releaseType); }
   if (options.labelId) { where.push('t.labelId = ?'); bindings.push(options.labelId); }
   if (options.artistId) { where.push("EXISTS (SELECT 1 FROM tape_artist ta WHERE ta.tapeId = t.id AND ta.artistId = ? AND ta.isPublished = 1)"); bindings.push(options.artistId); }
-  if (options.letter && sort === 'title') { where.push('t.titleSort >= ? AND t.titleSort < ?'); bindings.push(options.letter, `${options.letter}\uffff`); }
+  if (options.letter && sort === 'title') {
+    const prefix = options.letter === '0-9' ? '0' : `${/[A-Z]/u.test(options.letter) ? '2' : '1'}${options.letter.toLowerCase()}`;
+    where.push('t.titleSort >= ? AND t.titleSort < ?');
+    bindings.push(prefix, `${prefix}\uffff`);
+  }
   const cursor = decodeCursor(sort, options.cursor);
   if (cursor) {
     where.push(`(${keyColumn}, t.id) ${sort === 'new' ? '<' : '>'} (?, ?)`);

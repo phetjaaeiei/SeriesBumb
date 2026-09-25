@@ -4,6 +4,7 @@ import TapeList from '../../components/ui/TapeList.astro';
 import { RELEASE_TYPES, type ReleaseType } from '../../db/enums';
 import { getTapePage } from '../../lib/queries/tapes';
 import type { CatalogSort } from '../../lib/queries/cursor';
+import { CATALOG_LETTERS } from '../../lib/thai';
 
 export const partial = true;
 Astro.response.headers.set('X-Robots-Tag', 'noindex');
@@ -24,9 +25,11 @@ const [label, artist, genre] = await Promise.all([
 
 const allowedSorts: CatalogSort[] = artist ? ['year'] : label ? ['new', 'year'] : genre || releaseType ? ['new'] : decade ? ['new', 'year'] : ['new', 'year', 'title'];
 const sort: CatalogSort = allowedSorts.includes(params.get('sort') as CatalogSort) ? params.get('sort') as CatalogSort : artist ? 'year' : 'new';
+const requestedLetter = params.get('l');
+const letter = sort === 'title' && !decade && !genre && !releaseType && !label && !artist && requestedLetter && CATALOG_LETTERS.includes(requestedLetter) ? requestedLetter : null;
 const page = await getTapePage(env.DB, {
   decade, genreId: genre?.id, labelId: label?.id, artistId: artist?.id, releaseType,
-  sort, cursor: params.get('cursor'), pageSize: label || artist ? 50 : 24,
+  sort, letter, cursor: params.get('cursor'), pageSize: label || artist ? 50 : 24,
 });
 const view = params.get('view') === 'grid' ? 'grid' : 'table';
 const showLabel = !label && !artist;

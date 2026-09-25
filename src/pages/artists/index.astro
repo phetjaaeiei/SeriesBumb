@@ -4,12 +4,13 @@ import BaseLayout from '../../components/layout/BaseLayout.astro';
 import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
 import { isProvince } from '../../lib/provinces';
 import { artistStatusLabel, artistTypeLabel } from '../../lib/format';
+import { CATALOG_LETTERS } from '../../lib/thai';
 import type { ArtistStatus, ArtistType } from '../../db/enums';
 
 const params = Astro.url.searchParams;
 const rawProvince = params.get('province');
 const province = rawProvince && isProvince(rawProvince) ? rawProvince : null;
-const letters = [...'กขคฆงจฉชซญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรลวศษสหฬอฮ', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '0-9'];
+const letters = CATALOG_LETTERS;
 const defaultLetter = province ? null : await env.DB.prepare('SELECT nameSort FROM artist WHERE publishedTapeCount > 0 ORDER BY nameSort, id LIMIT 1').first<{ nameSort: string }>();
 const requested = params.get('l');
 const letter = province ? null : requested && letters.includes(requested) ? requested : defaultLetter?.nameSort.slice(1, 2) ?? null;
