@@ -1,16 +1,20 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
 import React, { useEffect, useState } from 'react';
+import { Reorder, useDragControls, useReducedMotion } from 'motion/react';
 import ImageUpload from './ImageUpload';
 import { imageUrl } from '../../lib/urls';
 import { PROVINCES, PROVINCE_NAMES, REGIONS } from '../../lib/provinces';
 import { createOgImage } from '../../lib/client/og-image';
+import { formatDuration, parseDuration } from '../../lib/format';
+import { TRACK_SIDES, appendTrack, changeTrackSide, moveTrack, numberTracks, reorderSide, type TrackSide } from '../../lib/client/track-order';
 
 type Kind = 'tapes' | 'songs' | 'artists' | 'labels' | 'genres' | 'collections';
 type LookupKind = 'artists' | 'labels' | 'genres' | 'songs' | 'tapes';
 type Row = Record<string, string | number | null>;
 type Choice = { id: string; label: string };
-type Track = { songId: string; side: 'A' | 'B' | 'C' | 'D'; position: number; durationSec?: number | null; note?: string | null };
+type Track = { songId: string; side: TrackSide; position: number; durationSec?: number | null; note?: string | null };
+type TrackRow = Track & { clientId: string; durationText: string };
 type Member = { name: string; role?: string; years?: string | null; isCurrent?: boolean | number };
 type Item = { tapeId: string; note?: string | null };
 type TapeImage = { id: string; kind: 'front' | 'back' | 'inside' | 'cassette' | 'other'; fullKey: string; thumbKey: string; position: number };
@@ -85,11 +89,44 @@ function Area({ label, value, onChange, maxLength = 5000 }: { label: string; val
   return <label className="admin-field admin-field-full"><span>{label}</span><textarea className="field" rows={5} value={value} onChange={event => onChange(event.target.value)} maxLength={maxLength} /><small className="help-text">{value.length.toLocaleString('th-TH')} / {maxLength.toLocaleString('th-TH')}</small></label>;
 }
 
+function TrackItem({ track, index, count, choices, onUpdate, onSideChange, onMove, onRemove, onOrderChanged, onChoice }: {
+  track: TrackRow; index: number; count: number; choices: Choice[];
+  onUpdate: (values: Partial<TrackRow>) => void;
+  onSideChange: (side: TrackSide) => void;
+  onMove: (direction: -1 | 1) => void;
+  onRemove: () => void;
+  onOrderChanged: () => void;
+  onChoice: (choice: Choice) => void;
+}) {
+  const dragControls = useDragControls();
+  const reduceMotion = useReducedMotion();
+  return <Reorder.Item as="div" value={track.clientId} dragListener={false} dragControls={dragControls} onDragEnd={onOrderChanged} transition={{ duration: reduceMotion ? 0 : 0.18 }} className="track-edit">
+    <div className="track-edit-top">
+      <button type="button" className="track-drag-handle" aria-label={`เรียงเพลงหน้า ${track.side} ลำดับ ${index + 1} ใช้ลูกศรขึ้นลงหรือจับลาก`} onPointerDown={event => dragControls.start(event)} onKeyDown={event => {
+        if (event.key === 'ArrowUp' && index > 0) { event.preventDefault(); onMove(-1); }
+        if (event.key === 'ArrowDown' && index < count - 1) { event.preventDefault(); onMove(1); }
+      }} title="ลากเพื่อเรียงเพลง">⠿</button>
+      <select className="field" aria-label={`หน้าเทปเพลงลำดับ ${index + 1}`} value={track.side} onChange={event => onSideChange(event.target.value as TrackSide)}>{TRACK_SIDES.map(side => <option key={side}>{side}</option>)}</select>
+      <span className="mono">#{index + 1}</span>
+      <div className="track-order-actions">
+        <button type="button" className="button" aria-label={`เลื่อนเพลงหน้า ${track.side} ลำดับ ${index + 1} ขึ้น`} disabled={index === 0} onClick={() => onMove(-1)}>↑</button>
+        <button type="button" className="button" aria-label={`เลื่อนเพลงหน้า ${track.side} ลำดับ ${index + 1} ลง`} disabled={index === count - 1} onClick={() => onMove(1)}>↓</button>
+      </div>
+      <button type="button" className="button" onClick={onRemove}>เอาเพลงออก</button>
+    </div>
+    <Picker kind="songs" label="เพลง" ids={track.songId ? [track.songId] : []} selected={choices} multiple={false} onChange={(ids, choice) => { onUpdate({ songId: ids[0] || '' }); if (choice) onChoice(choice); }} />
+    <div className="admin-form-grid">
+      <Field label="ความยาว (นาที:วินาที)" value={track.durationText} onChange={value => onUpdate({ durationText: value })} maxLength={5} help="เช่น 4:12" />
+      <Field label="โน้ต" value={track.note || ''} onChange={value => onUpdate({ note: value })} maxLength={50} />
+    </div>
+  </Reorder.Item>;
+}
+
 export default function AdminEditor({ kind, record, artistIds, genreIds, tracks, members, items, images, selected, imageBase }: Props) {
   const [fields, setFields] = useState<Row>(record);
   const [artists, setArtists] = useState(artistIds);
   const [genres, setGenres] = useState(genreIds);
-  const [trackRows, setTrackRows] = useState<Track[]>(tracks);
+  const [trackRows, setTrackRows] = useState<TrackRow[]>(() => tracks.map(track => ({ ...track, clientId: crypto.randomUUID(), durationText: formatDuration(track.durationSec ?? null) })));
   const [memberRows, setMemberRows] = useState<Member[]>(members);
   const [itemRows, setItemRows] = useState<Item[]>(items);
   const [imageRows, setImageRows] = useState<TapeImage[]>(images);
@@ -97,6 +134,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [trackAnnouncement, setTrackAnnouncement] = useState('');
   const id = String(record.id);
   const get = (key: string) => String(fields[key] ?? '');
   const set = (key: string, value: string | number | null) => setFields(previous => ({ ...previous, [key]: value }));
@@ -109,6 +147,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
       if (!get(kind === 'artists' || kind === 'labels' || kind === 'genres' ? 'name' : 'title').trim()) throw new Error('กรุณากรอกชื่อก่อนบันทึก');
       if (kind === 'tapes') {
         if (trackRows.some(track => !track.songId)) throw new Error('กรุณาเลือกเพลงให้ครบทุกแถว');
+        if (trackRows.some(track => track.durationText.trim() && parseDuration(track.durationText) === null)) throw new Error('ความยาวเพลงต้องเป็น นาที:วินาที เช่น 4:12');
         if (status === 'published') {
           if (!imageRows.length) throw new Error('กรุณาเพิ่มรูปปกก่อนเผยแพร่');
           if (!artists.length && !['compilation', 'soundtrack'].includes(get('releaseType'))) throw new Error('กรุณาเลือกศิลปินก่อนเผยแพร่');
@@ -145,7 +184,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
         releaseType: get('releaseType') as 'album' | 'compilation' | 'soundtrack' | 'single' | 'other',
         catalogNo: get('catalogNo') || null, description: get('description'), reelUrl: get('reelUrl') || null,
         isRare: Boolean(fields.isRare), labelId: get('labelId') || null, artistIds: artists, genreIds: genres,
-        tracks: trackRows.map(track => ({ ...track, position: trackRows.filter(row => row.side === track.side).findIndex(row => row === track) + 1, durationSec: track.durationSec || null })),
+        tracks: numberTracks(trackRows).map(track => ({ songId: track.songId, side: track.side, position: track.position, durationSec: parseDuration(track.durationText), note: track.note || null })),
         status: status || (get('status') as 'draft' | 'published'), ogImageKey: nextOgKey, ogSourceImageId: nextOgSourceId, ogSourceTitle: nextOgSourceTitle,
       }) : kind === 'songs' ? await actions.admin.songs.save({
         id, title: get('title'), titleAlt: get('titleAlt') || null, slug: customSlug, artistIds: artists,
@@ -218,7 +257,30 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
 
     {kind === 'artists' && <div className="editor-section"><h2>สมาชิกวง</h2>{memberRows.map((member, index) => <div className="editor-row" key={index}><input className="field" aria-label={`ชื่อสมาชิก ${index + 1}`} placeholder="ชื่อสมาชิก" value={member.name} onChange={event => setMemberRows(previous => previous.map((row, i) => i === index ? { ...row, name: event.target.value } : row))} /><input className="field" aria-label={`หน้าที่สมาชิก ${index + 1}`} placeholder="หน้าที่" value={member.role || ''} onChange={event => setMemberRows(previous => previous.map((row, i) => i === index ? { ...row, role: event.target.value } : row))} /><input className="field" aria-label={`ปีที่อยู่ในวงของสมาชิก ${index + 1}`} placeholder="ปีที่อยู่ในวง" value={member.years || ''} onChange={event => setMemberRows(previous => previous.map((row, i) => i === index ? { ...row, years: event.target.value } : row))} /><label className="admin-check"><input type="checkbox" checked={Boolean(member.isCurrent)} onChange={event => setMemberRows(previous => previous.map((row, i) => i === index ? { ...row, isCurrent: event.target.checked } : row))} /> ปัจจุบัน</label><button className="button" type="button" onClick={() => setMemberRows(previous => previous.filter((_, i) => i !== index))}>เอาออก</button></div>)}<button className="button" type="button" onClick={() => setMemberRows(previous => [...previous, { name: '', role: '', years: '', isCurrent: true }])}>+ เพิ่มสมาชิก</button></div>}
 
-    {kind === 'tapes' && <div className="editor-section"><h2>เพลงในเทป</h2>{trackRows.map((track, index) => <div className="track-edit" key={index}><div className="track-edit-top"><select className="field" aria-label={`หน้าเทปเพลง ${index + 1}`} value={track.side} onChange={event => setTrackRows(previous => previous.map((row, i) => i === index ? { ...row, side: event.target.value as Track['side'] } : row))}><option>A</option><option>B</option><option>C</option><option>D</option></select><span>#{index + 1}</span><button type="button" className="button" onClick={() => setTrackRows(previous => previous.filter((_, i) => i !== index))}>เอาออก</button></div><Picker kind="songs" label="เพลง" ids={track.songId ? [track.songId] : []} selected={choices} multiple={false} onChange={(ids, choice) => { setTrackRows(previous => previous.map((row, i) => i === index ? { ...row, songId: ids[0] || '' } : row)); if (choice) setChoices(previous => [...previous, choice]); }} /><div className="admin-form-grid"><Field label="ความยาว (วินาที)" type="number" value={String(track.durationSec || '')} onChange={value => setTrackRows(previous => previous.map((row, i) => i === index ? { ...row, durationSec: value ? Number(value) : null } : row))} /><Field label="โน้ต" value={track.note || ''} onChange={value => setTrackRows(previous => previous.map((row, i) => i === index ? { ...row, note: value } : row))} maxLength={50} /></div></div>)}<button className="button" type="button" onClick={() => setTrackRows(previous => [...previous, { songId: '', side: 'A', position: previous.length + 1, durationSec: null, note: null }])}>+ เพิ่มเพลง</button></div>}
+    {kind === 'tapes' && <div className="editor-section">
+      <h2>เพลงในเทป</h2>
+      <p className="help-text">ลากที่สัญลักษณ์หรือใช้ปุ่มลูกศรเพื่อเรียงเพลงในแต่ละหน้า บันทึกฟอร์มเพื่อใช้ลำดับใหม่</p>
+      <span className="sr-only" aria-live="polite">{trackAnnouncement}</span>
+      {TRACK_SIDES.filter(side => side === 'A' || side === 'B' || trackRows.some(track => track.side === side)).map(side => {
+        const sideRows = trackRows.filter(track => track.side === side);
+        return <section className="admin-track-side" key={side} aria-label={`เพลงหน้า ${side}`}>
+          <h3>หน้า {side} <span className="muted mono">({sideRows.length})</span></h3>
+          {sideRows.length ? <Reorder.Group as="div" axis="y" values={sideRows.map(track => track.clientId)} onReorder={ids => setTrackRows(previous => reorderSide(previous, side, ids))} className="admin-track-list">
+            {sideRows.map((track, index) => <TrackItem key={track.clientId} track={track} index={index} count={sideRows.length} choices={choices}
+              onUpdate={values => setTrackRows(previous => previous.map(row => row.clientId === track.clientId ? { ...row, ...values } : row))}
+              onSideChange={target => { setTrackRows(previous => changeTrackSide(previous, track.clientId, target)); setTrackAnnouncement(`ย้ายเพลงไปหน้า ${target} แล้ว`); }}
+              onMove={direction => { setTrackRows(previous => moveTrack(previous, track.clientId, direction)); setTrackAnnouncement(`ย้ายเพลงหน้า ${side} ไปที่ลำดับ ${index + direction + 1} แล้ว`); }}
+              onRemove={() => setTrackRows(previous => previous.filter(row => row.clientId !== track.clientId))}
+              onOrderChanged={() => setTrackAnnouncement(`เรียงลำดับเพลงหน้า ${side} แล้ว`)}
+              onChoice={choice => setChoices(previous => [...previous.filter(item => item.id !== choice.id), choice])}
+            />)}
+          </Reorder.Group> : <p className="help-text">ยังไม่มีเพลงในหน้านี้</p>}
+          <button className="button" type="button" onClick={() => setTrackRows(previous => appendTrack(previous, { clientId: crypto.randomUUID(), songId: '', side, position: sideRows.length + 1, durationSec: null, durationText: '', note: null }))}>+ เพิ่มเพลงหน้า {side}</button>
+        </section>;
+      })}
+      {TRACK_SIDES.filter(side => !['A', 'B'].includes(side) && !trackRows.some(track => track.side === side)).map(side =>
+        <button className="button admin-add-side" type="button" key={side} onClick={() => setTrackRows(previous => appendTrack(previous, { clientId: crypto.randomUUID(), songId: '', side, position: 1, durationSec: null, durationText: '', note: null }))}>+ เพิ่มหน้า {side}</button>)}
+    </div>}
 
     {kind === 'collections' && <div className="editor-section"><h2>เทปใน Collection</h2>{itemRows.map((item, index) => <div className="track-edit" key={index}><Picker kind="tapes" label={`เทปลำดับ ${index + 1}`} ids={item.tapeId ? [item.tapeId] : []} selected={choices} multiple={false} onChange={(ids, choice) => { setItemRows(previous => previous.map((row, i) => i === index ? { ...row, tapeId: ids[0] || '' } : row)); if (choice) setChoices(previous => [...previous, choice]); }} /><Field label="โน้ต" value={item.note || ''} onChange={value => setItemRows(previous => previous.map((row, i) => i === index ? { ...row, note: value } : row))} maxLength={1000} /><button className="button" type="button" onClick={() => setItemRows(previous => previous.filter((_, i) => i !== index))}>เอาออก</button></div>)}<button className="button" type="button" onClick={() => setItemRows(previous => [...previous, { tapeId: '', note: '' }])}>+ เพิ่มเทป</button></div>}
 

@@ -256,9 +256,19 @@ small { font-size: 13px; }
 .picker-results button:hover, .picker-results button:focus-visible { background: var(--surface); color: var(--accent); }
 .editor-row { display: grid; grid-template-columns: 2fr 2fr 1.5fr auto auto; gap: 8px; align-items: center; margin-bottom: 8px; }
 .track-edit { padding: 16px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
-.track-edit-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.track-edit-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
 .track-edit-top .field { max-width: 80px; }
-.track-edit-top .button { margin-left: auto; }
+.track-edit-top > .button { margin-left: auto; }
+.admin-track-side { margin-top: 24px; }
+.admin-track-side h3 { margin-bottom: 10px; font-size: 16px; }
+.admin-track-side > .button { margin-top: 4px; }
+.admin-add-side { margin: 20px 8px 0 0; }
+.track-drag-handle { display: inline-flex; width: 40px; height: 40px; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-2); color: var(--text); font-size: 22px; cursor: grab; touch-action: none; user-select: none; }
+.track-drag-handle:active { cursor: grabbing; }
+.track-drag-handle:hover { border-color: var(--accent); }
+.track-drag-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.track-order-actions { display: inline-flex; gap: 4px; }
+.track-order-actions .button { min-width: 40px; padding-inline: 8px; }
 .admin-image-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 .admin-image { display: flex; width: 120px; min-height: 120px; flex-direction: column; gap: 4px; justify-content: center; align-items: center; padding: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); font-size: 12px; }
 .admin-image img { width: 100%; height: 100px; object-fit: contain; }
