@@ -23,8 +23,8 @@ describe('permissions', () => {
   });
 
   it('requires a current user and admin role', () => {
-    expect(() => requireUser({ user: null } as App.Locals)).toThrowError('UNAUTHORIZED');
-    expect(() => requireAdmin({ user: member } as App.Locals)).toThrowError('FORBIDDEN');
+    expect(() => requireUser({ user: null } as App.Locals)).toThrow('UNAUTHORIZED');
+    expect(() => requireAdmin({ user: member } as App.Locals)).toThrow('FORBIDDEN');
     expect(requireAdmin({ user: { ...member, role: 'admin' } } as App.Locals).id).toBe(member.id);
   });
 });

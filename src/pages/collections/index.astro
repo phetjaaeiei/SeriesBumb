@@ -3,17 +3,22 @@ import { env } from 'cloudflare:workers';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
 import Placeholder from '../../components/ui/Placeholder.astro';
 import { imageUrl } from '../../lib/urls';
-const collections = (await env.DB.prepare(`SELECT c.id, c.slug, c.title, c.description, c.coverKey, COUNT(t.id) AS tapeCount
+const collections = (await env.DB.prepare(`SELECT c.id, c.slug, c.title, c.description,
+  COALESCE(c.coverKey, (SELECT firstTape.coverThumbKey FROM collection_item firstItem
+    JOIN tape firstTape ON firstTape.id = firstItem.tapeId AND firstTape.status = 'published'
+    WHERE firstItem.collectionId = c.id AND firstTape.coverThumbKey IS NOT NULL
+    ORDER BY firstItem.position LIMIT 1)) AS displayCoverKey,
+  COUNT(t.id) AS tapeCount
   FROM collection c LEFT JOIN collection_item ci ON ci.collectionId = c.id
   LEFT JOIN tape t ON t.id = ci.tapeId AND t.status = 'published'
-  WHERE c.status = 'published' GROUP BY c.id ORDER BY c.position, c.id LIMIT 100`).all<{ id: string; slug: string; title: string; description: string; coverKey: string | null; tapeCount: number }>()).results;
+  WHERE c.status = 'published' GROUP BY c.id ORDER BY c.position, c.id LIMIT 100`).all<{ id: string; slug: string; title: string; description: string; displayCoverKey: string | null; tapeCount: number }>()).results;
 ---
 <BaseLayout title="Collection" canonicalPath="/collections">
   <h1>Collection</h1>
   <p class="page-lede">เทปที่คัดไว้เป็นชุด เปิดดูเรื่องราวผ่านปกและเพลงในแต่ละ Collection</p>
   {collections.length ? <ul class="collection-grid section">{collections.map(item => <li>
     <a class="collection-cover" href={`/collections/${encodeURIComponent(item.slug)}`}>
-      {item.coverKey && env.IMAGE_BASE_URL ? <img src={imageUrl(item.coverKey, env.IMAGE_BASE_URL)} width="240" height="240" loading="lazy" decoding="async" alt={`ปก Collection ${item.title}`} /> : <Placeholder label="ยังไม่มีรูปปก" />}
+      {item.displayCoverKey && env.IMAGE_BASE_URL ? <img src={imageUrl(item.displayCoverKey, env.IMAGE_BASE_URL)} width="240" height="240" loading="lazy" decoding="async" alt={`ปก Collection ${item.title}`} /> : <Placeholder label="ยังไม่มีรูปปก" />}
     </a>
     <a class="collection-title" href={`/collections/${encodeURIComponent(item.slug)}`}>{item.title}</a>
     <span class="muted">{item.tapeCount} เทป</span>
