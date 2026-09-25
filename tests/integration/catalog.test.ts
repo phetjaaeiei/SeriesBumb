@@ -60,6 +60,7 @@ describe('public tape reads', () => {
     const marker = crypto.randomUUID();
     const publishedId = crypto.randomUUID();
     const draftId = crypto.randomUUID();
+    const songId = crypto.randomUUID();
     for (const [id, suffix, status] of [
       [publishedId, 'published', 'published'],
       [draftId, 'draft', 'draft'],
@@ -67,7 +68,13 @@ describe('public tape reads', () => {
       await db.prepare('INSERT INTO tape (id, slug, title, titleSort, releaseType, status, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
         .bind(id, `${marker}-${suffix}`, suffix, `2${suffix}`, 'album', status, status === 'published' ? now : null, now, now).run();
     }
-    expect((await getTapeBySlug(db, `${marker}-published`))?.id).toBe(publishedId);
+    await db.prepare('INSERT INTO song (id, slug, title, titleSort, lyrics, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(songId, `${marker}-song`, 'เพลงทดสอบ', 'เพลงทดสอบ', 'เนื้อเพลงทดสอบ', now, now).run();
+    await db.prepare("INSERT INTO tape_track (id, tapeId, songId, side, position) VALUES (?, ?, ?, 'A', 1)")
+      .bind(crypto.randomUUID(), publishedId, songId).run();
+    const detail = await getTapeBySlug(db, `${marker}-published`);
+    expect(detail?.id).toBe(publishedId);
+    expect(detail?.tracks[0]?.hasLyrics).toBe(1);
     expect(await getTapeBySlug(db, `${marker}-draft`)).toBeNull();
   });
 });

@@ -31,7 +31,17 @@ const items = [
   { label: 'แนวเพลง', value: tape.genres.map(genre => genre.name).join(', ') || null },
 ];
 const sides = ['A', 'B', 'C', 'D'].filter(side => tape.tracks.some(track => track.side === side));
-const collections = await env.DB.prepare(`SELECT c.slug, c.title FROM collection_item ci JOIN collection c ON c.id = ci.collectionId WHERE ci.tapeId = ? AND c.status = 'published' ORDER BY c.position`).bind(tape.id).all<{ slug: string; title: string }>();
+const sideGroups = sides.map(side => {
+  const tracks = tape.tracks.filter(track => track.side === side);
+  return { side, tracks, total: tracks.reduce((seconds, track) => seconds + (track.durationSec ?? 0), 0), incomplete: tracks.some(track => track.durationSec === null) };
+});
+const relatedStatement = tape.artists[0]
+  ? env.DB.prepare(`SELECT t.slug, t.title, t.year FROM tape_artist ta JOIN artist a ON a.id = ta.artistId JOIN tape t ON t.id = ta.tapeId WHERE a.slug = ? AND t.status = 'published' AND t.id != ? ORDER BY t.yearSort, t.id LIMIT 8`).bind(tape.artists[0].slug, tape.id)
+  : tape.labelId ? env.DB.prepare("SELECT slug, title, year FROM tape WHERE labelId = ? AND status = 'published' AND id != ? ORDER BY yearSort, id LIMIT 8").bind(tape.labelId, tape.id) : null;
+const [collections, related] = await Promise.all([
+  env.DB.prepare(`SELECT c.slug, c.title FROM collection_item ci JOIN collection c ON c.id = ci.collectionId WHERE ci.tapeId = ? AND c.status = 'published' ORDER BY c.position`).bind(tape.id).all<{ slug: string; title: string }>(),
+  relatedStatement?.all<{ slug: string; title: string; year: number | null }>() ?? Promise.resolve({ results: [] as { slug: string; title: string; year: number | null }[] }),
+]);
 const viewerId = Astro.locals.user?.id;
 const engagement = !unpublished && viewerId ? await env.DB.prepare('SELECT EXISTS(SELECT 1 FROM tape_like WHERE userId = ? AND tapeId = ?) AS liked, EXISTS(SELECT 1 FROM tape_owner WHERE userId = ? AND tapeId = ?) AS owned').bind(viewerId, tape.id, viewerId, tape.id).first<{ liked: number; owned: number }>() : null;
 const firstComments = !unpublished ? await listComments(env.DB, { tapeId: tape.id }, null, viewerId) : null;
@@ -77,11 +87,12 @@ const firstComments = !unpublished ? await listComments(env.DB, { tapeId: tape.i
   <Tabs tabs={[{ id: 'songs', label: 'เพลง' }, { id: 'details', label: 'รายละเอียด' }, { id: 'collections', label: 'Collection' }, { id: 'comments', label: `คอมเมนต์ (${tape.commentCount})` }]}>
     <section id="songs" class="tab-panel" data-tab-panel>
       <h2>เพลง</h2>
-      {sides.length ? sides.map(side => <div class="track-side">
-        <h3>หน้า {side}</h3>
+      {sideGroups.length ? sideGroups.map(group => <div class="track-side">
+        <h3>หน้า {group.side}</h3>
         <table class="data-table"><thead><tr><th scope="col">#</th><th scope="col">ชื่อเพลง</th><th scope="col">ผู้ร้อง</th><th scope="col">ความยาว</th></tr></thead><tbody>
-          {tape.tracks.filter(track => track.side === side).map(track => <tr><td class="mono">{track.position}</td><td><a href={`/songs/${encodeURIComponent(track.songSlug)}`}>{track.songTitle}</a>{track.note && <em class="track-note"> · {track.note}</em>}</td><td>{track.artists || artistNames}</td><td class="mono">{formatDuration(track.durationSec)}</td></tr>)}
+          {group.tracks.map(track => <tr><td class="mono">{track.position}</td><td><a href={`/songs/${encodeURIComponent(track.songSlug)}`}>{track.songTitle}</a>{track.note && <em class="track-note"> · {track.note}</em>}{track.hasLyrics ? <> · <a href={`/songs/${encodeURIComponent(track.songSlug)}#lyrics`}>เนื้อเพลง</a></> : null}</td><td>{track.artists && track.artists !== tape.artists.map(artist => artist.name).join(', ') ? track.artists : '—'}</td><td class="mono">{formatDuration(track.durationSec)}</td></tr>)}
         </tbody></table>
+        {group.total > 0 && <p class="track-side-total mono">{group.incomplete ? 'รวมเวลาที่ระบุ' : 'รวมเวลา'} {formatDuration(group.total)}</p>}
       </div>) : <p class="empty-state">ยังไม่มีรายชื่อเพลงในเทปนี้</p>}
     </section>
     <section id="details" class="tab-panel" data-tab-panel>
@@ -98,6 +109,7 @@ const firstComments = !unpublished ? await listComments(env.DB, { tapeId: tape.i
       {unpublished ? <p class="empty-state">เผยแพร่เทปก่อนจึงเปิดคอมเมนต์ได้</p> : <Comments tapeId={tape.id} initialItems={firstComments!.items} initialCursor={firstComments!.nextCursor} initialCount={tape.commentCount} authenticated={Boolean(viewerId)} banned={Boolean(Astro.locals.user?.commentBanned)} loginNext={Astro.url.pathname} client:visible />}
     </section>
   </Tabs>
+  {related.results.length > 0 && <section class="section" aria-labelledby="related-tapes-title"><h2 id="related-tapes-title">{tape.artists[0] ? `เทปอื่นของ ${tape.artists[0].name}` : 'เทปอื่นจากค่ายเดียวกัน'}</h2><ul class="plain-list">{related.results.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`}>{item.title}</a> <span class="mono muted">{item.year ?? '—'}</span></li>)}</ul></section>}
   <CreditLine createdByName={tape.createdByName} createdAt={tape.createdAt} updatedByName={tape.updatedByName} updatedAt={tape.updatedAt} />
   <script>import '../../scripts/lightbox';</script>
 </BaseLayout>
@@ -121,4 +133,5 @@ const firstComments = !unpublished ? await listComments(env.DB, { tapeId: tape.i
   .tape-lightbox button { border: 0; background: transparent; color: var(--text); cursor: pointer; }
   .tape-lightbox button:hover { color: var(--accent); }
   .tape-lightbox button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .track-side-total { margin-top: 8px; color: var(--text-muted); font-size: 13px; text-align: right; }
 </style>

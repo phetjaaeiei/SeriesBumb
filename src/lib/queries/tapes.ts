@@ -36,7 +36,7 @@ export interface TapeDetail extends TapeListItem {
   createdByName: string | null;
   updatedByName: string | null;
   images: { id: string; kind: string; fullKey: string; thumbKey: string; width: number; height: number; position: number }[];
-  tracks: { id: string; side: string; position: number; durationSec: number | null; note: string | null; songId: string; songSlug: string; songTitle: string; artists: string }[];
+  tracks: { id: string; side: string; position: number; durationSec: number | null; note: string | null; songId: string; songSlug: string; songTitle: string; artists: string | null; hasLyrics: number }[];
   genres: { name: string; slug: string }[];
 }
 
@@ -127,6 +127,7 @@ export async function getTapeBySlug(db: D1Database, slug: string, admin = false)
     db.prepare('SELECT a.name, a.slug FROM tape_artist ta JOIN artist a ON a.id = ta.artistId WHERE ta.tapeId = ? ORDER BY ta.position').bind(row.id).all<{ name: string; slug: string }>(),
     db.prepare('SELECT id, kind, fullKey, thumbKey, width, height, position FROM tape_image WHERE tapeId = ? ORDER BY position').bind(row.id).all<TapeDetail['images'][number]>(),
     db.prepare(`SELECT tt.id, tt.side, tt.position, tt.durationSec, tt.note, s.id AS songId, s.slug AS songSlug, s.title AS songTitle,
+      (s.lyrics IS NOT NULL AND s.lyrics != '') AS hasLyrics,
       (SELECT group_concat(a.name, ', ') FROM song_artist sa JOIN artist a ON a.id = sa.artistId WHERE sa.songId = s.id ORDER BY sa.position) AS artists
       FROM tape_track tt JOIN song s ON s.id = tt.songId WHERE tt.tapeId = ? ORDER BY tt.side, tt.position`).bind(row.id).all<TapeDetail['tracks'][number]>(),
     db.prepare('SELECT g.name, g.slug FROM tape_genre tg JOIN genre g ON g.id = tg.genreId WHERE tg.tapeId = ? ORDER BY g.position').bind(row.id).all<TapeDetail['genres'][number]>(),
