@@ -4,6 +4,8 @@ import { decadeOf, toCeYear, yearSortOf } from '../format';
 import { slugCandidates, SLUG_MAX, SLUG_RE } from '../slug';
 import { normalizeThai, thaiSortKey } from '../thai';
 import { reindexArtistDependents, reindexLabelDependents } from './search-admin';
+import { CatalogError } from './catalog-delete';
+import type { ImageKind } from './images';
 
 type EntityTable = 'artist' | 'label' | 'genre' | 'song' | 'tape' | 'collection';
 type SearchKind = Exclude<EntityTable, 'genre'>;
@@ -123,6 +125,7 @@ export interface TapeSaveInput {
   artistIds?: string[];
   genreIds?: string[];
   tracks?: { songId: string; side: 'A' | 'B' | 'C' | 'D'; position: number; durationSec?: number | null; note?: string | null }[];
+  images?: { id: string; kind: ImageKind }[];
   status: 'draft' | 'published';
   ogImageKey?: string | null;
   ogSourceImageId?: string | null;
@@ -138,8 +141,18 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
   const tracks = input.tracks ?? [];
   if (artistIds.length > 20 || tracks.length > 60) throw new Error('จำนวนศิลปินหรือเพลงเกินขีดจำกัด');
   if (input.status === 'published' && !artistIds.length && !['compilation', 'soundtrack'].includes(input.releaseType)) throw new Error('กรุณาระบุศิลปินก่อนเผยแพร่');
-  const images = await db.prepare("SELECT id, kind, thumbKey FROM tape_image WHERE tapeId = ? ORDER BY CASE WHEN kind = 'front' THEN 0 ELSE 1 END, position LIMIT 1").bind(input.id).all<{ id: string; kind: string; thumbKey: string }>();
-  const cover = images.results[0];
+  const images = await db.prepare('SELECT id, kind, thumbKey FROM tape_image WHERE tapeId = ? ORDER BY position, id').bind(input.id).all<{ id: string; kind: ImageKind; thumbKey: string }>();
+  if (input.images) {
+    const storedIds = new Set(images.results.map(image => image.id));
+    const submittedIds = input.images.map(image => image.id);
+    if (submittedIds.length !== storedIds.size || new Set(submittedIds).size !== storedIds.size || submittedIds.some(id => !storedIds.has(id))) {
+      throw new CatalogError('รายการรูปเปลี่ยนไปแล้ว กรุณาโหลดหน้าใหม่ก่อนบันทึก');
+    }
+  }
+  const orderedImages = input.images
+    ? input.images.map(image => ({ ...images.results.find(stored => stored.id === image.id)!, kind: image.kind }))
+    : images.results;
+  const cover = orderedImages.find(image => image.kind === 'front') || orderedImages[0];
   if (input.status === 'published' && !cover) throw new Error('กรุณาเพิ่มรูปปกก่อนเผยแพร่');
   const old = await Promise.all([
     db.prepare('SELECT artistId FROM tape_artist WHERE tapeId = ?').bind(input.id).all<{ artistId: string }>(),
@@ -173,6 +186,11 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
   const searchText = [title, input.titleAlt, ...names.results.map(row => row.name), labelName?.name, input.catalogNo].filter(Boolean).join(' | ');
   const relationPublished = Number(input.status === 'published');
   const statements: D1PreparedStatement[] = [
+    ...(input.images ? [db.prepare(`UPDATE tape_image SET
+      kind = (SELECT json_extract(value, '$.kind') FROM json_each(?1) WHERE json_extract(value, '$.id') = tape_image.id),
+      position = (SELECT CAST(json_extract(value, '$.position') AS INTEGER) FROM json_each(?1) WHERE json_extract(value, '$.id') = tape_image.id)
+      WHERE tapeId = ?2 AND id IN (SELECT json_extract(value, '$.id') FROM json_each(?1))`)
+      .bind(jsonParam(input.images.map((image, position) => ({ ...image, position }))), input.id)] : []),
     db.prepare(`UPDATE tape SET slug = ?, slugLocked = ?, title = ?, titleAlt = ?, titleSort = ?, labelId = ?, year = ?, yearSort = ?, decade = ?, releaseType = ?, catalogNo = ?, description = ?, reelUrl = ?, isRare = ?, status = ?, publishedAt = ?, coverImageId = ?, coverThumbKey = ?, ogImageKey = ?, ogImageBytes = ?, ogSourceImageId = ?, ogSourceTitle = ?, updatedBy = ?, updatedAt = ? WHERE id = ?`).bind(slug, Number(!!input.slug), title, input.titleAlt || null, thaiSortKey(title), input.labelId || null, year, yearSortOf(year), decadeOf(year), input.releaseType, input.catalogNo || null, input.description || '', input.reelUrl || null, Number(!!input.isRare), input.status, publishedAt, cover?.id || null, cover?.thumbKey || null, nextOgKey, nextOgBytes, nextOgSourceImageId, nextOgSourceTitle, userId, now, input.id),
     db.prepare('DELETE FROM tape_artist WHERE tapeId = ?').bind(input.id),
     db.prepare('INSERT INTO tape_artist (tapeId, artistId, position, isPublished, yearSort) SELECT ?, value, CAST(key AS INTEGER), ?, ? FROM json_each(?)').bind(input.id, relationPublished, yearSortOf(year), jsonParam(artistIds)),

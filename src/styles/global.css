@@ -272,6 +272,20 @@ small { font-size: 13px; }
 .admin-image-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 .admin-image { display: flex; width: 120px; min-height: 120px; flex-direction: column; gap: 4px; justify-content: center; align-items: center; padding: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); font-size: 12px; }
 .admin-image img { width: 100%; height: 100px; object-fit: contain; }
+.admin-image-list { display: flex; flex-direction: column; gap: 12px; padding: 0; margin: 16px 0; list-style: none; }
+.admin-tape-image { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 16px; align-items: start; padding: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
+.admin-tape-image-preview { display: flex; width: 112px; min-height: 112px; align-items: center; justify-content: center; background: var(--surface-2); color: var(--text-muted); text-align: center; }
+.admin-tape-image-preview img { width: 112px; height: 112px; object-fit: contain; }
+.admin-tape-image-body { min-width: 0; }
+.admin-tape-image-heading { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; color: var(--text); }
+.admin-cover-badge { padding: 2px 8px; border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); font-size: 12px; }
+.admin-tape-image .admin-field { max-width: 220px; }
+.admin-tape-image .field { min-height: 44px; }
+.admin-tape-image-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+.admin-tape-image-actions .button { min-width: 40px; padding-inline: 9px; }
+.admin-tape-image-actions .track-drag-handle { width: 44px; height: 44px; }
+.admin-tape-image-actions .track-drag-handle:disabled { cursor: not-allowed; color: var(--text-muted); }
+.admin-image-pending { margin: 0 0 16px; color: var(--accent); font-size: 13px; }
 .image-upload { max-width: 500px; }
 .editor-actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 24px 0 40px; }
 .success-text { color: var(--success); }
@@ -380,6 +394,9 @@ progress.usage-meter.danger::-moz-progress-bar { background: var(--status); }
   .admin-form-grid { grid-template-columns: 1fr; }
   .editor-row { grid-template-columns: 1fr 1fr; }
   .editor-row .button { width: max-content; }
+  .admin-tape-image { grid-template-columns: 1fr; }
+  .admin-tape-image-preview { width: 100%; }
+  .admin-tape-image-preview img { width: 100%; }
   .button { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {

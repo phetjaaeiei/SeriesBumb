@@ -18,6 +18,7 @@ type TrackRow = Track & { clientId: string; durationText: string };
 type Member = { name: string; role?: string; years?: string | null; isCurrent?: boolean | number };
 type Item = { tapeId: string; note?: string | null };
 type TapeImage = { id: string; kind: 'front' | 'back' | 'inside' | 'cassette' | 'other'; fullKey: string; thumbKey: string; position: number };
+const IMAGE_KIND_LABELS: Record<TapeImage['kind'], string> = { front: 'ปกหน้า', back: 'ปกหลัง', inside: 'ด้านใน', cassette: 'ตลับเทป', other: 'อื่น ๆ' };
 const PROVINCES_BY_REGION = REGIONS.map(region => ({ region, provinces: PROVINCES.filter(province => province.region === region).map(province => province.name) }));
 interface Props {
   kind: Kind;
@@ -122,6 +123,35 @@ function TrackItem({ track, index, count, choices, onUpdate, onSideChange, onMov
   </Reorder.Item>;
 }
 
+function TapeImageItem({ image, index, count, isCover, canDelete, imageBase, busy, onKindChange, onSetCover, onMove, onRemove, onOrderChanged }: {
+  image: TapeImage; index: number; count: number; isCover: boolean; canDelete: boolean; imageBase: string; busy: boolean;
+  onKindChange: (kind: TapeImage['kind']) => void;
+  onSetCover: () => void;
+  onMove: (direction: -1 | 1) => void;
+  onRemove: () => void;
+  onOrderChanged: () => void;
+}) {
+  const dragControls = useDragControls();
+  const reduceMotion = useReducedMotion();
+  return <Reorder.Item as="li" value={image.id} dragListener={false} dragControls={dragControls} onDragEnd={onOrderChanged} transition={{ duration: reduceMotion ? 0 : 0.18 }} className="admin-tape-image">
+    <div className="admin-tape-image-preview">{imageBase ? <img src={imageUrl(image.thumbKey, imageBase)} alt={`${IMAGE_KIND_LABELS[image.kind]} รูปที่ ${index + 1}`} width="112" height="112" loading="lazy" decoding="async" /> : <span className="muted">{IMAGE_KIND_LABELS[image.kind]}</span>}</div>
+    <div className="admin-tape-image-body">
+      <div className="admin-tape-image-heading"><span className="mono">รูปที่ {index + 1}</span>{isCover && <span className="admin-cover-badge">ปกหลัก</span>}</div>
+      <label className="admin-field">ประเภทภาพ<select className="field" aria-label={`ประเภทภาพรูปที่ ${index + 1}`} value={image.kind} disabled={busy} onChange={event => onKindChange(event.target.value as TapeImage['kind'])}>{Object.entries(IMAGE_KIND_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+      <div className="admin-tape-image-actions">
+        <button type="button" className="track-drag-handle" aria-label={`เรียงรูปที่ ${index + 1} ใช้ลูกศรขึ้นลงหรือจับลาก`} disabled={busy} onPointerDown={event => dragControls.start(event)} onKeyDown={event => {
+          if (event.key === 'ArrowUp' && index > 0) { event.preventDefault(); onMove(-1); }
+          if (event.key === 'ArrowDown' && index < count - 1) { event.preventDefault(); onMove(1); }
+        }} title="ลากเพื่อเรียงรูป">⠿</button>
+        <button type="button" className="button" aria-label={`เลื่อนรูปที่ ${index + 1} ขึ้น`} disabled={busy || index === 0} onClick={() => onMove(-1)}>↑</button>
+        <button type="button" className="button" aria-label={`เลื่อนรูปที่ ${index + 1} ลง`} disabled={busy || index === count - 1} onClick={() => onMove(1)}>↓</button>
+        <button type="button" className="button" aria-label={`ตั้งรูปที่ ${index + 1} เป็นปกหลัก`} disabled={busy || (isCover && image.kind === 'front')} onClick={onSetCover}>ตั้งเป็นปกหลัก</button>
+        <button type="button" className="button button-danger" aria-label={`ลบรูปที่ ${index + 1}`} disabled={busy || !canDelete} onClick={onRemove}>ลบรูป</button>
+      </div>
+    </div>
+  </Reorder.Item>;
+}
+
 export default function AdminEditor({ kind, record, artistIds, genreIds, tracks, members, items, images, selected, imageBase }: Props) {
   const [fields, setFields] = useState<Row>(record);
   const [artists, setArtists] = useState(artistIds);
@@ -130,6 +160,10 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
   const [memberRows, setMemberRows] = useState<Member[]>(members);
   const [itemRows, setItemRows] = useState<Item[]>(items);
   const [imageRows, setImageRows] = useState<TapeImage[]>(images);
+  const [imageDirty, setImageDirty] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState('');
+  const [imageAnnouncement, setImageAnnouncement] = useState('');
   const [choices, setChoices] = useState(selected);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -140,6 +174,26 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
   const set = (key: string, value: string | number | null) => setFields(previous => ({ ...previous, [key]: value }));
   const choose = (ids: string[], choice: Choice | undefined, setter: (ids: string[]) => void) => { setter(ids); if (choice) setChoices(previous => [...previous.filter(item => item.id !== choice.id), choice]); };
   const publicPath = kind === 'genres' ? `/genres/${get('slug')}` : `/${kind}/${get('slug')}`;
+  const coverImageId = imageRows.find(image => image.kind === 'front')?.id || imageRows[0]?.id;
+
+  function moveImage(imageId: string, direction: -1 | 1) {
+    const index = imageRows.findIndex(image => image.id === imageId);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= imageRows.length) return;
+    setImageRows(previous => {
+      const next = [...previous];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    setImageDirty(true);
+    setImageAnnouncement(`ย้ายรูปไปที่ลำดับ ${target + 1} แล้ว`);
+  }
+
+  function reorderImages(ids: string[]) {
+    if (ids.length !== imageRows.length || ids.some(id => !imageRows.some(image => image.id === id))) return;
+    setImageRows(previous => ids.map(id => previous.find(image => image.id === id)!));
+    setImageDirty(true);
+  }
 
   async function save(status?: 'draft' | 'published') {
     setBusy(true); setMessage(''); setError('');
@@ -185,6 +239,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
         catalogNo: get('catalogNo') || null, description: get('description'), reelUrl: get('reelUrl') || null,
         isRare: Boolean(fields.isRare), labelId: get('labelId') || null, artistIds: artists, genreIds: genres,
         tracks: numberTracks(trackRows).map(track => ({ songId: track.songId, side: track.side, position: track.position, durationSec: parseDuration(track.durationText), note: track.note || null })),
+        images: imageRows.map(image => ({ id: image.id, kind: image.kind })),
         status: status || (get('status') as 'draft' | 'published'), ogImageKey: nextOgKey, ogSourceImageId: nextOgSourceId, ogSourceTitle: nextOgSourceTitle,
       }) : kind === 'songs' ? await actions.admin.songs.save({
         id, title: get('title'), titleAlt: get('titleAlt') || null, slug: customSlug, artistIds: artists,
@@ -208,6 +263,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
       set('slug', newSlug);
       if (status) set('status', status);
       if (kind === 'tapes' && nextOgKey !== undefined) setFields(previous => ({ ...previous, ogImageKey: nextOgKey, ogSourceImageId: nextOgSourceId || null, ogSourceTitle: nextOgSourceTitle || null }));
+      if (kind === 'tapes') setImageDirty(false);
       setMessage(ogWarning ? `บันทึกแล้ว · ${ogWarning}` : 'บันทึกแล้ว');
       if (newSlug !== record.slug) window.history.replaceState(null, '', `/admin/${kind}/${id}`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'บันทึกไม่สำเร็จ ลองอีกครั้ง'); }
@@ -215,14 +271,15 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
   }
 
   async function removeImage(imageId: string) {
-    if (!window.confirm('ลบรูปนี้ออกจากเทป?')) return;
-    setBusy(true); setError(''); setMessage('');
+    if (!window.confirm('ลบรูปนี้ออกจากเทปถาวร? ไฟล์รูปจะถูกลบจากคลังภาพด้วย')) return;
+    setBusy(true); setError(''); setMessage(''); setImageError('');
     try {
       const response = await actions.admin.images.deleteTapeImage({ imageId });
       if (response.error) throw new Error(response.error.message);
       setImageRows(previous => previous.filter(image => image.id !== imageId));
       setMessage('ลบรูปแล้ว');
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'ลบรูปไม่สำเร็จ'); }
+      setImageAnnouncement('ลบรูปแล้ว');
+    } catch (cause) { setImageError(cause instanceof Error ? cause.message : 'ลบรูปไม่สำเร็จ'); }
     finally { setBusy(false); }
   }
 
@@ -284,11 +341,39 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
 
     {kind === 'collections' && <div className="editor-section"><h2>เทปใน Collection</h2>{itemRows.map((item, index) => <div className="track-edit" key={index}><Picker kind="tapes" label={`เทปลำดับ ${index + 1}`} ids={item.tapeId ? [item.tapeId] : []} selected={choices} multiple={false} onChange={(ids, choice) => { setItemRows(previous => previous.map((row, i) => i === index ? { ...row, tapeId: ids[0] || '' } : row)); if (choice) setChoices(previous => [...previous, choice]); }} /><Field label="โน้ต" value={item.note || ''} onChange={value => setItemRows(previous => previous.map((row, i) => i === index ? { ...row, note: value } : row))} maxLength={1000} /><button className="button" type="button" onClick={() => setItemRows(previous => previous.filter((_, i) => i !== index))}>เอาออก</button></div>)}<button className="button" type="button" onClick={() => setItemRows(previous => [...previous, { tapeId: '', note: '' }])}>+ เพิ่มเทป</button></div>}
 
-    {['tapes', 'artists', 'labels', 'collections'].includes(kind) && <div className="editor-section"><h2>รูปภาพ</h2>{kind === 'tapes' && <div className="admin-image-grid">{imageRows.map(image => <div className="admin-image" key={image.id}>{imageBase ? <img src={imageUrl(image.thumbKey, imageBase)} alt={`รูป ${image.kind}`} /> : <span className="muted">{image.kind}</span>}<span>{image.kind}</span><button className="button" type="button" disabled={busy} onClick={() => void removeImage(image.id)}>ลบรูป</button></div>)}</div>}{kind !== 'tapes' && get(kind === 'artists' ? 'imageKey' : kind === 'labels' ? 'logoKey' : 'coverKey') && imageBase && <div className="admin-image"><img src={imageUrl(get(kind === 'artists' ? 'imageKey' : kind === 'labels' ? 'logoKey' : 'coverKey'), imageBase)} alt="รูปปัจจุบัน" /></div>}<ImageUpload entityType={kind as 'tapes' | 'artists' | 'labels' | 'collections'} entityId={id} onUploaded={result => { if (kind === 'tapes') setImageRows(previous => [...previous, { id: result.imageId || result.key, kind: 'front', fullKey: result.key, thumbKey: result.thumbKey || result.key, position: previous.length }]); else set(kind === 'artists' ? 'imageKey' : kind === 'labels' ? 'logoKey' : 'coverKey', result.key); }} /></div>}
+    {['tapes', 'artists', 'labels', 'collections'].includes(kind) && <div className="editor-section">
+      <h2>รูปภาพ</h2>
+      {kind === 'tapes' && <>
+        <p className="help-text">เลือกประเภทภาพ ตั้งปกหลัก และลากหรือใช้ลูกศรเพื่อเรียงรูป บันทึกฟอร์มเพื่อใช้การเปลี่ยนแปลง</p>
+        <span className="sr-only" aria-live="polite">{imageAnnouncement}</span>
+        {imageRows.length ? <Reorder.Group as="ol" axis="y" values={imageRows.map(image => image.id)} onReorder={reorderImages} className="admin-image-list">
+          {imageRows.map((image, index) => <TapeImageItem key={image.id} image={image} index={index} count={imageRows.length}
+            isCover={image.id === coverImageId} canDelete={get('status') !== 'published' || imageRows.length > 1}
+            imageBase={imageBase} busy={busy || imageUploading}
+            onKindChange={value => { setImageRows(previous => previous.map(row => row.id === image.id ? { ...row, kind: value } : row)); setImageDirty(true); setImageAnnouncement(`เปลี่ยนประเภทภาพรูปที่ ${index + 1} แล้ว`); }}
+            onSetCover={() => { setImageRows(previous => [{ ...image, kind: 'front' }, ...previous.filter(row => row.id !== image.id)]); setImageDirty(true); setImageAnnouncement(`ตั้งรูปที่ ${index + 1} เป็นปกหลักแล้ว`); }}
+            onMove={direction => moveImage(image.id, direction)} onRemove={() => void removeImage(image.id)}
+            onOrderChanged={() => setImageAnnouncement('เรียงลำดับรูปแล้ว')} />)}
+        </Reorder.Group> : <p className="empty-state">ยังไม่มีรูปเทป เพิ่มรูปเพื่อแสดงปกในคลัง</p>}
+        {get('status') === 'published' && imageRows.length === 1 && <p className="help-text">เทปที่เผยแพร่ต้องมีรูปอย่างน้อยหนึ่งรูป เพิ่มรูปใหม่ก่อนลบรูปนี้</p>}
+        {imageDirty && <p className="admin-image-pending" role="status">ยังไม่บันทึกลำดับหรือประเภทภาพ</p>}
+        {imageError && <p className="error-text" role="alert">{imageError}</p>}
+      </>}
+      {kind !== 'tapes' && get(kind === 'artists' ? 'imageKey' : kind === 'labels' ? 'logoKey' : 'coverKey') && imageBase && <div className="admin-image"><img src={imageUrl(get(kind === 'artists' ? 'imageKey' : kind === 'labels' ? 'logoKey' : 'coverKey'), imageBase)} alt="รูปปัจจุบัน" /></div>}
+      <ImageUpload entityType={kind as 'tapes' | 'artists' | 'labels' | 'collections'} entityId={id} onBusyChange={setImageUploading} onUploaded={result => {
+        if (kind === 'tapes') {
+          const imageId = result.imageId;
+          if (!imageId) { setImageError('อัปโหลดแล้ว แต่แสดงรูปใหม่ไม่ได้ กรุณาโหลดหน้าใหม่'); return; }
+          setImageRows(previous => [...previous, { id: imageId, kind: result.kind || 'front', fullKey: result.key, thumbKey: result.thumbKey || result.key, position: previous.length }]);
+          setImageError('');
+          setImageAnnouncement('เพิ่มรูปใหม่แล้ว');
+        } else set(kind === 'artists' ? 'imageKey' : kind === 'labels' ? 'logoKey' : 'coverKey', result.key);
+      }} />
+    </div>}
 
     <div className="editor-actions">
-      {kind === 'tapes' || kind === 'collections' ? <><button className="button" type="button" disabled={busy} onClick={() => void save('draft')}>บันทึกร่าง</button><button className="button button-primary" type="button" disabled={busy} onClick={() => void save(get('status') === 'published' ? 'draft' : 'published')}>{busy ? 'กำลังบันทึก…' : get('status') === 'published' ? 'ยกเลิกเผยแพร่' : 'เผยแพร่'}</button></> : <button className="button button-primary" type="button" disabled={busy} onClick={() => void save()}>{busy ? 'กำลังบันทึก…' : 'บันทึก'}</button>}
-      <button className="button button-danger" type="button" disabled={busy} onClick={() => void removeEntity()}>ลบรายการ</button>
+      {kind === 'tapes' || kind === 'collections' ? <><button className="button" type="button" disabled={busy || imageUploading} onClick={() => void save('draft')}>บันทึกร่าง</button><button className="button button-primary" type="button" disabled={busy || imageUploading} onClick={() => void save(get('status') === 'published' ? 'draft' : 'published')}>{busy ? 'กำลังบันทึก…' : get('status') === 'published' ? 'ยกเลิกเผยแพร่' : 'เผยแพร่'}</button></> : <button className="button button-primary" type="button" disabled={busy || imageUploading} onClick={() => void save()}>{busy ? 'กำลังบันทึก…' : 'บันทึก'}</button>}
+      <button className="button button-danger" type="button" disabled={busy || imageUploading} onClick={() => void removeEntity()}>ลบรายการ</button>
       {message && <span className="success-text" role="status">{message}</span>}
       {error && <span className="error-text" role="alert">{error}</span>}
     </div>

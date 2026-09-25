@@ -8,7 +8,8 @@ type ImageKind = 'front' | 'back' | 'inside' | 'cassette' | 'other';
 interface Props {
   entityType: EntityType;
   entityId: string;
-  onUploaded: (value: { key: string; thumbKey?: string; imageId?: string }) => void;
+  onUploaded: (value: { key: string; thumbKey?: string; imageId?: string; kind?: ImageKind }) => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 function uploadInput(entityType: EntityType, entityId: string, variant: 'full' | 'thumb', file: File, width: number, height: number, uuid?: string, kind?: ImageKind) {
@@ -24,7 +25,7 @@ function uploadInput(entityType: EntityType, entityId: string, variant: 'full' |
   return form;
 }
 
-export default function ImageUpload({ entityType, entityId, onUploaded }: Props) {
+export default function ImageUpload({ entityType, entityId, onUploaded, onBusyChange }: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [kind, setKind] = useState<ImageKind>('front');
@@ -32,6 +33,7 @@ export default function ImageUpload({ entityType, entityId, onUploaded }: Props)
   async function upload(files: File[]) {
     if (!files.length || busy) return;
     setBusy(true);
+    onBusyChange?.(true);
     setMessage('');
     for (const [index, source] of files.entries()) {
       try {
@@ -42,15 +44,17 @@ export default function ImageUpload({ entityType, entityId, onUploaded }: Props)
         if (first.error || !first.data) throw new Error(first.error?.message || 'อัปโหลดรูปเต็มไม่สำเร็จ');
         const second = await actions.admin.images.upload(uploadInput(entityType, entityId, 'thumb', thumb.file, thumb.width, thumb.height, first.data.uuid, kind));
         if (second.error || !second.data) throw new Error(second.error?.message || 'อัปโหลดรูปย่อไม่สำเร็จ');
-        onUploaded({ key: second.data.fullKey || first.data.key, thumbKey: second.data.thumbKey, imageId: second.data.imageId });
+        onUploaded({ key: second.data.fullKey || first.data.key, thumbKey: second.data.thumbKey, imageId: second.data.imageId, kind });
       } catch (error) {
         setMessage(`รูป ${index + 1}: ${error instanceof Error ? error.message : 'อัปโหลดไม่สำเร็จ'}`);
         setBusy(false);
+        onBusyChange?.(false);
         return;
       }
     }
     setMessage(`อัปโหลดแล้ว ${files.length} รูป`);
     setBusy(false);
+    onBusyChange?.(false);
   }
 
   return <div className="image-upload">
