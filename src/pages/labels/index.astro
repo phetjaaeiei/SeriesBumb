@@ -1,10 +1,16 @@
 ---
 import { env } from 'cloudflare:workers';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
-const labels = (await env.DB.prepare('SELECT slug, name, publishedTapeCount FROM label WHERE publishedTapeCount > 0 ORDER BY nameSort, id LIMIT 100').all<{ slug: string; name: string; publishedTapeCount: number }>()).results;
+import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
+const cursor = decodeCursor('title', Astro.url.searchParams.get('cursor'));
+const rows = (await env.DB.prepare(`SELECT id, slug, name, nameSort, publishedTapeCount FROM label WHERE publishedTapeCount > 0 ${cursor ? 'AND (nameSort, id) > (?, ?)' : ''} ORDER BY nameSort, id LIMIT 101`).bind(...(cursor ? [cursor.key, cursor.id] : [])).all<{ id: string; slug: string; name: string; nameSort: string; publishedTapeCount: number }>()).results;
+const labels = rows.slice(0, 100);
+const last = labels.at(-1);
+const next = rows.length > 100 && last ? encodeCursor('title', last.nameSort, last.id) : null;
 ---
-<BaseLayout title="ค่ายเพลง" canonicalPath="/labels">
+<BaseLayout title="ค่ายเพลง" canonicalPath="/labels" noindex={Astro.url.searchParams.size > 0}>
   <h1>ค่ายเพลง</h1>
   <p class="page-lede">ค่ายเพลงที่มีเทปเผยแพร่ในคลัง</p>
   {labels.length ? <ul class="browse-list section">{labels.map(label => <li><a href={`/labels/${encodeURIComponent(label.slug)}`}><span>{label.name}</span><span class="mono muted">{label.publishedTapeCount}</span></a></li>)}</ul> : <p class="empty-state section">ยังไม่มีค่ายเพลงในคลัง</p>}
+  {next && <nav class="pagination" aria-label="หน้ารายการค่ายเพลง"><a class="button" href={`/labels?cursor=${encodeURIComponent(next)}`} rel="nofollow">หน้าถัดไป →</a></nav>}
 </BaseLayout>
