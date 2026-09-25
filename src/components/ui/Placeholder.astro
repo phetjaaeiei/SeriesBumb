@@ -1,0 +1,9 @@
+---
+import CassetteIcon from './CassetteIcon.astro';
+interface Props { label?: string; class?: string }
+const { label = 'ยังไม่มีรูป', class: className = '' } = Astro.props;
+---
+<div class:list={['placeholder', className]} role="img" aria-label={label}>
+  <CassetteIcon />
+  <span>{label}</span>
+</div>

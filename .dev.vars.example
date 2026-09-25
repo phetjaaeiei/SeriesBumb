@@ -1,0 +1,6 @@
+# Copy this file to .dev.vars for local development.
+# Replace these example values; never commit .dev.vars.
+BETTER_AUTH_SECRET="replace-with-a-long-random-secret-at-least-32-characters"
+GOOGLE_CLIENT_ID="replace-with-google-oauth-client-id"
+GOOGLE_CLIENT_SECRET="replace-with-google-oauth-client-secret"
+ADMIN_EMAILS="admin@example.com"

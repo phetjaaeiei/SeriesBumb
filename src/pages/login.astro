@@ -1,0 +1,19 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../components/layout/BaseLayout.astro';
+import { safeNextPath } from '../lib/urls';
+
+const next = safeNextPath(Astro.url.searchParams.get('next'), env.SITE_URL);
+if (Astro.locals.user) return Astro.redirect(next);
+const failed = Astro.url.searchParams.has('error');
+---
+<BaseLayout title="เข้าสู่ระบบ" noindex>
+  <div class="error-page">
+    <h1>เข้าสู่ระบบ</h1>
+    <p>ใช้บัญชี Google เพื่อบันทึกเทปที่คุณมี กดถูกใจ และร่วมพูดคุยใต้เทปหรือเพลง</p>
+    {failed && <p class="error-text" role="alert">เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง</p>}
+    <button class="button button-primary" type="button" data-google-login data-next={next}>เข้าสู่ระบบด้วย Google</button>
+    <p class="help-text section">ชื่อและรูปจาก Google จะแสดงต่อสาธารณะเมื่อคุณเขียนคอมเมนต์</p>
+  </div>
+  <script>import '../scripts/login';</script>
+</BaseLayout>

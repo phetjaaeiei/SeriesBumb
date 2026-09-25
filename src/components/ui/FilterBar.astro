@@ -1,0 +1,42 @@
+---
+import { RELEASE_TYPES } from '../../db/enums';
+import { releaseTypeLabel } from '../../lib/format';
+interface Props { action?: string; params: URLSearchParams; genres?: { slug: string; name: string }[]; showDecade?: boolean; showGenre?: boolean; showType?: boolean; sorts?: ('new' | 'year' | 'title')[] }
+const { action = Astro.url.pathname, params, genres = [], showDecade = true, showGenre = true, showType = true, sorts = ['new', 'year', 'title'] } = Astro.props;
+const selected = (key: string) => params.get(key) ?? '';
+const count = ['decade', 'genre', 'type'].filter(key => params.has(key)).length;
+const sortLabels = { new: 'เพิ่มล่าสุด', year: 'ปีเก่าไปใหม่', title: 'ชื่อ ก–ฮ' };
+const clearUrl = action;
+---
+<form class="filter-bar" action={action} method="get">
+  <details class="filter-details">
+    <summary>ตัวกรอง{count ? ` (${count})` : ''}</summary>
+    <div class="filter-fields">
+      {showDecade && <label>ยุค
+        <select class="field" name="decade">
+          <option value="">ทุกยุค</option>
+          {[1950,1960,1970,1980,1990,2000,2010,2020].map(decade => <option value={`${decade}s`} selected={selected('decade') === `${decade}s`}>{decade}s</option>)}
+        </select>
+      </label>}
+      {showGenre && <label>แนวเพลง
+        <select class="field" name="genre">
+          <option value="">ทุกแนว</option>
+          {genres.map(genre => <option value={genre.slug} selected={selected('genre') === genre.slug}>{genre.name}</option>)}
+        </select>
+      </label>}
+      {showType && <label>ประเภท
+        <select class="field" name="type">
+          <option value="">ทุกประเภท</option>
+          {RELEASE_TYPES.map(type => <option value={type} selected={selected('type') === type}>{releaseTypeLabel(type)}</option>)}
+        </select>
+      </label>}
+      <label>เรียงตาม
+        <select class="field" name="sort">
+          {sorts.map(sort => <option value={sort} selected={(selected('sort') || 'new') === sort}>{sortLabels[sort]}</option>)}
+        </select>
+      </label>
+      {selected('view') === 'grid' && <input type="hidden" name="view" value="grid" />}
+      <div class="filter-actions"><button class="button button-primary" type="submit">กรองรายการ</button><a href={clearUrl}>ล้างตัวกรอง</a></div>
+    </div>
+  </details>
+</form>

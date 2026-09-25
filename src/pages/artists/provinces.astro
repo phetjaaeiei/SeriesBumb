@@ -1,0 +1,24 @@
+---
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import { REGIONS, PROVINCES, FOREIGN } from '../../lib/provinces';
+---
+<BaseLayout title="ศิลปินตามจังหวัด" canonicalPath="/artists/provinces">
+  <h1>ศิลปินตามจังหวัด</h1>
+  <p class="page-lede">เลือกจังหวัดเพื่อดูศิลปินที่มีผลงานอยู่ในคลัง</p>
+  <div class="place-groups section">
+    {REGIONS.map(region => (
+      <section class="place-group" aria-label={`ภาค${region}`}>
+        <h2>ภาค{region}</h2>
+        <ul class="place-list">
+          {PROVINCES.filter(province => province.region === region).map(province => (
+            <li><a href={`/artists?province=${encodeURIComponent(province.name)}`}>{province.name}</a></li>
+          ))}
+        </ul>
+      </section>
+    ))}
+    <section class="place-group" aria-label={FOREIGN}>
+      <h2>{FOREIGN}</h2>
+      <ul class="place-list"><li><a href={`/artists?province=${encodeURIComponent(FOREIGN)}`}>ศิลปินจากต่างประเทศ</a></li></ul>
+    </section>
+  </div>
+</BaseLayout>

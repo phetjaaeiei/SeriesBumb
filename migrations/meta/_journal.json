@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1790333639514,
+      "tag": "0000_brainy_spectrum",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790333655496,
+      "tag": "0001_search_fts",
+      "breakpoints": true
+    }
+  ]
+}

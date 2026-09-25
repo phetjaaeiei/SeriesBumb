@@ -1,0 +1,10 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+const genres = (await env.DB.prepare('SELECT slug, name, publishedTapeCount FROM genre ORDER BY position').all<{ slug: string; name: string; publishedTapeCount: number }>()).results;
+---
+<BaseLayout title="แนวเพลง" canonicalPath="/genres">
+  <h1>แนวเพลง</h1>
+  <p class="page-lede">เปิดดูเทปตามแนวเพลงที่บันทึกไว้ในคลัง</p>
+  {genres.length ? <ul class="browse-list section">{genres.map(genre => <li><a href={`/genres/${encodeURIComponent(genre.slug)}`}><span>{genre.name}</span><span class="mono muted">{genre.publishedTapeCount}</span></a></li>)}</ul> : <p class="empty-state section">ยังไม่มีแนวเพลงในคลัง</p>}
+</BaseLayout>

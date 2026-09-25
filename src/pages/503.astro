@@ -1,0 +1,12 @@
+---
+import BaseLayout from '../components/layout/BaseLayout.astro';
+Astro.response.status = 503;
+Astro.response.headers.set('Retry-After', '3600');
+---
+<BaseLayout title="ปิดชั่วคราว" noindex>
+  <div class="error-page">
+    <h1>ร้านปิดชั่วคราว</h1>
+    <p>กลับมาเปิด 07:00 น. เมื่อระบบพร้อมแล้วลองอีกครั้ง</p>
+    <a class="button" href="/">กลับหน้าแรก</a>
+  </div>
+</BaseLayout>

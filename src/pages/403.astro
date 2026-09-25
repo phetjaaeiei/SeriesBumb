@@ -1,0 +1,11 @@
+---
+import BaseLayout from '../components/layout/BaseLayout.astro';
+Astro.response.status = 403;
+---
+<BaseLayout title="ไม่มีสิทธิ์เข้าถึง" noindex>
+  <div class="error-page">
+    <h1>หน้านี้สำหรับแอดมิน</h1>
+    <p>บัญชีนี้ยังไม่มีสิทธิ์จัดการคลังเทป</p>
+    <a class="button" href="/">กลับหน้าแรก</a>
+  </div>
+</BaseLayout>

@@ -1,0 +1,9 @@
+---
+import { formatDate } from '../../lib/format';
+interface Props { createdByName?: string | null; createdAt: number; updatedByName?: string | null; updatedAt: number }
+const { createdByName, createdAt, updatedByName, updatedAt } = Astro.props;
+---
+<div class="credit-line">
+  <span>เพิ่มโดย {createdByName || 'แอดมิน'} · <time datetime={new Date(createdAt).toISOString()}>{formatDate(createdAt)}</time></span>
+  <span>แก้ไขล่าสุดโดย {updatedByName || 'แอดมิน'} · <time datetime={new Date(updatedAt).toISOString()}>{formatDate(updatedAt)}</time></span>
+</div>

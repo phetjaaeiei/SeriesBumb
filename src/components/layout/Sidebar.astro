@@ -1,0 +1,32 @@
+---
+interface Props { id?: string; currentPath?: string; label?: string }
+const { id, currentPath = Astro.url.pathname, label = 'หมวดหมู่คลังเทป' } = Astro.props;
+const groups = [
+  { title: 'เทป', links: [
+    { href: '/tapes?sort=title', text: 'ตามตัวอักษร' },
+    { href: '/decades', text: 'ตามยุค' },
+    { href: '/genres', text: 'ตามแนวเพลง' },
+  ] },
+  { title: 'ศิลปิน', links: [
+    { href: '/artists', text: 'ตามตัวอักษร' },
+    { href: '/artists/provinces', text: 'ตามจังหวัด' },
+  ] },
+  { title: 'ค่ายเพลง', links: [{ href: '/labels', text: 'ทั้งหมด' }] },
+  { title: 'Collection', links: [{ href: '/collections', text: 'ชุดคัดสรร' }] },
+  { title: 'อื่นๆ', links: [
+    { href: '/random', text: 'สุ่มเทป' },
+    { href: '/latest', text: 'เพิ่มล่าสุด' },
+  ] },
+];
+const active = (href: string) => currentPath === href.split('?')[0];
+---
+<nav id={id} class="sidebar-nav" aria-label={label}>
+  {groups.map(group => (
+    <div class="nav-group">
+      <h2 class="nav-group-title">{group.title}</h2>
+      {group.links.map(link => (
+        <a class="nav-link" href={link.href} aria-current={active(link.href) ? 'page' : undefined}>{link.text}</a>
+      ))}
+    </div>
+  ))}
+</nav>

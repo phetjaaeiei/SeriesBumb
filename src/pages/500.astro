@@ -1,0 +1,11 @@
+---
+import BaseLayout from '../components/layout/BaseLayout.astro';
+Astro.response.status = 500;
+---
+<BaseLayout title="เกิดข้อผิดพลาด" noindex>
+  <div class="error-page">
+    <h1>เทปติดเครื่อง</h1>
+    <p>เปิดหน้านี้ไม่ได้ในตอนนี้ ลองโหลดอีกครั้ง หากยังพบปัญหาโปรดลองใหม่ภายหลัง</p>
+    <a class="button button-primary" href={Astro.url.pathname}>ลองใหม่</a>
+  </div>
+</BaseLayout>

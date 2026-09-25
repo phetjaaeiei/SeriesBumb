@@ -1,0 +1,12 @@
+---
+interface Props { tabs: { id: string; label: string }[] }
+const { tabs } = Astro.props;
+---
+<div data-tabs>
+  <nav class="tab-list" data-tab-list aria-label="หัวข้อในหน้านี้">
+    {tabs.map(tab => <a class="tab-link" href={`#${tab.id}`} data-tab-link>{tab.label}</a>)}
+    <span class="tab-marker" data-tab-marker aria-hidden="true" hidden></span>
+  </nav>
+  <div class="tab-panels"><slot /></div>
+</div>
+<script>import '../../scripts/tabs';</script>

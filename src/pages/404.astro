@@ -1,0 +1,15 @@
+---
+import BaseLayout from '../components/layout/BaseLayout.astro';
+Astro.response.status = 404;
+---
+<BaseLayout title="ไม่พบหน้า" noindex>
+  <div class="error-page">
+    <h1>เทปม้วนนี้ยืดไปแล้ว</h1>
+    <p>ไม่พบหน้าที่คุณกำลังหา ลองค้นหาชื่อเทป เพลง หรือศิลปินอีกครั้ง</p>
+    <form action="/search" method="get" role="search">
+      <label class="sr-only" for="missing-search">ค้นหาเทป เพลง ศิลปิน</label>
+      <input class="field" id="missing-search" type="search" name="q" placeholder="ค้นหาเทป เพลง ศิลปิน" />
+      <button class="button button-primary section" type="submit">ค้นหาในคลัง</button>
+    </form>
+  </div>
+</BaseLayout>

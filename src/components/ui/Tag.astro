@@ -1,0 +1,5 @@
+---
+interface Props { tone?: 'default' | 'accent' }
+const { tone = 'default' } = Astro.props;
+---
+<span class:list={['tag', tone === 'accent' && 'tag-accent']}><slot /></span>

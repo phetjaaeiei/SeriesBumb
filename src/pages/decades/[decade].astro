@@ -1,0 +1,18 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import TapeResults from '../../components/ui/TapeResults.astro';
+import { getTapePage } from '../../lib/queries/tapes';
+const value = Astro.params.decade ?? '';
+if (!/^(19[5-9]|20[0-2])0s$/u.test(value)) return Astro.rewrite('/404');
+const decade = Number(value.slice(0, 4));
+const sort = Astro.url.searchParams.get('sort') === 'year' ? 'year' : 'new';
+const page = await getTapePage(env.DB, { decade, sort, cursor: Astro.url.searchParams.get('cursor') });
+const nextParams = new URLSearchParams(Astro.url.searchParams); nextParams.delete('cursor');
+---
+<BaseLayout title={`เทปยุค ${value}`} description={`เทปเพลงไทยยุค ${value} ในคลังซีรี่ย์บั้ม`} canonicalPath={`/decades/${value}${sort === 'year' ? '?sort=year' : ''}`} noindex={Astro.url.searchParams.size > 0}>
+  <p class="eyebrow"><a href="/decades">เลือกตามยุค</a></p>
+  <h1>เทปยุค <span class="mono">{value}</span></h1>
+  <nav class="view-switch" aria-label="เรียงรายการ"><a href={`/decades/${value}`} aria-current={sort === 'new' ? 'page' : undefined}>เพิ่มล่าสุด</a><a href={`/decades/${value}?sort=year`} aria-current={sort === 'year' ? 'page' : undefined}>ปีเก่าไปใหม่</a></nav>
+  <div class="section"><TapeResults items={page.items} nextCursor={page.nextCursor} path={`/decades/${value}`} params={nextParams} /></div>
+</BaseLayout>

@@ -1,0 +1,27 @@
+---
+interface Props { id?: string }
+const { id } = Astro.props;
+const currentPath = Astro.url.pathname;
+const links = [
+  { href: '/admin', text: 'แดชบอร์ด' },
+  { href: '/admin/tapes', text: 'เทป' },
+  { href: '/admin/songs', text: 'เพลง' },
+  { href: '/admin/artists', text: 'ศิลปิน' },
+  { href: '/admin/labels', text: 'ค่ายเพลง' },
+  { href: '/admin/genres', text: 'แนวเพลง' },
+  { href: '/admin/collections', text: 'Collection' },
+  { href: '/admin/comments', text: 'คอมเมนต์' },
+  { href: '/admin/users', text: 'ผู้ใช้' },
+];
+---
+<nav id={id} class="sidebar-nav" aria-label="เมนูหลังบ้าน">
+  <div class="nav-group">
+    <h2 class="nav-group-title">จัดการคลัง</h2>
+    {links.map(link => (
+      <a class="nav-link" href={link.href} aria-current={currentPath === link.href ? 'page' : undefined}>{link.text}</a>
+    ))}
+  </div>
+  <div class="nav-group">
+    <a class="nav-link" href="/">กลับหน้าเว็บ</a>
+  </div>
+</nav>

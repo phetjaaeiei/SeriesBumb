@@ -1,0 +1,46 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
+import { isProvince } from '../../lib/provinces';
+import { artistStatusLabel, artistTypeLabel } from '../../lib/format';
+import type { ArtistStatus, ArtistType } from '../../db/enums';
+
+const params = Astro.url.searchParams;
+const rawProvince = params.get('province');
+const province = rawProvince && isProvince(rawProvince) ? rawProvince : null;
+const letters = [...'กขคฆงจฉชซญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรลวศษสหฬอฮ', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '0-9'];
+const defaultLetter = province ? null : await env.DB.prepare('SELECT nameSort FROM artist WHERE publishedTapeCount > 0 ORDER BY nameSort, id LIMIT 1').first<{ nameSort: string }>();
+const requested = params.get('l');
+const letter = province ? null : requested && letters.includes(requested) ? requested : defaultLetter?.nameSort.slice(1, 2) ?? null;
+const cursor = decodeCursor('title', params.get('cursor'));
+const where = ['publishedTapeCount > 0'];
+const bindings: (string | number)[] = [];
+if (province) { where.push('province = ?'); bindings.push(province); }
+else if (letter && letter !== '0-9') { where.push('nameSort >= ? AND nameSort < ?'); bindings.push(`${/[A-Z]/u.test(letter) ? '2' : '1'}${letter.toLowerCase()}`, `${/[A-Z]/u.test(letter) ? '2' : '1'}${letter.toLowerCase()}\uffff`); }
+else if (letter === '0-9') { where.push("nameSort >= '0' AND nameSort < '1'"); }
+if (cursor) { where.push('(nameSort, id) > (?, ?)'); bindings.push(cursor.key, cursor.id); }
+const rows = (await env.DB.prepare(`SELECT id, slug, name, artistType, status, province, publishedTapeCount, nameSort FROM artist WHERE ${where.join(' AND ')} ORDER BY nameSort, id LIMIT 51`).bind(...bindings).all<{ id: string; slug: string; name: string; artistType: ArtistType | null; status: ArtistStatus; province: string | null; publishedTapeCount: number; nameSort: string }>()).results;
+const hasMore = rows.length > 50;
+const artists = rows.slice(0, 50);
+const last = artists.at(-1);
+const next = hasMore && last ? encodeCursor('title', last.nameSort, last.id) : null;
+const nextParams = new URLSearchParams();
+if (province) nextParams.set('province', province);
+else if (letter) nextParams.set('l', letter);
+if (next) nextParams.set('cursor', next);
+const title = province ? `ศิลปินจาก${province}` : 'ศิลปิน';
+---
+<BaseLayout title={title} canonicalPath={province ? `/artists?province=${encodeURIComponent(province)}` : '/artists'} noindex={params.size > 0}>
+  <h1>{title}</h1>
+  {province ? <p class="page-lede"><a href="/artists/provinces">เลือกจังหวัดอื่น</a></p> : <p class="page-lede">เลือกตัวอักษรเพื่อเปิดรายชื่อศิลปินที่มีเทปในคลัง</p>}
+  {!province && <nav class="letter-bar" aria-label="ตัวอักษรศิลปิน">{letters.map(value => <a href={`/artists?l=${encodeURIComponent(value)}`} aria-current={letter === value ? 'page' : undefined}>{value}</a>)}</nav>}
+  {artists.length ? (
+    <>
+      <div class="table-wrap section"><table class="data-table"><thead><tr><th scope="col">ศิลปิน</th><th scope="col">ประเภท</th><th scope="col">จังหวัด</th><th scope="col">สถานะ</th><th scope="col">เทป</th></tr></thead><tbody>
+        {artists.map(artist => <tr><td><a href={`/artists/${encodeURIComponent(artist.slug)}`}>{artist.name}</a></td><td>{artistTypeLabel(artist.artistType)}</td><td>{artist.province || '—'}</td><td>{artistStatusLabel(artist.status, artist.artistType)}</td><td class="mono">{artist.publishedTapeCount}</td></tr>)}
+      </tbody></table></div>
+      {next && <nav class="pagination"><a class="button" href={`/artists?${nextParams}`} rel="nofollow">หน้าถัดไป →</a></nav>}
+    </>
+  ) : <p class="empty-state section">{province ? `ยังไม่มีศิลปินจากจังหวัด${province}` : 'ยังไม่มีศิลปินในหมวดนี้'}</p>}
+</BaseLayout>

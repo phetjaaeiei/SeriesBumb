@@ -1,0 +1,15 @@
+---
+import type { TapeListItem } from '../../lib/queries/tapes';
+import TapeList from './TapeList.astro';
+interface Props { items: TapeListItem[]; nextCursor: string | null; path: string; params: URLSearchParams; view?: 'table' | 'grid'; showLabel?: boolean; emptyText?: string }
+const { items, nextCursor, path, params, view = 'table', showLabel = true, emptyText = 'ยังไม่มีเทปในหมวดนี้' } = Astro.props;
+const nextParams = new URLSearchParams(params);
+if (nextCursor) nextParams.set('cursor', nextCursor);
+const nextUrl = nextCursor ? `${path}?${nextParams}` : null;
+---
+{items.length ? (
+  <>
+    <TapeList items={items} view={view} showLabel={showLabel} />
+    {nextUrl && <nav class="pagination" aria-label="หน้าถัดไป"><a class="button" href={nextUrl} rel="nofollow">หน้าถัดไป →</a></nav>}
+  </>
+) : <p class="empty-state">{emptyText}</p>}

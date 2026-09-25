@@ -1,0 +1,21 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import Placeholder from '../../components/ui/Placeholder.astro';
+import { imageUrl } from '../../lib/urls';
+const collections = (await env.DB.prepare(`SELECT c.id, c.slug, c.title, c.description, c.coverKey, COUNT(t.id) AS tapeCount
+  FROM collection c LEFT JOIN collection_item ci ON ci.collectionId = c.id
+  LEFT JOIN tape t ON t.id = ci.tapeId AND t.status = 'published'
+  WHERE c.status = 'published' GROUP BY c.id ORDER BY c.position, c.id LIMIT 100`).all<{ id: string; slug: string; title: string; description: string; coverKey: string | null; tapeCount: number }>()).results;
+---
+<BaseLayout title="Collection" canonicalPath="/collections">
+  <h1>Collection</h1>
+  <p class="page-lede">เทปที่คัดไว้เป็นชุด เปิดดูเรื่องราวผ่านปกและเพลงในแต่ละ Collection</p>
+  {collections.length ? <ul class="collection-grid section">{collections.map(item => <li>
+    <a class="collection-cover" href={`/collections/${encodeURIComponent(item.slug)}`}>
+      {item.coverKey && env.IMAGE_BASE_URL ? <img src={imageUrl(item.coverKey, env.IMAGE_BASE_URL)} width="240" height="240" loading="lazy" decoding="async" alt={`ปก Collection ${item.title}`} /> : <Placeholder label="ยังไม่มีรูปปก" />}
+    </a>
+    <a class="collection-title" href={`/collections/${encodeURIComponent(item.slug)}`}>{item.title}</a>
+    <span class="muted">{item.tapeCount} เทป</span>
+  </li>)}</ul> : <p class="empty-state section">ยังไม่มี Collection ที่เผยแพร่</p>}
+</BaseLayout>

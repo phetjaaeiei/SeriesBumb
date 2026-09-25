@@ -1,0 +1,14 @@
+---
+interface Props { items: { label: string; value: string | null; href?: string; tone?: 'default' | 'status' }[] }
+const { items } = Astro.props;
+---
+<dl class="info-box">
+  {items.map(item => (
+    <>
+      <dt>{item.label}</dt>
+      <dd class:list={[item.tone === 'status' && 'status-text']}>
+        {item.href && item.value ? <a href={item.href}>{item.value}</a> : item.value || '—'}
+      </dd>
+    </>
+  ))}
+</dl>

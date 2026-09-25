@@ -1,0 +1,50 @@
+---
+import { env } from 'cloudflare:workers';
+import type { TapeListItem } from '../../lib/queries/tapes';
+import { imageUrl } from '../../lib/urls';
+import { formatYear, releaseTypeLabel } from '../../lib/format';
+import Placeholder from './Placeholder.astro';
+interface Props { items: TapeListItem[]; view?: 'table' | 'grid'; showLabel?: boolean }
+const { items, view = 'table', showLabel = true } = Astro.props;
+const imageBase = env.IMAGE_BASE_URL || '';
+---
+{view === 'grid' ? (
+  <ul class="tape-grid" data-tape-items>
+    {items.map(item => (
+      <li class="tape-card">
+        <a class="tape-card-cover" href={`/tapes/${encodeURIComponent(item.slug)}`} aria-label={`ดูเทป ${item.title}`}>
+          {item.coverThumbKey && imageBase ? <img src={imageUrl(item.coverThumbKey, imageBase)} width="240" height="240" loading="lazy" decoding="async" alt={`ปกหน้า ${item.title} – ${item.artists.map(artist => artist.name).join(' / ') || 'รวมศิลปิน'}`} /> : <Placeholder label="ยังไม่มีรูปปก" />}
+        </a>
+        <div class="tape-card-body">
+          <a class="tape-card-title" href={`/tapes/${encodeURIComponent(item.slug)}`}>{item.title}</a>
+          <span class="tape-card-meta">{item.artists.map(artist => artist.name).join(' / ') || 'รวมศิลปิน'}</span>
+          <span class="tape-card-meta mono">{item.year ?? '—'}</span>
+        </div>
+      </li>
+    ))}
+  </ul>
+) : (
+  <div class="table-wrap" data-tape-items>
+    <table class="data-table tape-table">
+      <thead><tr><th scope="col">เทป</th><th scope="col">ศิลปิน</th><th scope="col">ประเภท</th><th scope="col">ปี</th>{showLabel && <th scope="col">ค่าย</th>}</tr></thead>
+      <tbody>
+        {items.map(item => (
+          <tr>
+            <td data-label="เทป">
+              <div class="tape-row-title">
+                <span class="tape-row-cover">
+                  {item.coverThumbKey && imageBase ? <img src={imageUrl(item.coverThumbKey, imageBase)} width="48" height="48" loading="lazy" decoding="async" alt="" /> : <span aria-hidden="true">▣</span>}
+                </span>
+                <a href={`/tapes/${encodeURIComponent(item.slug)}`}>{item.title}</a>
+              </div>
+            </td>
+            <td data-label="ศิลปิน">{item.artists.length ? item.artists.map((artist, index) => <>{index > 0 && ' / '}<a href={`/artists/${encodeURIComponent(artist.slug)}`}>{artist.name}</a></>) : 'รวมศิลปิน'}</td>
+            <td data-label="ประเภท">{releaseTypeLabel(item.releaseType)}</td>
+            <td data-label="ปี" class="mono">{item.year ? formatYear(item.year) : '—'}</td>
+            {showLabel && <td data-label="ค่าย">{item.labelSlug && item.labelName ? <a href={`/labels/${encodeURIComponent(item.labelSlug)}`}>{item.labelName}</a> : '—'}</td>}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}

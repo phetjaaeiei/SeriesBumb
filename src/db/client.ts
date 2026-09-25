@@ -1,0 +1,16 @@
+import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1';
+import * as schema from './schema';
+
+export type Db = DrizzleD1Database<typeof schema>;
+
+export function getDb(d1: D1Database): Db {
+  return drizzle(d1, { schema });
+}
+
+export function jsonParam(value: unknown): string {
+  const json = JSON.stringify(value);
+  if (json === undefined) {
+    throw new TypeError('jsonParam requires a JSON-serializable value');
+  }
+  return json;
+}

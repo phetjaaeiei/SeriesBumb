@@ -1,0 +1,45 @@
+---
+import { env } from 'cloudflare:workers';
+import AdminLayout from '../../components/layout/AdminLayout.astro';
+
+interface StatsRow {
+  tapeCount: number;
+  publishedTapeCount: number;
+  songCount: number;
+  userCount: number;
+  imageBytes: number;
+}
+let stats: StatsRow = { tapeCount: 0, publishedTapeCount: 0, songCount: 0, userCount: 0, imageBytes: 0 };
+let dbBytes: number | null = null;
+try {
+  const row = await env.DB.prepare('SELECT tapeCount, publishedTapeCount, songCount, userCount, imageBytes FROM site_stats WHERE id = 1').first<StatsRow>();
+  if (row) stats = row;
+  const probe = await env.DB.prepare('SELECT 1').run();
+  dbBytes = probe.meta.size_after ?? null;
+} catch {
+  // The dashboard shell remains useful before local migrations.
+}
+const gigabyte = 1024 ** 3;
+const megabyte = 1024 ** 2;
+const imageRatio = Math.min(stats.imageBytes / (10 * gigabyte), 1);
+---
+<AdminLayout title="แดชบอร์ด">
+  <h1>แดชบอร์ด</h1>
+  <p class="page-lede">ภาพรวมของคลังเทปและพื้นที่เก็บข้อมูล</p>
+  <div class="admin-stats" aria-label="สถิติคลัง">
+    <div class="admin-stat"><strong class="mono">{stats.publishedTapeCount.toLocaleString('th-TH')} / {stats.tapeCount.toLocaleString('th-TH')}</strong><span>เทปที่เผยแพร่ / เทปทั้งหมด</span></div>
+    <div class="admin-stat"><strong class="mono">{stats.songCount.toLocaleString('th-TH')}</strong><span>เพลง</span></div>
+    <div class="admin-stat"><strong class="mono">{stats.userCount.toLocaleString('th-TH')}</strong><span>สมาชิก</span></div>
+    <div class="admin-stat"><strong class="mono">{(stats.imageBytes / gigabyte).toFixed(2)} GB</strong><span>รูปใน R2 จาก 10 GB</span><progress class:list={['usage-meter', imageRatio > .8 && 'danger']} value={stats.imageBytes} max={10 * gigabyte}>{Math.round(imageRatio * 100)}%</progress></div>
+    <div class="admin-stat"><strong class="mono">{dbBytes === null ? '—' : `${(dbBytes / megabyte).toFixed(1)} MB`}</strong><span>ขนาดฐานข้อมูล D1</span></div>
+  </div>
+  <section class="section" aria-labelledby="manage-title">
+    <div class="section-heading"><h2 id="manage-title">จัดการข้อมูล</h2></div>
+    <ul class="browse-list">
+      <li><a href="/admin/tapes">จัดการเทป</a></li>
+      <li><a href="/admin/songs">จัดการเพลง</a></li>
+      <li><a href="/admin/artists">จัดการศิลปิน</a></li>
+      <li><a href="/admin/collections">จัดการ Collection</a></li>
+    </ul>
+  </section>
+</AdminLayout>

@@ -1,0 +1,80 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../components/layout/BaseLayout.astro';
+import Placeholder from '../components/ui/Placeholder.astro';
+import TapeList from '../components/ui/TapeList.astro';
+import { getTapeHighlights, getTapePage } from '../lib/queries/tapes';
+
+let publishedTapeCount: number | null = null;
+try {
+  const row = await env.DB.prepare('SELECT publishedTapeCount FROM site_stats WHERE id = 1').first<{ publishedTapeCount: number }>();
+  publishedTapeCount = row?.publishedTapeCount ?? 0;
+} catch {
+  // The shell also renders before a local database has been migrated.
+}
+const browseLinks = [
+  { href: '/tapes', label: 'เทปทั้งหมด' },
+  { href: '/artists', label: 'ศิลปิน' },
+  { href: '/decades', label: 'เลือกตามยุค' },
+  { href: '/genres', label: 'แนวเพลง' },
+  { href: '/labels', label: 'ค่ายเพลง' },
+  { href: '/collections', label: 'Collection' },
+];
+const recent = publishedTapeCount ? await getTapePage(env.DB, { pageSize: 10 }) : null;
+const [updated, owned, featured] = publishedTapeCount ? await Promise.all([
+  getTapeHighlights(env.DB, 'updated', 10),
+  getTapeHighlights(env.DB, 'owned', 10),
+  env.DB.prepare("SELECT slug, title FROM collection WHERE status = 'published' AND isFeatured = 1 ORDER BY position LIMIT 3").all<{ slug: string; title: string }>(),
+]) : [[], [], { results: [] as { slug: string; title: string }[] }];
+---
+<BaseLayout title="ซีรี่ย์บั้ม · คลังเทปเพลง" canonicalPath="/">
+  <div class="intro-grid">
+    <div>
+      <p class="eyebrow">ซีรี่ย์บั้ม เทปเพลง</p>
+      <h1>คลังเทปเพลงไทย</h1>
+      <p class="page-lede">สำรวจตลับเทป เพลง ศิลปิน และเรื่องราวที่ยังอยู่ในความทรงจำ ค้นหาชื่อที่นึกออก หรือค่อย ๆ เปิดดูตามยุคและแนวเพลง</p>
+    </div>
+    <div class="intro-count" aria-label="จำนวนเทปที่เผยแพร่">
+      <strong class="mono">{publishedTapeCount === null ? '—' : publishedTapeCount.toLocaleString('th-TH')}</strong>
+      <span class="muted">เทปในคลังตอนนี้</span>
+    </div>
+  </div>
+
+  <section class="section" aria-labelledby="browse-title">
+    <div class="section-heading"><h2 id="browse-title">เปิดดูคลัง</h2></div>
+    <ul class="browse-list">
+      {browseLinks.map(link => (
+        <li><a href={link.href}><span>{link.label}</span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 10h13m-5-5 5 5-5 5" /></svg></a></li>
+      ))}
+    </ul>
+  </section>
+
+  {recent && recent.items.length > 0 && (
+    <>
+      <section class="section" aria-labelledby="recent-title">
+        <div class="section-heading"><h2 id="recent-title">เพิ่มล่าสุด</h2><a href="/latest">ดูทั้งหมด</a></div>
+        <TapeList items={recent.items} />
+      </section>
+      <section class="section" aria-labelledby="updated-title">
+        <div class="section-heading"><h2 id="updated-title">แก้ไขล่าสุด</h2><a href="/latest">ดูทั้งหมด</a></div>
+        <TapeList items={updated} />
+      </section>
+      {featured.results.length > 0 && <section class="section" aria-labelledby="featured-title"><div class="section-heading"><h2 id="featured-title">Collection เด่น</h2><a href="/collections">ดูทั้งหมด</a></div><ul class="browse-list">{featured.results.map(item => <li><a href={`/collections/${encodeURIComponent(item.slug)}`}>{item.title}</a></li>)}</ul></section>}
+      {owned.length > 0 && <section class="section" aria-labelledby="owned-title"><div class="section-heading"><h2 id="owned-title">เทปที่คนมีเยอะที่สุด</h2></div><TapeList items={owned} /></section>}
+    </>
+  )}
+  {publishedTapeCount === 0 && (
+    <section class="section" aria-labelledby="latest-title">
+      <div class="section-heading"><h2 id="latest-title">เพิ่มล่าสุด</h2></div>
+      <div class="empty-state">
+        <p>กำลังจัดเรียงเทปม้วนแรกของคลัง เมื่อเผยแพร่แล้ว รายการใหม่จะปรากฏตรงนี้</p>
+      </div>
+    </section>
+  )}
+  {publishedTapeCount === null && (
+    <section class="section" aria-labelledby="latest-title">
+      <div class="section-heading"><h2 id="latest-title">คลังเทป</h2></div>
+      <Placeholder label="กำลังเตรียมข้อมูลคลังเทป" />
+    </section>
+  )}
+</BaseLayout>

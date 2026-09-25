@@ -1,0 +1,26 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../components/layout/BaseLayout.astro';
+import { searchPublic, type SearchResult } from '../lib/search';
+const q = Astro.url.searchParams.get('q')?.trim().slice(0, 100) ?? '';
+const results = q ? await searchPublic(env.DB, q) : [];
+const groups: { kind: SearchResult['kind']; label: string; path: string }[] = [
+  { kind: 'tape', label: 'เทป', path: 'tapes' },
+  { kind: 'song', label: 'เพลง', path: 'songs' },
+  { kind: 'artist', label: 'ศิลปิน', path: 'artists' },
+  { kind: 'label', label: 'ค่ายเพลง', path: 'labels' },
+  { kind: 'collection', label: 'Collection', path: 'collections' },
+];
+---
+<BaseLayout title="ค้นหา" canonicalPath="/search" noindex>
+  <h1>ค้นหาในคลัง</h1>
+  <form class="search-page-form" action="/search" method="get" role="search">
+    <label class="sr-only" for="catalog-search">ค้นหาเทป เพลง ศิลปิน</label>
+    <input class="field" id="catalog-search" type="search" name="q" value={q} maxlength="100" placeholder="ค้นหาเทป เพลง ศิลปิน" autofocus />
+    <button class="button button-primary" type="submit">ค้นหา</button>
+  </form>
+  {q && (results.length ? <div class="section">
+    <p class="soft">ผลค้นหา “{q}”</p>
+    {groups.map(group => { const items = results.filter(item => item.kind === group.kind); return items.length ? <section class="section"><div class="section-heading"><h2>{group.label}</h2></div><ul class="browse-list">{items.map(item => <li><a href={`/${group.path}/${encodeURIComponent(item.slug)}`}>{item.title}</a></li>)}</ul></section> : null; })}
+  </div> : <div class="empty-state section"><p>ไม่พบ “{q}”</p><a href="/tapes">ดูเทปทั้งหมด</a><p class="help-text">คำค้นสั้นกว่า 3 ตัวอักษรค้นเฉพาะต้นชื่อ</p></div>)}
+</BaseLayout>

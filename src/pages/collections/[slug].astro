@@ -1,0 +1,25 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import CreditLine from '../../components/layout/CreditLine.astro';
+import Placeholder from '../../components/ui/Placeholder.astro';
+import { imageUrl } from '../../lib/urls';
+const slug = Astro.params.slug ?? '';
+const admin = Astro.locals.user?.role === 'admin';
+const collection = await env.DB.prepare(`SELECT c.*, creator.name AS createdByName, editor.name AS updatedByName FROM collection c LEFT JOIN user creator ON creator.id = c.createdBy LEFT JOIN user editor ON editor.id = c.updatedBy WHERE c.slug = ? ${admin ? '' : "AND c.status = 'published'"}`).bind(slug).first<{ id: string; title: string; description: string; coverKey: string | null; status: 'draft' | 'published'; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
+if (!collection) return Astro.rewrite('/404');
+const items = (await env.DB.prepare(`SELECT ci.position, ci.note, t.slug, t.title, t.year, t.coverThumbKey FROM collection_item ci JOIN tape t ON t.id = ci.tapeId WHERE ci.collectionId = ? AND t.status = 'published' ORDER BY ci.position LIMIT 100`).bind(collection.id).all<{ position: number; note: string | null; slug: string; title: string; year: number | null; coverThumbKey: string | null }>()).results;
+const coverKey = collection.coverKey || items.find(item => item.coverThumbKey)?.coverThumbKey;
+---
+<BaseLayout title={collection.title} description={(collection.description || `Collection ${collection.title} รวม ${items.length} เทปเพลงไทย`).replace(/\s+/gu, ' ').slice(0, 155)} canonicalPath={`/collections/${slug}`} noindex={collection.status !== 'published'}>
+  {collection.status !== 'published' && <p class="draft-banner">ยังไม่เผยแพร่ · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
+  <h1>{collection.title}</h1>
+  <div class="entity-top">
+    <div>{collection.description ? <p class="long-text soft">{collection.description}</p> : <p class="soft">เทปที่คัดไว้ใน Collection นี้</p>}</div>
+    <div class="entity-art">{coverKey && env.IMAGE_BASE_URL ? <img src={imageUrl(coverKey, env.IMAGE_BASE_URL)} width="240" height="240" loading="lazy" decoding="async" alt={`ปก Collection ${collection.title}`} /> : <Placeholder label="ยังไม่มีรูปปก" />}</div>
+  </div>
+  <section class="section" aria-labelledby="items-title"><div class="section-heading"><h2 id="items-title">เทปใน Collection</h2></div>
+    {items.length ? <table class="data-table"><thead><tr><th scope="col">ลำดับ</th><th scope="col">เทป</th><th scope="col">ปี</th><th scope="col">หมายเหตุ</th></tr></thead><tbody>{items.map(item => <tr><td class="mono">{item.position + 1}</td><td><a href={`/tapes/${encodeURIComponent(item.slug)}`}>{item.title}</a></td><td class="mono">{item.year ?? '—'}</td><td class="soft">{item.note || '—'}</td></tr>)}</tbody></table> : <p class="empty-state">ยังไม่มีเทปเผยแพร่ใน Collection นี้</p>}
+  </section>
+  <CreditLine createdByName={collection.createdByName} createdAt={collection.createdAt} updatedByName={collection.updatedByName} updatedAt={collection.updatedAt} />
+</BaseLayout>

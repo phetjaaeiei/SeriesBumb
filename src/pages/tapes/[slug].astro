@@ -1,0 +1,75 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import CreditLine from '../../components/layout/CreditLine.astro';
+import InfoBox from '../../components/ui/InfoBox.astro';
+import Placeholder from '../../components/ui/Placeholder.astro';
+import Tabs from '../../components/ui/Tabs.astro';
+import Tag from '../../components/ui/Tag.astro';
+import { formatDuration, formatYear, releaseTypeLabel } from '../../lib/format';
+import { getTapeBySlug } from '../../lib/queries/tapes';
+import { imageUrl } from '../../lib/urls';
+
+const slug = Astro.params.slug ?? '';
+const isAdmin = Astro.locals.user?.role === 'admin';
+const tape = await getTapeBySlug(env.DB, slug, isAdmin);
+if (!tape) return Astro.rewrite('/404');
+const unpublished = tape.status !== 'published';
+const artistNames = tape.artists.map(artist => artist.name).join(' / ') || 'รวมศิลปิน';
+const cover = tape.images.find(image => image.id === tape.coverImageId) ?? tape.images.find(image => image.kind === 'front') ?? tape.images[0];
+const ogImage = tape.ogImageKey && env.IMAGE_BASE_URL ? imageUrl(tape.ogImageKey, env.IMAGE_BASE_URL) : undefined;
+const description = (tape.description || `เทป ${tape.title} – ${artistNames}${tape.year ? ` (พ.ศ. ${tape.year + 543})` : ''}${tape.labelName ? ` ค่าย ${tape.labelName}` : ''} | ซีรี่ย์บั้ม เทปเพลง`).replace(/\s+/gu, ' ').slice(0, 155);
+const items = [
+  { label: 'ประเภท', value: releaseTypeLabel(tape.releaseType) },
+  { label: 'ปี', value: formatYear(tape.year) },
+  { label: 'ค่าย', value: tape.labelName, href: tape.labelSlug ? `/labels/${encodeURIComponent(tape.labelSlug)}` : undefined },
+  { label: 'รหัสตลับ', value: tape.catalogNo },
+  { label: 'แนวเพลง', value: tape.genres.map(genre => genre.name).join(', ') || null },
+];
+const sides = ['A', 'B', 'C', 'D'].filter(side => tape.tracks.some(track => track.side === side));
+const collections = await env.DB.prepare(`SELECT c.slug, c.title FROM collection_item ci JOIN collection c ON c.id = ci.collectionId WHERE ci.tapeId = ? AND c.status = 'published' ORDER BY c.position`).bind(tape.id).all<{ slug: string; title: string }>();
+---
+<BaseLayout title={tape.title} description={description} canonicalPath={`/tapes/${slug}`} ogImage={ogImage} ogImageAlt={`ภาพแชร์เทป ${tape.title}`} ogType="music.album" noindex={unpublished}>
+  {unpublished && <p class="draft-banner">ยังไม่เผยแพร่ · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
+  <h1>{tape.title}</h1>
+  {tape.titleAlt && <p class="subheading">{tape.titleAlt}</p>}
+  <p class="entity-byline">{tape.artists.length ? tape.artists.map((artist, index) => <>{index > 0 && ' / '}<a href={`/artists/${encodeURIComponent(artist.slug)}`}>{artist.name}</a></>) : 'รวมศิลปิน'}</p>
+  <div class="entity-top">
+    <div>
+      <InfoBox items={items} />
+      <div class="entity-tags">
+        {tape.isRare ? <Tag tone="accent">หายาก</Tag> : null}
+        {tape.publishedAt && Date.now() - tape.publishedAt < 14 * 24 * 60 * 60 * 1000 ? <Tag>ใหม่</Tag> : null}
+      </div>
+      {!unpublished && <div class="engagement-counts"><span>ถูกใจ <strong class="mono">{tape.likeCount}</strong></span><span>มีเทปนี้ <strong class="mono">{tape.ownerCount}</strong> คน</span></div>}
+    </div>
+    <div class="entity-art">
+      {cover && env.IMAGE_BASE_URL ? <img src={imageUrl(cover.fullKey, env.IMAGE_BASE_URL)} width={cover.width} height={cover.height} alt={`ปกหน้า ${tape.title} – ${artistNames}`} decoding="async" /> : <Placeholder label={`ยังไม่มีรูปปก ${tape.title}`} />}
+    </div>
+  </div>
+  <Tabs tabs={[{ id: 'songs', label: 'เพลง' }, { id: 'details', label: 'รายละเอียด' }, { id: 'collections', label: 'Collection' }, { id: 'comments', label: `คอมเมนต์ (${tape.commentCount})` }]}>
+    <section id="songs" class="tab-panel" data-tab-panel>
+      <h2>เพลง</h2>
+      {sides.length ? sides.map(side => <div class="track-side">
+        <h3>หน้า {side}</h3>
+        <table class="data-table"><thead><tr><th scope="col">#</th><th scope="col">ชื่อเพลง</th><th scope="col">ผู้ร้อง</th><th scope="col">ความยาว</th></tr></thead><tbody>
+          {tape.tracks.filter(track => track.side === side).map(track => <tr><td class="mono">{track.position}</td><td><a href={`/songs/${encodeURIComponent(track.songSlug)}`}>{track.songTitle}</a>{track.note && <em class="track-note"> · {track.note}</em>}</td><td>{track.artists || artistNames}</td><td class="mono">{formatDuration(track.durationSec)}</td></tr>)}
+        </tbody></table>
+      </div>) : <p class="empty-state">ยังไม่มีรายชื่อเพลงในเทปนี้</p>}
+    </section>
+    <section id="details" class="tab-panel" data-tab-panel>
+      <h2>รายละเอียด</h2>
+      {tape.description ? <p class="long-text">{tape.description}</p> : <p class="empty-state">ยังไม่มีรายละเอียดเพิ่มเติม</p>}
+      {tape.reelUrl && <a href={tape.reelUrl} target="_blank" rel="noopener noreferrer">ดูรีวิวบนเพจ</a>}
+    </section>
+    <section id="collections" class="tab-panel" data-tab-panel>
+      <h2>Collection</h2>
+      {collections.results.length ? <ul class="plain-list">{collections.results.map(item => <li><a href={`/collections/${encodeURIComponent(item.slug)}`}>{item.title}</a></li>)}</ul> : <p class="empty-state">เทปนี้ยังไม่อยู่ใน Collection</p>}
+    </section>
+    <section id="comments" class="tab-panel" data-tab-panel>
+      <h2>คอมเมนต์</h2>
+      <p class="empty-state">ระบบคอมเมนต์กำลังจัดเตรียม</p>
+    </section>
+  </Tabs>
+  <CreditLine createdByName={tape.createdByName} createdAt={tape.createdAt} updatedByName={tape.updatedByName} updatedAt={tape.updatedAt} />
+</BaseLayout>

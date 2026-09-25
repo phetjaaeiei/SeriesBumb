@@ -5,3 +5,7 @@ dist/
 .dev.vars
 .env
 .DS_Store
+coverage/
+playwright-report/
+test-results/
+bundled/

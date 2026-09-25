@@ -1,0 +1,59 @@
+---
+import type { SessionUser } from '../../lib/types';
+interface Props { user: SessionUser | null }
+const { user } = Astro.props;
+let avatarUrl: string | null = null;
+if (user?.image) {
+  try {
+    const parsed = new URL(user.image);
+    if (parsed.protocol === 'https:' && parsed.hostname.endsWith('.googleusercontent.com')) avatarUrl = parsed.href;
+  } catch { /* fall back to initial */ }
+}
+const displayName = user?.name.slice(0, 50) ?? '';
+---
+<header class="site-header">
+  <div class="header-inner">
+    <a class="mobile-nav-link icon-button" href="#site-nav" aria-label="ไปที่เมนูหมวดหมู่">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+    </a>
+    <button class="mobile-nav-button icon-button" type="button" data-mobile-nav-open aria-label="เปิดเมนูหมวดหมู่" aria-controls="mobile-nav-dialog" aria-expanded="false" hidden>
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+    </button>
+    <a class="brand" href="/">ซีรี่ย์บั้ม · คลังเทปเพลง</a>
+    <div class="header-spacer"></div>
+    <form class="header-search" action="/search" method="get" role="search">
+      <label class="search-field">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+        <span class="sr-only">ค้นหาเทป เพลง ศิลปิน</span>
+        <input type="search" name="q" placeholder="ค้นหาเทป เพลง ศิลปิน" autocomplete="off" />
+      </label>
+    </form>
+    <details class="mobile-search">
+      <summary aria-label="เปิดช่องค้นหา">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+      </summary>
+      <form action="/search" method="get" role="search">
+        <label class="search-field">
+          <span class="sr-only">ค้นหาเทป เพลง ศิลปิน</span>
+          <input type="search" name="q" placeholder="ค้นหาเทป เพลง ศิลปิน" autocomplete="off" />
+        </label>
+      </form>
+    </details>
+    {user ? (
+      <details class="account-menu" data-account-menu>
+        <summary aria-label={`เมนูผู้ใช้ ${displayName}`}>
+          <span class="avatar">
+            {avatarUrl ? <img src={avatarUrl} width="30" height="30" alt="" referrerpolicy="no-referrer" /> : displayName.charAt(0)}
+          </span>
+          <span class="sr-only">{displayName}</span>
+        </summary>
+        <div class="account-dropdown">
+          <a href="/me">ของฉัน</a>
+          {user.role === 'admin' && <a href="/admin">หลังบ้าน</a>}
+          <button type="button" data-sign-out>ออกจากระบบ</button>
+        </div>
+      </details>
+    ) : <a class="login-link" href="/login">เข้าสู่ระบบ</a>}
+  </div>
+</header>
+<script>import '../../scripts/avatar-menu';</script>

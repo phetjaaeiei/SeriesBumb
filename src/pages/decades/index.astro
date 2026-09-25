@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+const decades = [1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
+---
+<BaseLayout title="เทปตามยุค" canonicalPath="/decades">
+  <h1>เทปตามยุค</h1>
+  <p class="page-lede">เลือกช่วงเวลาที่อยากย้อนกลับไป แล้วเปิดดูเทปที่เผยแพร่ในยุคนั้น</p>
+  <ul class="browse-list section">
+    {decades.map(decade => (
+      <li><a href={`/decades/${decade}s`}><span class="mono">{decade}s</span><span class="sr-only">ดูเทปยุค {decade}s</span></a></li>
+    ))}
+  </ul>
+</BaseLayout>

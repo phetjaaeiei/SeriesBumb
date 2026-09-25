@@ -1,0 +1,10 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+const labels = (await env.DB.prepare('SELECT slug, name, publishedTapeCount FROM label WHERE publishedTapeCount > 0 ORDER BY nameSort, id LIMIT 100').all<{ slug: string; name: string; publishedTapeCount: number }>()).results;
+---
+<BaseLayout title="ค่ายเพลง" canonicalPath="/labels">
+  <h1>ค่ายเพลง</h1>
+  <p class="page-lede">ค่ายเพลงที่มีเทปเผยแพร่ในคลัง</p>
+  {labels.length ? <ul class="browse-list section">{labels.map(label => <li><a href={`/labels/${encodeURIComponent(label.slug)}`}><span>{label.name}</span><span class="mono muted">{label.publishedTapeCount}</span></a></li>)}</ul> : <p class="empty-state section">ยังไม่มีค่ายเพลงในคลัง</p>}
+</BaseLayout>
