@@ -31,3 +31,22 @@
 | `npm run db:generate` | สร้าง SQL migration จาก Drizzle schema |
 
 การทดสอบ E2E ต้องติดตั้ง Chromium ของ Playwright ด้วย `npx playwright install chromium` ก่อนใช้ครั้งแรก
+
+## สำรองและกู้คืน D1
+
+ใช้ D1 Time Travel สำหรับการย้อนข้อมูลภายใน 7 วัน (`npx wrangler d1 time-travel restore seriesbumb --timestamp ...`) และสำรองออกนอกระบบอย่างน้อยสัปดาห์ละครั้ง คำสั่งสำรองด้านล่างอ่านตารางปกติทั้งหมดผ่าน `wrangler d1 execute --remote --json` แล้วสร้าง `manifest.json` กับไฟล์ JSON แยกชุด ไม่รวมตาราง FTS5 ที่สร้างใหม่ได้
+
+ก่อนสำรองหรือกู้คืน ให้หยุดการเขียนข้อมูลจากเว็บไซต์/แอดมินจนเสร็จ และกำหนด D1 `database_id` จริงใน `wrangler.jsonc` เก็บโฟลเดอร์สำรองไว้นอก Git ในที่ปลอดภัย เพราะมีข้อมูลบัญชีและ OAuth token; สำรองไฟล์รูปใน R2 แยกต่างหาก
+
+```sh
+node --experimental-strip-types scripts/backup.ts --database seriesbumb --out "$HOME/seriesbumb-backups/$(date -u +%F)" --writes-paused
+```
+
+การกู้จาก JSON ต้องใช้ **D1 ใหม่ที่ว่างและลง migrations รุ่นเดียวกับไฟล์สำรองแล้ว** ตั้งชื่อ/ID ของฐานใหม่นั้นใน `wrangler.jsonc` ก่อนรัน ห้ามชี้ไปยังฐานที่มีข้อมูลอยู่:
+
+```sh
+npx wrangler d1 migrations apply seriesbumb-restore --remote
+node --experimental-strip-types scripts/restore.ts --from "$HOME/seriesbumb-backups/YYYY-MM-DD" --database seriesbumb-restore --confirm-database seriesbumb-restore --writes-paused
+```
+
+สคริปต์ตรวจ schema, checksum, ตารางปลายทาง, จำนวนแถวและ foreign keys พร้อมอ่านข้อมูลกลับหลังเขียนแต่ละชุด บันทึกสถานะไว้ในโฟลเดอร์สำรอง จึงรันคำสั่งกู้เดิมซ้ำได้หลังหยุดหรือหลังโควตารีเซ็ต 00:00 UTC (07:00 น. ไทย) สคริปต์หยุดก่อนงบ 80,000 `rows_written` ต่อวันโดยนับจาก metadata ของงานกู้นี้เท่านั้น; หากบัญชี Cloudflare มีงานเขียนอื่นในวันเดียวกัน ต้องเผื่อโควตาเพิ่มเติมด้วย `--max-writes N` เมื่อกู้เสร็จ กด **สร้างดัชนีใหม่ทั้งหมด** ที่ `/admin` และรอจนคิวหมดก่อนเปิดให้เขียนอีกครั้ง
