@@ -9,35 +9,87 @@ interface StatsRow {
   songCount: number;
   userCount: number;
   imageBytes: number;
+  reindexCursor: string | null;
 }
-let stats: StatsRow = { tapeCount: 0, publishedTapeCount: 0, songCount: 0, userCount: 0, imageBytes: 0 };
+interface RecentComment {
+  id: string;
+  body: string;
+  createdAt: number;
+  deletedAt: number | null;
+  authorName: string;
+  tapeSlug: string | null;
+  tapeTitle: string | null;
+  songSlug: string | null;
+  songTitle: string | null;
+}
+interface DraftTape { id: string; title: string; updatedAt: number }
+
+let stats: StatsRow | null = null;
 let dbBytes: number | null = null;
 let pendingReindex = 0;
-let rebuilding = false;
+let recentComments: RecentComment[] = [];
+let draftTapes: DraftTape[] = [];
+let loadError = false;
 try {
-  const row = await env.DB.prepare('SELECT tapeCount, publishedTapeCount, songCount, userCount, imageBytes FROM site_stats WHERE id = 1').first<StatsRow>();
-  if (row) stats = row;
-  const probe = await env.DB.prepare('SELECT 1').run();
-  dbBytes = probe.meta.size_after ?? null;
-  pendingReindex = (await env.DB.prepare('SELECT COUNT(*) AS count FROM search_queue').first<{ count: number }>())?.count ?? 0;
-  rebuilding = (await env.DB.prepare('SELECT reindexCursor FROM site_stats WHERE id = 1').first<{ reindexCursor: string | null }>())?.reindexCursor != null;
-} catch {
-  // The dashboard shell remains useful before local migrations.
+  const [statsResult, queueResult, commentsResult, draftsResult] = await Promise.all([
+    env.DB.prepare('SELECT tapeCount, publishedTapeCount, songCount, userCount, imageBytes, reindexCursor FROM site_stats WHERE id = 1').run<StatsRow>(),
+    env.DB.prepare('SELECT COUNT(*) AS count FROM search_queue').first<{ count: number }>(),
+    env.DB.prepare(`SELECT c.id, c.body, c.createdAt, c.deletedAt, u.name AS authorName,
+      t.slug AS tapeSlug, t.title AS tapeTitle, s.slug AS songSlug, s.title AS songTitle
+      FROM comment c JOIN user u ON u.id = c.userId
+      LEFT JOIN tape t ON t.id = c.tapeId LEFT JOIN song s ON s.id = c.songId
+      ORDER BY c.createdAt DESC, c.id DESC LIMIT 10`).all<RecentComment>(),
+    env.DB.prepare("SELECT id, title, updatedAt FROM tape WHERE status = 'draft' ORDER BY updatedAt ASC, id ASC LIMIT 10").all<DraftTape>(),
+  ]);
+  stats = statsResult.results[0] ?? null;
+  dbBytes = typeof statsResult.meta.size_after === 'number' ? statsResult.meta.size_after : null;
+  pendingReindex = queueResult?.count ?? 0;
+  recentComments = commentsResult.results;
+  draftTapes = draftsResult.results;
+} catch (error) {
+  loadError = true;
+  console.error('Admin dashboard could not load', error instanceof Error ? error.message : 'unknown');
 }
-const gigabyte = 1024 ** 3;
-const megabyte = 1024 ** 2;
-const imageRatio = Math.min(stats.imageBytes / (10 * gigabyte), 1);
+const gigabyte = 1_000_000_000;
+const megabyte = 1_000_000;
+const r2LimitBytes = 10 * gigabyte;
+const imageBytes = Math.max(stats?.imageBytes ?? 0, 0);
+const imagePercent = Math.round(imageBytes / r2LimitBytes * 100);
+const r2Warning = imageBytes > 8 * gigabyte;
+const d1Warning = dbBytes !== null && dbBytes > 400 * megabyte;
+const dateFormat = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeZone: 'Asia/Bangkok' });
 ---
 <AdminLayout title="แดชบอร์ด">
   <h1>แดชบอร์ด</h1>
   <p class="page-lede">ภาพรวมของคลังเทปและพื้นที่เก็บข้อมูล</p>
+  {loadError && <p class="error-text" role="alert">โหลดข้อมูลแดชบอร์ดไม่สำเร็จ ลองเปิดหน้านี้อีกครั้ง</p>}
   <div class="admin-stats" aria-label="สถิติคลัง">
-    <div class="admin-stat"><strong class="mono">{stats.publishedTapeCount.toLocaleString('th-TH')} / {stats.tapeCount.toLocaleString('th-TH')}</strong><span>เทปที่เผยแพร่ / เทปทั้งหมด</span></div>
-    <div class="admin-stat"><strong class="mono">{stats.songCount.toLocaleString('th-TH')}</strong><span>เพลง</span></div>
-    <div class="admin-stat"><strong class="mono">{stats.userCount.toLocaleString('th-TH')}</strong><span>สมาชิก</span></div>
-    <div class="admin-stat"><strong class="mono">{(stats.imageBytes / gigabyte).toFixed(2)} GB</strong><span>รูปใน R2 จาก 10 GB</span><progress class:list={['usage-meter', imageRatio > .8 && 'danger']} value={stats.imageBytes} max={10 * gigabyte}>{Math.round(imageRatio * 100)}%</progress></div>
-    <div class="admin-stat"><strong class="mono">{dbBytes === null ? '—' : `${(dbBytes / megabyte).toFixed(1)} MB`}</strong><span>ขนาดฐานข้อมูล D1</span></div>
+    <div class="admin-stat"><strong class="mono">{stats ? `${stats.publishedTapeCount.toLocaleString('th-TH')} / ${stats.tapeCount.toLocaleString('th-TH')}` : '—'}</strong><span>เทปที่เผยแพร่ / เทปทั้งหมด</span></div>
+    <div class="admin-stat"><strong class="mono">{stats ? stats.songCount.toLocaleString('th-TH') : '—'}</strong><span>เพลง</span></div>
+    <div class="admin-stat"><strong class="mono">{stats ? stats.userCount.toLocaleString('th-TH') : '—'}</strong><span>สมาชิก</span></div>
+    <div class="admin-stat">
+      <strong class="mono">{stats ? `${(imageBytes / gigabyte).toFixed(2)} GB` : '—'}</strong>
+      <span>รูปที่บันทึกใน R2 จาก 10 GB</span>
+      {stats && <><progress class:list={['usage-meter', r2Warning && 'danger']} value={Math.min(imageBytes, r2LimitBytes)} max={r2LimitBytes} aria-label="พื้นที่รูปใน R2">{imagePercent}%</progress><span class="usage-percent mono">{imagePercent}%</span></>}
+      {r2Warning && <p class="error-text usage-warning" role="status">รูปใน R2 เกิน 80% ของพื้นที่อ้างอิง 10 GB ตรวจการใช้งานจริงใน Cloudflare</p>}
+    </div>
+    <div class="admin-stat">
+      <strong class="mono">{dbBytes === null ? '—' : `${(dbBytes / megabyte).toFixed(1)} MB`}</strong><span>ขนาดฐานข้อมูล D1 จาก 500 MB</span>
+      {d1Warning && <p class="error-text usage-warning" role="status">D1 เกิน 400 MB และใกล้ขีดจำกัดของแพ็กเกจฟรี</p>}
+    </div>
   </div>
+  <section class="section" aria-labelledby="drafts-title">
+    <div class="section-heading"><h2 id="drafts-title">เทปที่เป็นร่าง</h2><a href="/admin/tapes?status=draft">ดูร่างทั้งหมด</a></div>
+    {loadError ? <p class="empty-state">อ่านรายการเทปร่างไม่ได้</p> : draftTapes.length ? <div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">เทป</th><th scope="col">แก้ไขล่าสุด</th><th scope="col">จัดการ</th></tr></thead><tbody>
+      {draftTapes.map(tape => <tr><td>{tape.title}</td><td><time datetime={new Date(tape.updatedAt).toISOString()}>{dateFormat.format(tape.updatedAt)}</time></td><td><a href={`/admin/tapes/${encodeURIComponent(tape.id)}`} aria-label={`แก้ไขหรือลบเทป ${tape.title}`}>แก้ไขหรือลบ</a></td></tr>)}
+    </tbody></table></div> : <p class="empty-state">ไม่มีเทปร่างที่รอดำเนินการ</p>}
+  </section>
+  <section class="section" aria-labelledby="recent-comments-title">
+    <div class="section-heading"><h2 id="recent-comments-title">คอมเมนต์ล่าสุด</h2><a href="/admin/comments">จัดการคอมเมนต์ทั้งหมด</a></div>
+    {loadError ? <p class="empty-state">อ่านคอมเมนต์ล่าสุดไม่ได้</p> : recentComments.length ? <div class="table-wrap"><table class="data-table dashboard-comments"><thead><tr><th scope="col">คอมเมนต์</th><th scope="col">ผู้เขียน</th><th scope="col">รายการ</th><th scope="col">วันที่</th><th scope="col">สถานะ</th></tr></thead><tbody>
+      {recentComments.map(comment => <tr><td class="comment-cell">{comment.body.length > 140 ? `${comment.body.slice(0, 140)}…` : comment.body}</td><td>{comment.authorName}</td><td>{comment.tapeSlug ? <a href={`/tapes/${encodeURIComponent(comment.tapeSlug)}`}>{comment.tapeTitle}</a> : comment.songSlug ? <a href={`/songs/${encodeURIComponent(comment.songSlug)}`}>{comment.songTitle}</a> : '—'}</td><td><time datetime={new Date(comment.createdAt).toISOString()}>{dateFormat.format(comment.createdAt)}</time></td><td>{comment.deletedAt === null ? 'เผยแพร่' : 'ลบแล้ว'}</td></tr>)}
+    </tbody></table></div> : <p class="empty-state">ยังไม่มีคอมเมนต์ในคลัง</p>}
+  </section>
   <section class="section" aria-labelledby="manage-title">
     <div class="section-heading"><h2 id="manage-title">จัดการข้อมูล</h2></div>
     <ul class="browse-list">
@@ -47,5 +99,11 @@ const imageRatio = Math.min(stats.imageBytes / (10 * gigabyte), 1);
       <li><a href="/admin/collections">จัดการ Collection</a></li>
     </ul>
   </section>
-  <section class="section" aria-labelledby="search-index-title"><div class="section-heading"><h2 id="search-index-title">ดัชนีค้นหา</h2></div><ReindexControl initialPending={pendingReindex} initialRebuilding={rebuilding} client:only="react" /></section>
+  <section class="section" aria-labelledby="search-index-title"><div class="section-heading"><h2 id="search-index-title">ดัชนีค้นหา</h2></div>{loadError ? <p class="empty-state">อ่านสถานะดัชนีค้นหาไม่ได้</p> : <ReindexControl initialPending={pendingReindex} initialRebuilding={stats?.reindexCursor != null} client:only="react" />}</section>
 </AdminLayout>
+
+<style>
+  .usage-percent { display: block; margin-top: 4px; color: var(--text-soft); font-size: 13px; }
+  .usage-warning { margin: 8px 0 0; font-size: 13px; line-height: 1.5; }
+  .dashboard-comments .comment-cell { min-width: 220px; max-width: 360px; }
+</style>
