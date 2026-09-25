@@ -6,7 +6,8 @@ import InfoBox from '../../components/ui/InfoBox.astro';
 import Placeholder from '../../components/ui/Placeholder.astro';
 import Tabs from '../../components/ui/Tabs.astro';
 import TapeResults from '../../components/ui/TapeResults.astro';
-import { artistStatusLabel, artistTypeLabel } from '../../lib/format';
+import { artistStatusLabel, artistTypeLabel, formatYear } from '../../lib/format';
+import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
 import { getTapePage } from '../../lib/queries/tapes';
 import { imageUrl } from '../../lib/urls';
 import type { ArtistStatus, ArtistType } from '../../db/enums';
@@ -15,18 +16,48 @@ const slug = Astro.params.slug ?? '';
 const admin = Astro.locals.user?.role === 'admin';
 const artist = await env.DB.prepare(`SELECT a.*, creator.name AS createdByName, editor.name AS updatedByName FROM artist a LEFT JOIN user creator ON creator.id = a.createdBy LEFT JOIN user editor ON editor.id = a.updatedBy WHERE a.slug = ? ${admin ? '' : 'AND a.publishedTapeCount > 0'}`).bind(slug).first<{ id: string; slug: string; name: string; nameAlt: string | null; artistType: ArtistType | null; status: ArtistStatus; province: string | null; yearsActive: string | null; bio: string; imageKey: string | null; publishedTapeCount: number; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
 if (!artist) return Astro.rewrite('/404');
+const songCursor = decodeCursor('title', Astro.url.searchParams.get('songs_cursor'));
+const songCursorFilter = songCursor ? 'AND (s.titleSort, s.id) > (?, ?)' : '';
+type SongRow = { id: string; slug: string; title: string; titleSort: string; firstTapeSlug: string | null; firstTapeTitle: string | null; firstTapeYear: number | null };
 const [members, songs, genreRows, lastLabel] = await Promise.all([
-  env.DB.prepare('SELECT name, role, years, isCurrent FROM artist_member WHERE artistId = ? ORDER BY position').bind(artist.id).all<{ name: string; role: string; years: string | null; isCurrent: number }>(),
-  env.DB.prepare(`SELECT s.slug, s.title FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = ? AND s.publishedTapeCount > 0 ORDER BY s.titleSort, s.id LIMIT 100`).bind(artist.id).all<{ slug: string; title: string }>(),
-  env.DB.prepare(`SELECT g.name FROM tape_artist ta JOIN tape_genre tg ON tg.tapeId = ta.tapeId JOIN genre g ON g.id = tg.genreId WHERE ta.artistId = ? AND ta.isPublished = 1 GROUP BY g.id ORDER BY COUNT(*) DESC LIMIT 3`).bind(artist.id).all<{ name: string }>(),
-  env.DB.prepare(`SELECT l.name, l.slug FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId JOIN label l ON l.id = t.labelId WHERE ta.artistId = ? AND t.status = 'published' ORDER BY t.yearSort DESC, t.publishedAt DESC LIMIT 1`).bind(artist.id).first<{ name: string; slug: string }>(),
+  env.DB.prepare('SELECT name, role, years, isCurrent FROM artist_member WHERE artistId = ? ORDER BY position LIMIT 40').bind(artist.id).all<{ name: string; role: string; years: string | null; isCurrent: number }>(),
+  env.DB.prepare(`WITH song_page AS MATERIALIZED (
+    SELECT s.id, s.slug, s.title, s.titleSort
+    FROM song_artist sa JOIN song s ON s.id = sa.songId
+    WHERE sa.artistId = ? AND s.publishedTapeCount > 0 ${songCursorFilter}
+    ORDER BY s.titleSort, s.id LIMIT 101
+  )
+  SELECT sp.id, sp.slug, sp.title, sp.titleSort,
+    firstTape.slug AS firstTapeSlug, firstTape.title AS firstTapeTitle, firstTape.year AS firstTapeYear
+  FROM song_page sp
+  LEFT JOIN tape firstTape ON firstTape.id = (
+    SELECT t.id FROM tape_track tt JOIN tape t ON t.id = tt.tapeId
+    WHERE tt.songId = sp.id AND t.status = 'published'
+    ORDER BY t.yearSort, t.id LIMIT 1
+  )
+  ORDER BY sp.titleSort, sp.id`).bind(artist.id, ...(songCursor ? [songCursor.key, songCursor.id] : [])).all<SongRow>(),
+  env.DB.prepare(`SELECT g.name FROM (
+    SELECT ta.tapeId FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId
+    WHERE ta.artistId = ? AND ta.isPublished = 1 AND t.status = 'published'
+    ORDER BY ta.yearSort, ta.tapeId LIMIT 200
+  ) artistTapes JOIN tape_genre tg ON tg.tapeId = artistTapes.tapeId AND tg.isPublished = 1
+    JOIN genre g ON g.id = tg.genreId
+    GROUP BY g.id ORDER BY COUNT(*) DESC, g.name LIMIT 3`).bind(artist.id).all<{ name: string }>(),
+  env.DB.prepare(`SELECT l.name, l.slug FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId JOIN label l ON l.id = t.labelId
+    WHERE ta.artistId = ? AND ta.isPublished = 1 AND t.status = 'published'
+    ORDER BY (t.year IS NULL), t.yearSort DESC, t.publishedAt DESC, t.id DESC LIMIT 1`).bind(artist.id).first<{ name: string; slug: string }>(),
 ]);
 const page = await getTapePage(env.DB, { artistId: artist.id, sort: 'year', pageSize: 50, cursor: Astro.url.searchParams.get('cursor') });
+const currentMembers = members.results.filter(member => member.isCurrent);
+const pastMembers = members.results.filter(member => !member.isCurrent);
+const visibleSongs = songs.results.slice(0, 100);
+const lastSong = visibleSongs.at(-1);
+const nextSongCursor = songs.results.length > 100 && lastSong ? encodeCursor('title', lastSong.titleSort, lastSong.id) : null;
 const tabs = [{ id: 'discography', label: 'ผลงาน' }];
 if (artist.artistType !== 'solo' && members.results.length) tabs.push({ id: 'members', label: 'สมาชิก' });
 tabs.push({ id: 'songs', label: 'เพลงที่ร้อง' });
 ---
-<BaseLayout title={artist.name} description={(artist.bio || `ศิลปิน ${artist.name} มี ${artist.publishedTapeCount} เทปในคลัง`).replace(/\s+/gu, ' ').slice(0, 155)} canonicalPath={`/artists/${slug}`} noindex={artist.publishedTapeCount === 0}>
+<BaseLayout title={artist.name} description={(artist.bio || `ศิลปิน ${artist.name} มี ${artist.publishedTapeCount} เทปในคลัง`).replace(/\s+/gu, ' ').slice(0, 155)} canonicalPath={`/artists/${slug}`} noindex={artist.publishedTapeCount === 0 || Astro.url.searchParams.size > 0}>
   {artist.publishedTapeCount === 0 && <p class="draft-banner">ยังไม่มีเทปเผยแพร่ · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
   <h1>{artist.name}</h1>{artist.nameAlt && <p class="subheading">{artist.nameAlt}</p>}
   <div class="entity-top">
@@ -43,8 +74,21 @@ tabs.push({ id: 'songs', label: 'เพลงที่ร้อง' });
   {artist.bio && <p class="long-text section soft">{artist.bio}</p>}
   <Tabs tabs={tabs}>
     <section id="discography" class="tab-panel" data-tab-panel><h2>ผลงาน</h2><TapeResults items={page.items} nextCursor={page.nextCursor} path={`/artists/${slug}`} params={new URLSearchParams()} showLabel={false} /></section>
-    {artist.artistType !== 'solo' && members.results.length > 0 && <section id="members" class="tab-panel" data-tab-panel><h2>สมาชิก</h2><table class="data-table"><thead><tr><th scope="col">ชื่อ</th><th scope="col">หน้าที่</th><th scope="col">ปี</th></tr></thead><tbody>{members.results.map(member => <tr><td>{member.name}{member.isCurrent ? ' · ปัจจุบัน' : ''}</td><td>{member.role || '—'}</td><td class="mono">{member.years || '—'}</td></tr>)}</tbody></table></section>}
-    <section id="songs" class="tab-panel" data-tab-panel><h2>เพลงที่ร้อง</h2>{songs.results.length ? <ul class="plain-list">{songs.results.map(song => <li><a href={`/songs/${encodeURIComponent(song.slug)}`}>{song.title}</a></li>)}</ul> : <p class="empty-state">ยังไม่มีเพลงที่แสดงในคลัง</p>}</section>
+    {artist.artistType !== 'solo' && members.results.length > 0 && <section id="members" class="tab-panel" data-tab-panel>
+      <h2>สมาชิก</h2>
+      {([{ title: 'สมาชิกล่าสุด', rows: currentMembers }, { title: 'อดีตสมาชิก', rows: pastMembers }]).map(group => group.rows.length > 0 && <div class="section">
+        <h3>{group.title}</h3>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">ชื่อ</th><th scope="col">หน้าที่ (ปี)</th></tr></thead><tbody>
+          {group.rows.map(member => <tr><td>{member.name}</td><td>{member.role || (!member.years ? '—' : '')}{member.years && <> {member.role && '· '}<span class="mono">{member.years}</span></>}</td></tr>)}
+        </tbody></table></div>
+      </div>)}
+    </section>}
+    <section id="songs" class="tab-panel" data-tab-panel><h2>เพลงที่ร้อง</h2>
+      {visibleSongs.length ? <div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">ชื่อ</th><th scope="col">อยู่ในเทปแรก</th><th scope="col">ปี</th></tr></thead><tbody>
+        {visibleSongs.map(song => <tr><td><a href={`/songs/${encodeURIComponent(song.slug)}`}>{song.title}</a></td><td>{song.firstTapeSlug && song.firstTapeTitle ? <a href={`/tapes/${encodeURIComponent(song.firstTapeSlug)}`}>{song.firstTapeTitle}</a> : '—'}</td><td class="mono">{formatYear(song.firstTapeYear)}</td></tr>)}
+      </tbody></table></div> : <p class="empty-state">ยังไม่มีเพลงที่แสดงในคลัง</p>}
+      {nextSongCursor && <nav class="pagination" aria-label="เพลงหน้าถัดไป"><a class="button" href={`/artists/${encodeURIComponent(slug)}?songs_cursor=${encodeURIComponent(nextSongCursor)}#songs`} rel="nofollow">เพลงหน้าถัดไป →</a></nav>}
+    </section>
   </Tabs>
   <CreditLine createdByName={artist.createdByName} createdAt={artist.createdAt} updatedByName={artist.updatedByName} updatedAt={artist.updatedAt} />
 </BaseLayout>
