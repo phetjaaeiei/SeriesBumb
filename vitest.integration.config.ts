@@ -11,10 +11,10 @@ export default defineConfig({
         compatibilityDate: '2026-09-25',
         compatibilityFlags: ['nodejs_compat'],
         d1Databases: ['DB'],
-        r2Buckets: ['BUCKET'],
         bindings: {
           SITE_URL: 'http://localhost:4321',
           IMAGE_BASE_URL: 'https://images.example.test',
+          FIREBASE_STORAGE_BUCKET: 'seriesbumb-test.firebasestorage.app',
           CF_BEACON_TOKEN: '',
           BETTER_AUTH_SECRET: 'integration-test-secret-only',
           GOOGLE_CLIENT_ID: 'integration-test-client-id',

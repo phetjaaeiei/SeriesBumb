@@ -20,8 +20,11 @@ export function canonicalUrl(path: string, siteUrl: string): string {
 
 export function imageUrl(key: string, imageBaseUrl: string): string {
   const base = imageBaseUrl.replace(/\/+$/u, '');
-  const encodedKey = key.replace(/^\/+|\/+$/gu, '').split('/').map(encodeURIComponent).join('/');
-  return `${base}/${encodedKey}`;
+  const cleanKey = key.replace(/^\/+|\/+$/gu, '');
+  if (/^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o$/u.test(base)) {
+    return `${base}/${encodeURIComponent(cleanKey)}?alt=media`;
+  }
+  return `${base}/${cleanKey.split('/').map(encodeURIComponent).join('/')}`;
 }
 
 export function thumbKeyFromFull(fullKey: string): string {

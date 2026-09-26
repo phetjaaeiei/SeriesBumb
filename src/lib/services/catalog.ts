@@ -7,6 +7,7 @@ import { reindexArtistDependents, reindexLabelDependents } from './search-admin'
 import { CatalogError } from './catalog-delete';
 import { normalizeSearchField, searchDocument } from '../search';
 import type { ImageKind } from './images';
+import type { ImageStore } from './image-store';
 
 type EntityTable = 'artist' | 'label' | 'genre' | 'song' | 'tape' | 'collection';
 type SearchKind = Exclude<EntityTable, 'genre'>;
@@ -133,7 +134,7 @@ export interface TapeSaveInput {
   ogSourceTitle?: string | null;
 }
 
-export async function saveTape(db: D1Database, userId: string, input: TapeSaveInput, bucket?: R2Bucket, waitUntil?: (promise: Promise<unknown>) => void) {
+export async function saveTape(db: D1Database, userId: string, input: TapeSaveInput, bucket?: ImageStore, waitUntil?: (promise: Promise<unknown>) => void) {
   const title = requiredName(input.title, 'ชื่อเทป');
   const current = await db.prepare('SELECT id, slug, slugLocked, status, publishedAt, labelId, coverImageId, ogImageKey, ogImageBytes, ogSourceImageId, ogSourceTitle FROM tape WHERE id = ?').bind(input.id).first<{ id: string; slug: string; slugLocked: number; status: 'draft' | 'published'; publishedAt: number | null; labelId: string | null; coverImageId: string | null; ogImageKey: string | null; ogImageBytes: number; ogSourceImageId: string | null; ogSourceTitle: string | null }>();
   if (!current) throw new Error('ไม่พบเทปนี้');

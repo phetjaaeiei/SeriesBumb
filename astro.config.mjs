@@ -3,11 +3,10 @@ import cloudflare from '@astrojs/cloudflare';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 
-// The image origin is supplied at build time as well as in wrangler.jsonc.
+// Firebase is the default image host; deployments may override the origin.
 const imageOrigin = (() => {
-  if (!process.env.IMAGE_BASE_URL) return null;
   try {
-    return new URL(process.env.IMAGE_BASE_URL).origin;
+    return new URL(process.env.IMAGE_BASE_URL || 'https://firebasestorage.googleapis.com').origin;
   } catch {
     throw new Error('IMAGE_BASE_URL must be an absolute URL');
   }

@@ -1,0 +1,12 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Public archive images; all writes use the Worker service account and IAM.
+    match /{entity}/{entityId}/{fileName} {
+      allow get: if entity in ['tapes', 'artists', 'labels', 'collections']
+        && entityId.matches('[0-9a-fA-F-]{36}')
+        && fileName.matches('[0-9a-fA-F-]{36}-(full|thumb|og)\\.(jpg|webp)');
+      allow list, write: if false;
+    }
+  }
+}

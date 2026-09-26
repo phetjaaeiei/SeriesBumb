@@ -52,10 +52,7 @@ try {
 }
 const gigabyte = 1_000_000_000;
 const megabyte = 1_000_000;
-const r2LimitBytes = 10 * gigabyte;
 const imageBytes = Math.max(stats?.imageBytes ?? 0, 0);
-const imagePercent = Math.round(imageBytes / r2LimitBytes * 100);
-const r2Warning = imageBytes > 8 * gigabyte;
 const d1Warning = dbBytes !== null && dbBytes > 400 * megabyte;
 const dateFormat = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeZone: 'Asia/Bangkok' });
 ---
@@ -69,9 +66,8 @@ const dateFormat = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeZ
     <div class="admin-stat"><strong class="mono">{stats ? stats.userCount.toLocaleString('th-TH') : '—'}</strong><span>สมาชิก</span></div>
     <div class="admin-stat">
       <strong class="mono">{stats ? `${(imageBytes / gigabyte).toFixed(2)} GB` : '—'}</strong>
-      <span>รูปที่บันทึกใน R2 จาก 10 GB</span>
-      {stats && <><progress class:list={['usage-meter', r2Warning && 'danger']} value={Math.min(imageBytes, r2LimitBytes)} max={r2LimitBytes} aria-label="พื้นที่รูปใน R2">{imagePercent}%</progress><span class="usage-percent mono">{imagePercent}%</span></>}
-      {r2Warning && <p class="error-text usage-warning" role="status">รูปใน R2 เกิน 80% ของพื้นที่อ้างอิง 10 GB ตรวจการใช้งานจริงใน Cloudflare</p>}
+      <span>ขนาดไฟล์รูปในคลัง</span>
+      <span class="usage-percent">ดูพื้นที่และค่าใช้จ่ายจริงใน Firebase Console</span>
     </div>
     <div class="admin-stat">
       <strong class="mono">{dbBytes === null ? '—' : `${(dbBytes / megabyte).toFixed(1)} MB`}</strong><span>ขนาดฐานข้อมูล D1 จาก 500 MB</span>

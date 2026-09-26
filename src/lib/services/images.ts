@@ -1,3 +1,5 @@
+import type { ImageStore } from './image-store';
+
 export type ImageEntityType = 'tapes' | 'artists' | 'labels' | 'collections';
 export type ImageVariant = 'full' | 'thumb' | 'og';
 export type ImageKind = 'front' | 'back' | 'inside' | 'cassette' | 'other';
@@ -22,7 +24,7 @@ export interface UploadInput {
   file: File;
 }
 
-export async function uploadImage(db: D1Database, bucket: R2Bucket, input: UploadInput) {
+export async function uploadImage(db: D1Database, bucket: ImageStore, input: UploadInput) {
   const { entityType, entityId, variant, file } = input;
   if (file.size < 1 || file.size > 3 * 1024 * 1024) throw new Error('รูปต้องมีขนาดไม่เกิน 3 MB');
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -36,7 +38,7 @@ export async function uploadImage(db: D1Database, bucket: R2Bucket, input: Uploa
   if (variant === 'thumb' && !input.uuid) throw new Error('ต้องอัปโหลดรูปเต็มก่อน');
   if (variant === 'thumb' && (!input.width || !input.height || input.width < 1 || input.height < 1)) throw new Error('ขนาดรูปไม่ถูกต้อง');
   const key = `${entityType}/${entityId}/${uuid}-${variant}.${format.extension}`;
-  let full: R2Object | null = null;
+  let full: { size: number } | null = null;
   let fullKey = '';
   if (variant === 'thumb') {
     for (const extension of ['jpg', 'webp'] as const) {
@@ -82,7 +84,7 @@ export async function uploadImage(db: D1Database, bucket: R2Bucket, input: Uploa
   return { uuid, key };
 }
 
-export async function deleteTapeImage(db: D1Database, bucket: R2Bucket, imageId: string, waitUntil: (promise: Promise<unknown>) => void) {
+export async function deleteTapeImage(db: D1Database, bucket: ImageStore, imageId: string, waitUntil: (promise: Promise<unknown>) => void) {
   const image = await db.prepare(`SELECT i.id, i.tapeId, i.fullKey, i.thumbKey, i.bytes, t.status,
     t.ogSourceImageId, t.ogImageKey, t.ogImageBytes FROM tape_image i JOIN tape t ON t.id = i.tapeId WHERE i.id = ?`)
     .bind(imageId).first<{ id: string; tapeId: string; fullKey: string; thumbKey: string; bytes: number; status: string; ogSourceImageId: string | null; ogImageKey: string | null; ogImageBytes: number }>();

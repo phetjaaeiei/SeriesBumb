@@ -33,6 +33,12 @@ describe('asset and canonical URLs', () => {
       .toBe('https://images.example/artists/%E0%B8%8A%E0%B8%B7%E0%B9%88%E0%B8%AD%20%E0%B8%A8%E0%B8%B4%E0%B8%A5%E0%B8%9B%E0%B8%B4%E0%B8%99-full.webp');
   });
 
+  it('builds a Firebase Storage public media URL with the whole key encoded', () => {
+    const base = 'https://firebasestorage.googleapis.com/v0/b/seriesbumb-32f9e.firebasestorage.app/o';
+    expect(imageUrl('tapes/id/ชื่อ เทป-full.webp', base))
+      .toBe(`${base}/tapes%2Fid%2F%E0%B8%8A%E0%B8%B7%E0%B9%88%E0%B8%AD%20%E0%B9%80%E0%B8%97%E0%B8%9B-full.webp?alt=media`);
+  });
+
   it('changes only the full-image filename into its thumbnail filename', () => {
     expect(thumbKeyFromFull('tapes/uuid-full.webp')).toBe('tapes/uuid-thumb.webp');
     expect(thumbKeyFromFull('dir-full.name/uuid-full.jpg')).toBe('dir-full.name/uuid-thumb.jpg');

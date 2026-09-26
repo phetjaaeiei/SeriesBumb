@@ -1,4 +1,5 @@
 import { jsonParam } from '../../db/client';
+import type { ImageStore } from './image-store';
 
 type Kind = 'tapes' | 'songs' | 'artists' | 'labels' | 'genres' | 'collections';
 export class CatalogError extends Error {}
@@ -17,7 +18,7 @@ function thumbKeys(fullKey: string | null): string[] {
   return [fullKey, fullKey.replace(/-full\.[^.]+$/u, '-thumb.webp'), fullKey.replace(/-full\.[^.]+$/u, '-thumb.jpg')];
 }
 
-export async function deleteCatalogEntity(db: D1Database, bucket: R2Bucket, kind: Kind, id: string, confirmation: string | undefined, waitUntil: (promise: Promise<unknown>) => void) {
+export async function deleteCatalogEntity(db: D1Database, bucket: ImageStore, kind: Kind, id: string, confirmation: string | undefined, waitUntil: (promise: Promise<unknown>) => void) {
   if (kind === 'tapes') {
     const tape = await db.prepare('SELECT id, title, slug, status, labelId, ogImageKey, ogImageBytes FROM tape WHERE id = ?').bind(id).first<{ id: string; title: string; slug: string; status: string; labelId: string | null; ogImageKey: string | null; ogImageBytes: number }>();
     if (!tape) throw new CatalogError('ไม่พบเทปนี้');
