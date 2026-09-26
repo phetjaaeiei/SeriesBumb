@@ -352,3 +352,42 @@ export const siteStats = sqliteTable('site_stats', {
   reindexRowsWritten: integer('reindexRowsWritten').notNull().default(0),
   updatedAt: integer('updatedAt').notNull(),
 }, (table) => [check('site_stats_single_row', sql`${table.id} = 1`)]);
+
+// Storage reservations include pending/failed uploads until remote deletion succeeds.
+export const audioFile = sqliteTable('audio_file', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  filename: text('filename').notNull(),
+  provider: text('provider', { enum: ['supabase', 'firebase', 'drive'] }).notNull(),
+  size: integer('size').notNull(),
+  contentType: text('contentType').notNull(),
+  objectKey: text('objectKey'),
+  driveUrl: text('driveUrl'),
+  note: text('note'),
+  songId: text('songId').references(() => song.id, { onDelete: 'set null' }),
+  tapeId: text('tapeId').references(() => tape.id, { onDelete: 'set null' }),
+  status: text('status', { enum: ['pending', 'uploading', 'ready', 'failed', 'deleting'] }).notNull(),
+  createdBy: text('createdBy').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: integer('createdAt').notNull(),
+  updatedAt: integer('updatedAt').notNull(),
+}, (table) => [
+  index('audio_file_created_id_idx').on(table.createdAt, table.id),
+  index('audio_file_provider_status_idx').on(table.provider, table.status),
+  index('audio_file_song_idx').on(table.songId),
+  index('audio_file_tape_idx').on(table.tapeId),
+  check('audio_file_provider_check', sql`${table.provider} IN ('supabase', 'firebase', 'drive')`),
+  check('audio_file_size_check', sql`${table.size} >= 0`),
+  check('audio_file_status_check', sql`${table.status} IN ('pending', 'uploading', 'ready', 'failed', 'deleting')`),
+  check('audio_file_location_check', sql`(${table.provider} = 'drive' AND ${table.driveUrl} IS NOT NULL AND ${table.objectKey} IS NULL) OR (${table.provider} != 'drive' AND ${table.driveUrl} IS NULL AND ${table.objectKey} IS NOT NULL)`),
+]);
+
+export const audioDownloadUsage = sqliteTable('audio_download_usage', {
+  provider: text('provider').notNull(),
+  day: text('day').notNull(),
+  bytes: integer('bytes').notNull().default(0),
+  requests: integer('requests').notNull().default(0),
+}, (table) => [
+  primaryKey({ columns: [table.provider, table.day] }),
+  check('audio_download_bytes_check', sql`${table.bytes} >= 0`),
+  check('audio_download_requests_check', sql`${table.requests} >= 0`),
+]);

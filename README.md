@@ -4,6 +4,19 @@
 
 เว็บ production: https://seriesbumb.phetjaa.workers.dev
 
+## คลังไฟล์เพลงส่วนตัว
+
+แอดมินเปิด `/admin/audio` เพื่ออัปโหลด ค้นหา ดาวน์โหลด หรือลบไฟล์เสียง และผูกกับเพลงหรือเทปที่มีอยู่ได้ คนทั่วไปและสมาชิกไม่มีสิทธิ์เข้าหน้ารายการหรือ API ดาวน์โหลด ไฟล์ไม่ถูกเผยแพร่บนหน้าข้อมูลเพลง
+
+- **Supabase Free:** ใช้ private bucket `SeriesBumb` ในโปรเจกต์ `lgtdhbeocizxxvptofdb` ตั้ง `SUPABASE_SECRET_KEY` เป็น Worker secret เท่านั้น ห้ามใส่ในโค้ดฝั่งเบราว์เซอร์ รับ MP3, FLAC, WAV, M4A, OGG สูงสุด 50,000,000 bytes ต่อไฟล์
+- **เพดานของเว็บ:** เก็บไฟล์ Supabase รวมไม่เกิน 900 MB รวมรายการที่อัปโหลดไม่สำเร็จ/กำลังจองพื้นที่ และดาวน์โหลดไม่เกิน 4 GB ใน 32 วันล่าสุดตามวันที่ UTC นับเต็มไฟล์ก่อนเริ่มส่ง รวมกรณีดาวน์โหลดถูกยกเลิก เมื่อถึงเพดานระบบปฏิเสธคำขอใหม่ ทั้งนี้โควตาจริงของ Supabase แชร์กับโปรเจกต์อื่นในองค์กรด้วย และตัวเลขในเว็บไม่รวมไฟล์ที่เพิ่มผ่าน Console
+- **Google Drive:** เก็บเฉพาะลิงก์ไฟล์ ไม่มีการคัดลอกไฟล์หรือขอสิทธิ์อ่าน Drive ทั้งบัญชี ตั้งแชร์เป็น **Restricted** และให้สิทธิ์บัญชีแอดมินใน Drive เอง เว็บไม่สามารถตรวจหรือบังคับสิทธิ์ของไฟล์ Drive และไม่ทราบพื้นที่ว่างจริง
+- **Firebase:** `AUDIO_FIREBASE_ENABLED=false` และ `FIREBASE_IMAGE_UPLOADS_ENABLED=false` เป็นค่าเริ่มต้น จึงพักการอัปโหลดเพลงและรูปใหม่บน Blaze จนกว่าจะยอมรับความเสี่ยงค่าใช้จ่าย รูปเดิมยังอ่านและลบได้ ไม่มี spend cap สำหรับ Firebase Storage และ Budget Alert ไม่ใช่ตัวหยุดค่าใช้จ่าย ลิงก์รูปสาธารณะเดิม การใช้งานนอกเว็บ และ soft-deleted objects ไม่อยู่ภายใต้เพดานของคลังเพลง จึงห้ามอ้างว่าการตั้งค่านี้รับประกันค่าใช้จ่ายทั้งบัญชีเป็นศูนย์
+
+เมื่ออัปโหลดขาดช่วง ให้ลบรายการที่ค้างก่อนลองใหม่ ระบบจะคืนพื้นที่หลังยืนยันลบไฟล์จากผู้ให้บริการแล้วเท่านั้น รายการที่ยังอัปโหลดอยู่ลบได้หลังครบช่วงกู้คืน 15 นาที การลบลิงก์ Drive ลบเฉพาะรายการในเว็บ ไม่ลบไฟล์ต้นฉบับ
+
+Supabase Free ต้องคง Free plan และ Spend Cap; โปรเจกต์อาจพักเมื่อไม่ใช้งาน และอาจหยุดให้บริการเมื่อเกินโควตา สำรองไฟล์เสียงต้นฉบับไว้อีกชุด การสำรอง D1 ด้านล่างครอบคลุมข้อมูลรายการและยอดโควตา แต่ไม่รวม bytes ของไฟล์เสียง
+
 ## เริ่มพัฒนาในเครื่อง
 
 ต้องใช้ Node.js 22.12 ขึ้นไป และ npm
@@ -23,7 +36,7 @@
 ## Deploy
 
 1. ลงชื่อเข้า Cloudflare ด้วย `npx wrangler login`
-2. ตั้ง Worker secrets: `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAILS`, `FIREBASE_SERVICE_ACCOUNT_JSON` ผ่าน `npx wrangler secret put ชื่อคีย์`
+2. ตั้ง Worker secrets: `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAILS`, `FIREBASE_SERVICE_ACCOUNT_JSON`, `SUPABASE_SECRET_KEY` ผ่าน `npx wrangler secret put ชื่อคีย์`
 3. ตั้ง Google OAuth redirect URI เป็น `https://seriesbumb.phetjaa.workers.dev/api/auth/callback/google`
 4. เมื่อมี migration ใหม่ รัน `npx wrangler d1 migrations apply seriesbumb --remote`
 5. รัน `npm run check`, `npm run lint`, `npm test`, `npm run test:int` แล้ว `npm run deploy`

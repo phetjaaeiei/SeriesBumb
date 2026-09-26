@@ -1,0 +1,12 @@
+---
+import AdminLayout from '../../components/layout/AdminLayout.astro';
+import AudioArchive from '../../components/admin/AudioArchive';
+---
+<AdminLayout title="คลังไฟล์เพลง">
+  <h1>คลังไฟล์เพลง</h1>
+  <p class="page-lede">เก็บไฟล์ต้นฉบับและลิงก์ Google Drive สำหรับแอดมิน</p>
+  <AudioArchive client:only="react">
+    <p slot="fallback" class="empty-state" role="status">กำลังโหลดคลังไฟล์เพลง…</p>
+  </AudioArchive>
+  <noscript><p class="error-text">เปิด JavaScript เพื่ออัปโหลดและจัดการไฟล์เพลง</p></noscript>
+</AdminLayout>

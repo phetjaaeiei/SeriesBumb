@@ -19,6 +19,10 @@
   "vars": {
     "SITE_URL": "https://seriesbumb.phetjaa.workers.dev",
     "FIREBASE_STORAGE_BUCKET": "seriesbumb-32f9e.firebasestorage.app",
+    "SUPABASE_URL": "https://lgtdhbeocizxxvptofdb.supabase.co",
+    "SUPABASE_AUDIO_BUCKET": "SeriesBumb",
+    "AUDIO_FIREBASE_ENABLED": "false",
+    "FIREBASE_IMAGE_UPLOADS_ENABLED": "false",
     "IMAGE_BASE_URL": "https://firebasestorage.googleapis.com/v0/b/seriesbumb-32f9e.firebasestorage.app/o",
     "CF_BEACON_TOKEN": ""
   },

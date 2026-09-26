@@ -50,7 +50,7 @@ export class FirebaseImageStore implements ImageStore {
   private tokenPromise?: Promise<string>;
   private tokenExpiresAt = 0;
 
-  constructor(private readonly bucket: string, private readonly serviceAccountJson: string, private readonly request: typeof fetch = fetch) {
+  constructor(private readonly bucket: string, private readonly serviceAccountJson: string, private readonly request: typeof fetch = (input, init) => fetch(input, init), private readonly allowImageUploads = true) {
     if (!/^[a-z0-9][a-z0-9._-]*$/u.test(bucket)) throw new Error('Firebase Storage bucket is not configured');
   }
 
@@ -62,6 +62,7 @@ export class FirebaseImageStore implements ImageStore {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }),
+          signal: AbortSignal.timeout(30_000),
         });
         if (!response.ok) throw new Error(`Firebase service account authorization failed (${response.status})`);
         const data: unknown = await response.json();
@@ -117,6 +118,7 @@ export class FirebaseImageStore implements ImageStore {
   }
 
   async put(key: string, bytes: Uint8Array, options?: { httpMetadata?: { contentType?: string } }): Promise<void> {
+    if (!this.allowImageUploads) throw new Error('พักการอัปโหลดรูป Firebase เพื่อควบคุมค่าใช้จ่าย');
     const url = new URL(`https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(this.bucket)}/o`);
     url.searchParams.set('uploadType', 'media');
     url.searchParams.set('name', key);
@@ -127,6 +129,22 @@ export class FirebaseImageStore implements ImageStore {
     });
     if (!response.ok) throw new Error(`Firebase Storage upload failed (${response.status})`);
     await response.body?.cancel();
+  }
+
+  // Streams are one-shot: authenticate before upload and never retry a consumed body.
+  async putStream(key: string, body: ReadableStream<Uint8Array>, _size: number, contentType: string, signal = AbortSignal.timeout(120_000)): Promise<void> {
+    const url = new URL(`https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(this.bucket)}/o`);
+    url.searchParams.set('uploadType', 'media');
+    url.searchParams.set('name', key);
+    url.searchParams.set('ifGenerationMatch', '0');
+    const response = await this.request(url.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': contentType, Authorization: `Bearer ${await this.token()}` },
+      body,
+      signal,
+    });
+    await response.body?.cancel();
+    if (!response.ok) throw new Error(`Firebase Storage stream upload failed (${response.status})`);
   }
 
   async delete(keys: string | string[]): Promise<void> {
@@ -141,6 +159,6 @@ export class FirebaseImageStore implements ImageStore {
   }
 }
 
-export function firebaseImageStore(env: Pick<Env, 'FIREBASE_STORAGE_BUCKET' | 'FIREBASE_SERVICE_ACCOUNT_JSON'>): FirebaseImageStore {
-  return new FirebaseImageStore(env.FIREBASE_STORAGE_BUCKET, env.FIREBASE_SERVICE_ACCOUNT_JSON);
+export function firebaseImageStore(env: Pick<Env, 'FIREBASE_STORAGE_BUCKET' | 'FIREBASE_SERVICE_ACCOUNT_JSON'> & { FIREBASE_IMAGE_UPLOADS_ENABLED?: string }): FirebaseImageStore {
+  return new FirebaseImageStore(env.FIREBASE_STORAGE_BUCKET, env.FIREBASE_SERVICE_ACCOUNT_JSON, undefined, env.FIREBASE_IMAGE_UPLOADS_ENABLED === 'true');
 }

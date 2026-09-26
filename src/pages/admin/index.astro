@@ -59,6 +59,7 @@ const dateFormat = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeZ
 <AdminLayout title="แดชบอร์ด">
   <h1>แดชบอร์ด</h1>
   <p class="page-lede">ภาพรวมของคลังเทปและพื้นที่เก็บข้อมูล</p>
+  {env.FIREBASE_IMAGE_UPLOADS_ENABLED !== 'true' && <p class="help-text" role="status">พักการอัปโหลดรูปใหม่บน Firebase เพื่อควบคุมค่าใช้จ่าย Blaze รูปเดิมยังเปิดดูได้ จัดเก็บเพลงเพิ่มเติมได้ที่ <a href="/admin/audio">คลังไฟล์เพลง</a></p>}
   {loadError && <p class="error-text" role="alert">โหลดข้อมูลแดชบอร์ดไม่สำเร็จ ลองเปิดหน้านี้อีกครั้ง</p>}
   <div class="admin-stats" aria-label="สถิติคลัง">
     <div class="admin-stat"><strong class="mono">{stats ? `${stats.publishedTapeCount.toLocaleString('th-TH')} / ${stats.tapeCount.toLocaleString('th-TH')}` : '—'}</strong><span>เทปที่เผยแพร่ / เทปทั้งหมด</span></div>
@@ -91,6 +92,7 @@ const dateFormat = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeZ
     <ul class="browse-list">
       <li><a href="/admin/tapes">จัดการเทป</a></li>
       <li><a href="/admin/songs">จัดการเพลง</a></li>
+      <li><a href="/admin/audio">คลังไฟล์เพลงสำหรับแอดมิน</a></li>
       <li><a href="/admin/artists">จัดการศิลปิน</a></li>
       <li><a href="/admin/collections">จัดการ Collection</a></li>
     </ul>

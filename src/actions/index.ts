@@ -117,6 +117,9 @@ export const server = {
         accept: 'form', input: uploadSchema,
         handler: (input, context) => {
           requireAdmin(context.locals);
+          if (env.FIREBASE_IMAGE_UPLOADS_ENABLED !== 'true') {
+            throw new ActionError({ code: 'SERVICE_UNAVAILABLE', message: 'พักการอัปโหลดรูป Firebase เพื่อควบคุมค่าใช้จ่าย Blaze' });
+          }
           return runCatalog(() => uploadImage(env.DB, firebaseImageStore(env), input));
         },
       }),
