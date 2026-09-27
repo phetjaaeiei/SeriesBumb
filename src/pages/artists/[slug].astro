@@ -27,7 +27,7 @@ const songCursor = decodeCursor('title', Astro.url.searchParams.get('songs_curso
 const songCursorFilter = songCursor ? 'AND (s.titleSort, s.id) > (?, ?)' : '';
 type SongRow = { id: string; slug: string; title: string; titleSort: string; firstTapeSlug: string | null; firstTapeTitle: string | null; firstTapeYear: number | null };
 const [members, songs, genreRows, lastLabel] = await Promise.all([
-  env.DB.prepare('SELECT name, role, years, isCurrent FROM artist_member WHERE artistId = ? ORDER BY position LIMIT 40').bind(artist.id).all<{ name: string; role: string; years: string | null; isCurrent: number }>(),
+  env.DB.prepare('SELECT am.name, am.role, am.years, am.isCurrent, p.slug AS personSlug FROM artist_member am LEFT JOIN person p ON p.id = am.personId AND am.sourceId IS NOT NULL WHERE am.artistId = ? ORDER BY am.position LIMIT 40').bind(artist.id).all<{ name: string; role: string; years: string | null; isCurrent: number; personSlug: string | null }>(),
   env.DB.prepare(`WITH song_page AS MATERIALIZED (
     SELECT s.id, s.slug, s.title, s.titleSort
     FROM song_artist sa JOIN song s ON s.id = sa.songId
@@ -119,7 +119,7 @@ tabs.push({ id: 'similar', label: 'ศิลปินแนวใกล้กั
       {([{ title: 'สมาชิกล่าสุด', rows: currentMembers }, { title: 'อดีตสมาชิก', rows: pastMembers }]).map(group => group.rows.length > 0 && <div class="section">
         <h3>{group.title}</h3>
         <div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">ชื่อ</th><th scope="col">หน้าที่ (ปี)</th></tr></thead><tbody>
-          {group.rows.map(member => <tr><td>{member.name}</td><td>{member.role || (!member.years ? '—' : '')}{member.years && <> {member.role && '· '}<span class="mono">{member.years}</span></>}</td></tr>)}
+          {group.rows.map(member => <tr><td>{member.personSlug ? <a href={`/people/${encodeURIComponent(member.personSlug)}`}>{member.name}</a> : member.name}</td><td>{member.role || (!member.years ? '—' : '')}{member.years && <> {member.role && '· '}<span class="mono">{member.years}</span></>}</td></tr>)}
         </tbody></table></div>
       </div>)}
     </section>}

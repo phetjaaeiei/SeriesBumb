@@ -1,0 +1,18 @@
+---
+import { env } from 'cloudflare:workers';
+import AdminLayout from '../../components/layout/AdminLayout.astro';
+import PeopleManager from '../../components/admin/PeopleManager';
+const artistId = Astro.url.searchParams.get('artistId');
+const artist = artistId ? await env.DB.prepare('SELECT id, name FROM artist WHERE id = ?').bind(artistId).first<{ id: string; name: string }>() : null;
+const [people, members, sources] = await Promise.all([
+  env.DB.prepare('SELECT id, slug, name FROM person ORDER BY name LIMIT 100').all<{ id: string; slug: string; name: string }>(),
+  artist ? env.DB.prepare('SELECT id, name, role, personId, sourceId FROM artist_member WHERE artistId = ? ORDER BY position LIMIT 40').bind(artist.id).all<{ id: string; name: string; role: string; personId: string | null; sourceId: string | null }>() : Promise.resolve({ results: [] }),
+  artist ? env.DB.prepare("SELECT id, title FROM catalog_source WHERE entityKind = 'artist' AND entityId = ? ORDER BY createdAt DESC LIMIT 50").bind(artist.id).all<{ id: string; title: string }>() : Promise.resolve({ results: [] }),
+]);
+---
+<AdminLayout title="บุคคลและสมาชิกวง">
+  <h1>บุคคลและสมาชิกวง</h1>
+  <p class="page-lede">เชื่อมสมาชิกวงข้ามศิลปินเฉพาะเมื่อมีหลักฐานยืนยันว่าเป็นคนเดียวกัน</p>
+  {artist && <p><a href={`/admin/artists/${artist.id}`}>กลับไปแก้ไข {artist.name}</a></p>}
+  <PeopleManager initialPeople={people.results} initialMembers={members.results} sources={sources.results} artistId={artist?.id ?? null} client:load />
+</AdminLayout>

@@ -101,15 +101,26 @@ export const artist = sqliteTable('artist', {
   index('artist_province_name_sort_id_idx').on(table.province, table.nameSort, table.id),
 ]);
 
+export const person = sqliteTable('person', {
+  id: text('id').primaryKey(),
+  slug: text('slug').notNull().unique(),
+  name: text('name').notNull(),
+  bio: text('bio').notNull().default(''),
+  createdAt: integer('createdAt').notNull(),
+  updatedAt: integer('updatedAt').notNull(),
+});
+
 export const artistMember = sqliteTable('artist_member', {
   id: text('id').primaryKey(),
   artistId: text('artistId').notNull().references(() => artist.id, { onDelete: 'cascade' }),
+  personId: text('personId').references(() => person.id, { onDelete: 'set null' }),
+  sourceId: text('sourceId').references(() => catalogSource.id, { onDelete: 'set null' }),
   name: text('name').notNull(),
   role: text('role').notNull().default(''),
   years: text('years'),
   isCurrent: integer('isCurrent', { mode: 'boolean' }).notNull().default(false),
   position: integer('position').notNull(),
-}, (table) => [index('artist_member_artist_position_idx').on(table.artistId, table.position)]);
+}, (table) => [index('artist_member_artist_position_idx').on(table.artistId, table.position), index('artist_member_person_idx').on(table.personId)]);
 
 export const label = sqliteTable('label', {
   id: text('id').primaryKey(),

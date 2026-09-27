@@ -235,18 +235,28 @@ export async function saveArtist(db: D1Database, userId: string, input: {
   status?: 'active' | 'inactive' | 'hiatus' | 'deceased' | 'unknown';
   province?: string | null; formedYear?: number | null; themes?: string | null; yearsActive?: string | null; bio?: string;
   imageKey?: string | null;
-  members?: { name: string; role?: string; years?: string | null; isCurrent?: boolean }[];
+  members?: { id?: string; name: string; role?: string; years?: string | null; isCurrent?: boolean }[];
 }) {
   const name = requiredName(input.name, 'ชื่อศิลปิน');
   const old = await db.prepare('SELECT slug, name, publishedTapeCount, EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1) AS hasPublicSong FROM artist WHERE id = ?').bind(input.id).first<{ slug: string; name: string; publishedTapeCount: number; hasPublicSong: number }>();
   if (!old) throw new Error('ไม่พบศิลปินนี้');
   const slug = input.slug ? await uniqueSlug(db, 'artist', name, input.slug, input.id) : old.slug;
-  const members = (input.members ?? []).slice(0, 40).map((member, position) => ({ id: crypto.randomUUID(), name: requiredName(member.name, 'ชื่อสมาชิก'), role: member.role || '', years: member.years || null, isCurrent: Number(!!member.isCurrent), position }));
+  const previousMembers = (await db.prepare('SELECT id, personId, sourceId FROM artist_member WHERE artistId = ?').bind(input.id).all<{ id: string; personId: string | null; sourceId: string | null }>()).results;
+  const previousById = new Map(previousMembers.map(member => [member.id, member]));
+  const seenMembers = new Set<string>();
+  const members = (input.members ?? []).slice(0, 40).map((member, position) => {
+    const previous = member.id ? previousById.get(member.id) : undefined;
+    if (member.id && !previous) throw new Error('สมาชิกวงไม่ตรงกับศิลปิน');
+    const id = previous?.id ?? crypto.randomUUID();
+    if (seenMembers.has(id)) throw new Error('สมาชิกวงซ้ำ');
+    seenMembers.add(id);
+    return { id, personId: previous?.personId ?? null, sourceId: previous?.sourceId ?? null, name: requiredName(member.name, 'ชื่อสมาชิก'), role: member.role || '', years: member.years || null, isCurrent: Number(!!member.isCurrent), position };
+  });
   const now = Date.now();
   await db.batch([
     db.prepare('UPDATE artist SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, artistType = ?, status = ?, province = ?, formedYear = ?, themes = ?, yearsActive = ?, bio = ?, imageKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, name, input.nameAlt || null, thaiSortKey(name), input.artistType || null, input.status || 'unknown', input.province || null, input.formedYear == null ? null : toCeYear(input.formedYear), input.themes || null, input.yearsActive || null, input.bio || '', input.imageKey || null, userId, now, input.id),
     db.prepare('DELETE FROM artist_member WHERE artistId = ?').bind(input.id),
-    db.prepare(`INSERT INTO artist_member (id, artistId, name, role, years, isCurrent, position) SELECT json_extract(value,'$.id'), ?, json_extract(value,'$.name'), json_extract(value,'$.role'), json_extract(value,'$.years'), json_extract(value,'$.isCurrent'), json_extract(value,'$.position') FROM json_each(?)`).bind(input.id, jsonParam(members)),
+    db.prepare(`INSERT INTO artist_member (id, artistId, personId, sourceId, name, role, years, isCurrent, position) SELECT json_extract(value,'$.id'), ?, json_extract(value,'$.personId'), json_extract(value,'$.sourceId'), json_extract(value,'$.name'), json_extract(value,'$.role'), json_extract(value,'$.years'), json_extract(value,'$.isCurrent'), json_extract(value,'$.position') FROM json_each(?)`).bind(input.id, jsonParam(members)),
     ...indexStatements(db, 'artist', input.id, name, [name, input.nameAlt, ...members.map(member => member.name)].filter(Boolean).join(' | '), old.publishedTapeCount > 0 || old.hasPublicSong === 1),
     ...redirectStatements(db, `/artists/${old.slug}`, `/artists/${slug}`),
   ]);

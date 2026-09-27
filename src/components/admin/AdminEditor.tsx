@@ -15,7 +15,7 @@ type Row = Record<string, string | number | null>;
 type Choice = { id: string; label: string };
 type Track = { songId: string; side: TrackSide; position: number; durationSec?: number | null; note?: string | null };
 type TrackRow = Track & { clientId: string; durationText: string };
-type Member = { name: string; role?: string; years?: string | null; isCurrent?: boolean | number };
+type Member = { id?: string; name: string; role?: string; years?: string | null; isCurrent?: boolean | number };
 type Item = { tapeId: string; note?: string | null };
 type TapeImage = { id: string; kind: 'front' | 'back' | 'inside' | 'cassette' | 'other'; fullKey: string; thumbKey: string; position: number };
 const IMAGE_KIND_LABELS: Record<TapeImage['kind'], string> = { front: 'ปกหน้า', back: 'ปกหลัง', inside: 'ด้านใน', cassette: 'ตลับเทป', other: 'อื่น ๆ' };
@@ -286,7 +286,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
         artistType: (get('artistType') || null) as 'band' | 'solo' | 'group' | null,
         status: get('status') as 'active' | 'inactive' | 'hiatus' | 'deceased' | 'unknown',
         province: (get('province') || null) as (typeof PROVINCE_NAMES)[number] | null, formedYear: get('formedYear') ? Number(get('formedYear')) : null, themes: get('themes') || null, yearsActive: get('yearsActive') || null, bio: get('bio'), imageKey: get('imageKey') || null,
-        members: memberRows.map(member => ({ name: member.name, role: member.role || '', years: member.years || null, isCurrent: Boolean(member.isCurrent) })),
+        members: memberRows.map(member => ({ id: member.id, name: member.name, role: member.role || '', years: member.years || null, isCurrent: Boolean(member.isCurrent) })),
       }) : kind === 'labels' ? await actions.admin.labels.save({
         id, name: get('name'), nameAlt: get('nameAlt') || null, slug: customSlug, description: get('description'), logoKey: get('logoKey') || null,
       }) : kind === 'genres' ? await actions.admin.genres.save({ id, name: get('name'), slug: customSlug, position: fields.position == null ? undefined : Number(get('position')) })
@@ -350,6 +350,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
 
     {(kind === 'tapes' || kind === 'songs') && <div className="editor-section"><h2>ศิลปินและหมวดหมู่</h2><Picker kind="artists" label={kind === 'songs' ? 'ผู้ร้อง' : 'ศิลปิน'} ids={artists} selected={choices} onChange={(ids, choice) => choose(ids, choice, setArtists)} />{kind === 'tapes' && <><Picker kind="labels" label="ค่ายเพลง" ids={get('labelId') ? [get('labelId')] : []} selected={choices} multiple={false} onChange={(ids, choice) => { set('labelId', ids[0] || ''); if (choice) setChoices(previous => [...previous, choice]); }} /><Picker kind="genres" label="แนวเพลง" ids={genres} selected={choices} onChange={(ids, choice) => choose(ids, choice, setGenres)} /></>}</div>}
 
+    {kind === 'artists' && id && <p><a href={`/admin/people?artistId=${encodeURIComponent(id)}`}>เชื่อมตัวตนสมาชิกวงพร้อมหลักฐาน →</a></p>}
     {kind === 'artists' && <div className="editor-section"><h2>สมาชิกวง</h2>{memberRows.map((member, index) => <div className="editor-row" key={index}><input className="field" aria-label={`ชื่อสมาชิก ${index + 1}`} placeholder="ชื่อสมาชิก" value={member.name} onChange={event => setMemberRows(previous => previous.map((row, i) => i === index ? { ...row, name: event.target.value } : row))} /><input className="field" aria-label={`หน้าที่สมาชิก ${index + 1}`} placeholder="หน้าที่" value={member.role || ''} onChange={event => setMemberRows(previous => previous.map((row, i) => i === index ? { ...row, role: event.target.value } : row))} /><input className="field" aria-label={`ปีที่อยู่ในวงของสมาชิก ${index + 1}`} placeholder="ปีที่อยู่ในวง" value={member.years || ''} onChange={event => setMemberRows(previous => previous.map((row, i) => i === index ? { ...row, years: event.target.value } : row))} /><label className="admin-check"><input type="checkbox" checked={Boolean(member.isCurrent)} onChange={event => setMemberRows(previous => previous.map((row, i) => i === index ? { ...row, isCurrent: event.target.checked } : row))} /> ปัจจุบัน</label><button className="button" type="button" onClick={() => setMemberRows(previous => previous.filter((_, i) => i !== index))}>เอาออก</button></div>)}<button className="button" type="button" onClick={() => setMemberRows(previous => [...previous, { name: '', role: '', years: '', isCurrent: true }])}>+ เพิ่มสมาชิก</button></div>}
 
     {kind === 'tapes' && <div className="editor-section">

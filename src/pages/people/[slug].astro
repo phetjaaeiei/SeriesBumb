@@ -1,0 +1,20 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+const slug = Astro.params.slug ?? '';
+const person = await env.DB.prepare('SELECT id, name, bio FROM person WHERE slug = ?').bind(slug).first<{ id: string; name: string; bio: string }>();
+if (!person) return Astro.rewrite('/404');
+const appearances = (await env.DB.prepare(`SELECT a.slug AS artistSlug, a.name AS artistName, am.name AS creditedName, am.role, am.years, am.isCurrent, cs.title AS sourceTitle, cs.url AS sourceUrl
+  FROM artist_member am JOIN artist a ON a.id = am.artistId JOIN catalog_source cs ON cs.id = am.sourceId
+  WHERE am.personId = ? AND (a.publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1))
+  ORDER BY a.nameSort, am.position LIMIT 50`).bind(person.id).all<{ artistSlug: string; artistName: string; creditedName: string; role: string; years: string | null; isCurrent: number; sourceTitle: string; sourceUrl: string }>()).results;
+if (!appearances.length && Astro.locals.user?.role !== 'admin') return Astro.rewrite('/404');
+---
+<BaseLayout title={person.name} canonicalPath={`/people/${slug}`} noindex={!appearances.length}>
+  <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/artists">ศิลปิน</a><span>/</span>บุคคล</nav>
+  <h1>{person.name}</h1>
+  {person.bio && <p class="page-lede">{person.bio}</p>}
+  <section class="section"><h2>วงและหน้าที่ที่ยืนยันแล้ว</h2>
+    {appearances.length ? <div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">ศิลปิน</th><th scope="col">ชื่อที่เครดิต</th><th scope="col">หน้าที่</th><th scope="col">ช่วงปี</th><th scope="col">หลักฐาน</th></tr></thead><tbody>{appearances.map(row => <tr><td><a href={`/artists/${encodeURIComponent(row.artistSlug)}`}>{row.artistName}</a></td><td>{row.creditedName}</td><td>{row.role || '—'}</td><td>{row.years || '—'}</td><td><a href={row.sourceUrl} target="_blank" rel="noopener noreferrer">{row.sourceTitle} ↗</a></td></tr>)}</tbody></table></div> : <p class="empty-state">ยังไม่มีการเชื่อมตัวตนที่แสดงสาธารณะ</p>}
+  </section>
+</BaseLayout>

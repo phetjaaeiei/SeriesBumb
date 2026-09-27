@@ -57,6 +57,13 @@
       "when": 1790552758646,
       "tag": "0007_modern_the_hood",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790553129458,
+      "tag": "0008_careful_agent_brand",
+      "breakpoints": true
     }
   ]
 }

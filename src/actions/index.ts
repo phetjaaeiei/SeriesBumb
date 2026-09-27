@@ -15,6 +15,7 @@ import { CatalogError, deleteCatalogEntity } from '../lib/services/catalog-delet
 import { normalizeThai } from '../lib/thai';
 import { addCatalogSource, deleteCatalogSource } from '../lib/services/catalog-sources';
 import { ReviewError, moderateCorrection, moderateReview, submitCorrection, submitReview } from '../lib/services/reviews';
+import { createPerson, linkArtistMember } from '../lib/services/people';
 
 async function runCatalog<T>(action: () => Promise<T>): Promise<T> {
   try { return await action(); }
@@ -70,6 +71,10 @@ export const server = {
     setTapeOwned: defineMemberAction({ input: z.object({ tapeId: z.uuid(), owned: z.boolean() }), handler: (input, context) => setEngagement(env.DB, context.user.id, 'tapeOwned', input.tapeId, input.owned) }),
   },
   admin: {
+    people: {
+      create: defineAdminAction({ input: z.object({ name: z.string().trim().min(1).max(100) }), handler: ({ name }) => runCatalog(() => createPerson(env.DB, name)) }),
+      link: defineAdminAction({ input: z.object({ memberId: z.uuid(), personId: z.uuid().nullable(), sourceId: z.uuid().nullable() }), handler: input => runCatalog(() => linkArtistMember(env.DB, input.memberId, input.personId, input.sourceId)) }),
+    },
     reviews: {
       moderate: defineAdminAction({ input: z.object({ id: z.uuid(), status: z.enum(['published', 'rejected']) }), handler: (input, context) => runReview(() => moderateReview(env.DB, context.user.id, input.id, input.status)) }),
       moderateCorrection: defineAdminAction({ input: z.object({ id: z.uuid(), status: z.enum(['accepted', 'rejected']) }), handler: (input, context) => runReview(() => moderateCorrection(env.DB, context.user.id, input.id, input.status)) }),

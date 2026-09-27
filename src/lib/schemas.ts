@@ -18,7 +18,7 @@ export const artistSaveSchema = z.object({
   formedYear: year, themes: optionalText(300),
   yearsActive: optionalText(100), bio: z.string().max(5000).optional(),
   imageKey: optionalText(400),
-  members: z.array(z.object({ name: z.string().trim().min(1).max(100), role: z.string().max(100).optional(), years: optionalText(50), isCurrent: z.boolean().optional() })).max(40).optional(),
+  members: z.array(z.object({ id: uuid.optional(), name: z.string().trim().min(1).max(100), role: z.string().max(100).optional(), years: optionalText(50), isCurrent: z.boolean().optional() })).max(40).optional(),
 });
 
 export const labelSaveSchema = z.object({
