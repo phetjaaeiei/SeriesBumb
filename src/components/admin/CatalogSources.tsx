@@ -10,7 +10,7 @@ export default function CatalogSources({ entityKind, entityId, initial }: { enti
   const [claim, setClaim] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  async function add(event: React.FormEvent<HTMLFormElement>) {
+  async function add(event: { preventDefault(): void }) {
     event.preventDefault(); setBusy(true); setMessage('');
     const result = await actions.admin.sources.add({ entityKind, entityId, title, url, claim, accessedAt: Date.now() });
     if (result.error || !result.data) setMessage(result.error?.message || 'บันทึกไม่สำเร็จ');
