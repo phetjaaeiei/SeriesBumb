@@ -12,6 +12,9 @@ const kinds = [{ value: 'song', label: 'เพลง' }, { value: 'artist', labe
 const next = new URLSearchParams(params);
 if (nextCursor) next.set('cursor', nextCursor);
 const genres = (await env.DB.prepare('SELECT slug, name FROM genre ORDER BY position LIMIT 50').all<{ slug: string; name: string }>()).results;
+const artists = (await env.DB.prepare('SELECT a.slug, a.name FROM artist a WHERE EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1) ORDER BY a.nameSort LIMIT 100').all<{ slug: string; name: string }>()).results;
+const labels = (await env.DB.prepare('SELECT slug, name FROM label WHERE publishedTapeCount > 0 ORDER BY nameSort LIMIT 100').all<{ slug: string; name: string }>()).results;
+const releaseLabels: Record<string, string> = { album: 'อัลบั้ม', compilation: 'รวมศิลปิน', soundtrack: 'เพลงประกอบ', single: 'ซิงเกิล', other: 'อื่น ๆ' };
 ---
 <BaseLayout title="ค้นหาแบบละเอียด" canonicalPath="/search/advanced" noindex>
   <nav class="breadcrumbs" aria-label="เส้นทาง"><a href="/search">ค้นหา</a><span>/</span>ค้นหาแบบละเอียด</nav>
@@ -20,10 +23,10 @@ const genres = (await env.DB.prepare('SELECT slug, name FROM genre ORDER BY posi
   <form class="advanced-search-form section" action="/search/advanced" method="get" role="search">
     <label>คำค้น<input class="field" type="search" name="q" value={filters.query} maxlength="100" placeholder="ชื่อเพลง ศิลปิน หรือเทป" /></label>
     <label>หมวด<select class="field" name="kind">{kinds.map(kind => <option value={kind.value} selected={filters.kind === kind.value}>{kind.label}</option>)}</select></label>
-    <label>ศิลปิน (slug)<input class="field" name="artist" value={filters.artist} maxlength="100" placeholder="เช่น Hi-Rock" /></label>
-    <label>ค่ายเพลง (slug)<input class="field" name="label" value={filters.label} maxlength="100" /></label>
+    <label>ศิลปิน<select class="field" name="artist"><option value="">ทุกศิลปิน</option>{artists.map(artist => <option value={artist.slug} selected={filters.artist === artist.slug}>{artist.name}</option>)}</select></label>
+    <label>ค่ายเพลง<select class="field" name="label"><option value="">ทุกค่าย</option>{labels.map(label => <option value={label.slug} selected={filters.label === label.slug}>{label.name}</option>)}</select></label>
     <label>แนวเพลง<select class="field" name="genre"><option value="">ทุกแนว</option>{genres.map(genre => <option value={genre.slug} selected={filters.genre === genre.slug}>{genre.name}</option>)}</select></label>
-    <label>ประเภทเทป<select class="field" name="releaseType"><option value="">ทุกประเภท</option>{RELEASE_TYPES.map(type => <option value={type} selected={filters.releaseType === type}>{type}</option>)}</select></label>
+    <label>ประเภทเทป<select class="field" name="releaseType"><option value="">ทุกประเภท</option>{RELEASE_TYPES.map(type => <option value={type} selected={filters.releaseType === type}>{releaseLabels[type]}</option>)}</select></label>
     <label>ตั้งแต่ปี ค.ศ.<input class="field" type="number" name="yearFrom" min="1900" max="2100" value={filters.yearFrom ?? ''} /></label>
     <label>ถึงปี ค.ศ.<input class="field" type="number" name="yearTo" min="1900" max="2100" value={filters.yearTo ?? ''} /></label>
     <label>จังหวัด<input class="field" name="province" value={filters.province} maxlength="100" /></label>
