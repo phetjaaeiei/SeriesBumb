@@ -80,9 +80,11 @@ const pastMembers = members.results.filter(member => !member.isCurrent);
 const visibleSongs = songs.results.slice(0, 100);
 const lastSong = visibleSongs.at(-1);
 const nextSongCursor = songs.results.length > 100 && lastSong ? encodeCursor('title', lastSong.titleSort, lastSong.id) : null;
-const tabs = [{ id: 'discography', label: 'ผลงาน' }];
+const tabs = page.items.length
+  ? [{ id: 'discography', label: 'ผลงาน' }]
+  : [{ id: 'songs', label: 'เพลงที่ร้อง' }, { id: 'discography', label: 'ผลงาน' }];
 if (artist.artistType !== 'solo' && members.results.length) tabs.push({ id: 'members', label: 'สมาชิก' });
-tabs.push({ id: 'songs', label: 'เพลงที่ร้อง' });
+if (page.items.length) tabs.push({ id: 'songs', label: 'เพลงที่ร้อง' });
 tabs.push({ id: 'similar', label: 'ศิลปินแนวใกล้กัน' }, { id: 'links', label: 'ลิงก์ที่เกี่ยวข้อง' });
 ---
 <BaseLayout title={artist.name} description={(artist.bio || `ข้อมูลศิลปิน ${artist.name} และเพลงในคลัง`).replace(/\s+/gu, ' ').slice(0, 155)} canonicalPath={`/artists/${slug}`} noindex={!publicArtist || Astro.url.searchParams.size > 0}>
@@ -104,7 +106,7 @@ tabs.push({ id: 'similar', label: 'ศิลปินแนวใกล้กั
   {artist.bio && <ExpandableText text={artist.bio} id="artist-bio" className="section soft" />}
   <Tabs tabs={tabs}>
     <section id="discography" class="tab-panel" data-tab-panel><h2>ผลงาน</h2>
-      {page.items.length ? releaseGroups.map(group => { const items = page.items.filter(item => item.releaseType === group.type); return items.length ? <div class="section"><h3>{group.label} <span class="mono muted">({items.length})</span></h3><TapeList items={items} showLabel={false} /></div> : null; }) : <p class="empty-state">ยังไม่มีเทปของศิลปินนี้ที่เผยแพร่</p>}
+      {page.items.length ? releaseGroups.map(group => { const items = page.items.filter(item => item.releaseType === group.type); return items.length ? <div class="section"><h3>{group.label}</h3><TapeList items={items} showLabel={false} /></div> : null; }) : <p class="empty-state">ยังไม่มีเทปของศิลปินนี้ที่เผยแพร่ <a href="#songs">ดูเพลงที่มีข้อมูลแล้ว</a></p>}
       {page.nextCursor && <nav class="pagination" aria-label="ผลงานหน้าถัดไป"><a class="button" href={`/artists/${encodeURIComponent(slug)}?cursor=${encodeURIComponent(page.nextCursor)}#discography`} rel="nofollow">ผลงานหน้าถัดไป →</a></nav>}
       {appearances.results.length > 0 && <div class="section"><h3>เพลงที่ปรากฏในชุดรวม</h3><div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">เพลง</th><th scope="col">ชุดเทป</th><th scope="col">ปี</th></tr></thead><tbody>{appearances.results.map(row => <tr><td><a href={`/songs/${encodeURIComponent(row.songSlug)}`}>{row.songTitle}</a></td><td><a href={`/tapes/${encodeURIComponent(row.slug)}`}>{row.title}</a></td><td class="mono">{formatYear(row.year)}</td></tr>)}</tbody></table></div></div>}
     </section>
