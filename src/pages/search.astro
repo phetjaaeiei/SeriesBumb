@@ -19,6 +19,7 @@ const groups: { kind: SearchResult['kind']; label: string; path: string }[] = [
     <input class="field" id="catalog-search" type="search" name="q" value={q} maxlength="100" placeholder="ค้นหาเทป เพลง ศิลปิน" autofocus />
     <button class="button button-primary" type="submit">ค้นหา</button>
   </form>
+  <p class="section"><a href="/search/advanced">ค้นหาแบบละเอียด →</a></p>
   {q && (results.length ? <div class="section">
     <p class="soft">ผลค้นหา “{q}”</p>
     {groups.map(group => { const items = results.filter(item => item.kind === group.kind); return items.length ? <section class="section"><div class="section-heading"><h2>{group.label}</h2></div><ul class="browse-list">{items.map(item => <li><a href={`/${group.path}/${encodeURIComponent(item.slug)}`}>{item.title}</a></li>)}</ul></section> : null; })}

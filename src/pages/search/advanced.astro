@@ -1,0 +1,37 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import { advancedSearch, parseAdvancedSearch } from '../../lib/queries/advanced-search';
+import { RELEASE_TYPES } from '../../db/enums';
+
+const params = Astro.url.searchParams;
+const filters = parseAdvancedSearch(params);
+const { items, nextCursor } = await advancedSearch(env.DB, filters);
+const paths = { artist: 'artists', tape: 'tapes', song: 'songs', label: 'labels' };
+const kinds = [{ value: 'song', label: 'เพลง' }, { value: 'artist', label: 'ศิลปิน' }, { value: 'tape', label: 'เทป' }, { value: 'label', label: 'ค่ายเพลง' }];
+const next = new URLSearchParams(params);
+if (nextCursor) next.set('cursor', nextCursor);
+const genres = (await env.DB.prepare('SELECT slug, name FROM genre ORDER BY position LIMIT 50').all<{ slug: string; name: string }>()).results;
+---
+<BaseLayout title="ค้นหาแบบละเอียด" canonicalPath="/search/advanced" noindex>
+  <nav class="breadcrumbs" aria-label="เส้นทาง"><a href="/search">ค้นหา</a><span>/</span>ค้นหาแบบละเอียด</nav>
+  <h1>ค้นหาแบบละเอียด</h1>
+  <p class="page-lede">เลือกหมวดและเงื่อนไขเพื่อค้นหาในคลังเพลงไทย</p>
+  <form class="advanced-search-form section" action="/search/advanced" method="get" role="search">
+    <label>คำค้น<input class="field" type="search" name="q" value={filters.query} maxlength="100" placeholder="ชื่อเพลง ศิลปิน หรือเทป" /></label>
+    <label>หมวด<select class="field" name="kind">{kinds.map(kind => <option value={kind.value} selected={filters.kind === kind.value}>{kind.label}</option>)}</select></label>
+    <label>ศิลปิน (slug)<input class="field" name="artist" value={filters.artist} maxlength="100" placeholder="เช่น Hi-Rock" /></label>
+    <label>ค่ายเพลง (slug)<input class="field" name="label" value={filters.label} maxlength="100" /></label>
+    <label>แนวเพลง<select class="field" name="genre"><option value="">ทุกแนว</option>{genres.map(genre => <option value={genre.slug} selected={filters.genre === genre.slug}>{genre.name}</option>)}</select></label>
+    <label>ประเภทเทป<select class="field" name="releaseType"><option value="">ทุกประเภท</option>{RELEASE_TYPES.map(type => <option value={type} selected={filters.releaseType === type}>{type}</option>)}</select></label>
+    <label>ตั้งแต่ปี ค.ศ.<input class="field" type="number" name="yearFrom" min="1900" max="2100" value={filters.yearFrom ?? ''} /></label>
+    <label>ถึงปี ค.ศ.<input class="field" type="number" name="yearTo" min="1900" max="2100" value={filters.yearTo ?? ''} /></label>
+    <label>จังหวัด<input class="field" name="province" value={filters.province} maxlength="100" /></label>
+    <div class="advanced-search-actions"><button class="button button-primary" type="submit">ค้นหา</button><a class="button" href="/search/advanced">ล้างตัวกรอง</a></div>
+  </form>
+  <section class="section" aria-live="polite">
+    <div class="section-heading"><h2>ผลค้นหา {kinds.find(kind => kind.value === filters.kind)?.label}</h2></div>
+    {items.length ? <ul class="browse-list">{items.map(item => <li><a href={`/${paths[filters.kind]}/${encodeURIComponent(item.slug)}`}>{item.title}</a></li>)}</ul> : <div class="empty-state"><p>ไม่พบรายการตามเงื่อนไขนี้</p><a href="/search/advanced">ล้างตัวกรอง</a></div>}
+    {nextCursor && <a class="button section" href={`/search/advanced?${next}`}>ดูรายการถัดไป</a>}
+  </section>
+</BaseLayout>
