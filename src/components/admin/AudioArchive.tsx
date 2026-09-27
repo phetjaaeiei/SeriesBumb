@@ -25,7 +25,7 @@ class AudioRequestError extends Error {
 const endpoint = '/admin/api/audio';
 const supabaseTemporaryReservationBytes = 52_428_800;
 const providerNames: Record<Provider, string> = { supabase: 'Supabase', firebase: 'Firebase', drive: 'Google Drive' };
-const audioTypes: Record<string, string> = { mp3: 'audio/mpeg', flac: 'audio/flac', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg' };
+const audioTypes: Record<string, string> = { mp3: 'audio/mpeg', flac: 'audio/flac', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg', mp4: 'video/mp4' };
 
 function bytes(value: number) {
   if (value === 0) return '0 MB';
@@ -268,7 +268,7 @@ export default function AudioArchive() {
     if (mode === 'upload' && (!file || fileProblem)) { setFormError(fileProblem || 'เลือกไฟล์เพลงก่อนอัปโหลด'); return; }
     if (mode === 'drive' && !driveConfirmed) { setFormError('ตรวจสอบสิทธิ์แชร์ไฟล์ใน Google Drive แล้วทำเครื่องหมายยืนยัน'); return; }
     const extension = file?.name.split('.').at(-1)?.toLowerCase() || '';
-    if (mode === 'upload' && !audioTypes[extension]) { setFormError('รองรับไฟล์ MP3, FLAC, WAV, M4A และ OGG'); return; }
+    if (mode === 'upload' && !audioTypes[extension]) { setFormError('รองรับไฟล์ MP3, FLAC, WAV, M4A, OGG และวิดีโอ MP4'); return; }
     const contentType = mode === 'upload' ? audioTypes[extension] : 'application/octet-stream';
     setBusy(true); setProgress(null); setUploadStage('reserving');
     let reserved = false;
@@ -479,8 +479,8 @@ export default function AudioArchive() {
             </select></label>
             {!selectedUsage?.enabled && <p className="audio-blocked-reason admin-field-full" role="status">{selectedUsage?.reason || 'พื้นที่นี้ยังไม่พร้อมใช้งาน'}</p>}
             {provider === 'supabase' && selectedUsage?.enabled && <p className="help-text audio-direct-note admin-field-full">ไฟล์จะส่งตรงไปยัง Supabase Storage ต้องมีพื้นที่ว่าง {bytes(supabaseTemporaryReservationBytes)} เพื่อจองชั่วคราว หลังยืนยันแล้วระบบจะนับตามขนาดไฟล์จริง</p>}
-            <label className="admin-field admin-field-full">เลือกไฟล์เพลง<input ref={fileInput} className="field" type="file" accept=".mp3,.flac,.wav,.m4a,.ogg,audio/mpeg,audio/flac,audio/wav,audio/mp4,audio/ogg" required disabled={busy || !selectedUsage?.enabled} onChange={event => { const value = event.target.files?.[0] || null; setFile(value); if (value && !title.trim()) setTitle(value.name.replace(/\.[^.]+$/, '').slice(0, 200)); setFormError(''); }} />
-              <span className="help-text">MP3, FLAC, WAV, M4A หรือ OGG{selectedUsage?.maxFileBytes != null ? ` · ไม่เกิน ${bytes(selectedUsage.maxFileBytes)} ต่อไฟล์` : ''} · เก็บต้นฉบับโดยไม่แปลงเสียง</span>
+            <label className="admin-field admin-field-full">เลือกไฟล์เพลง<input ref={fileInput} className="field" type="file" accept=".mp3,.flac,.wav,.m4a,.ogg,.mp4,audio/mpeg,audio/flac,audio/wav,audio/mp4,audio/ogg,video/mp4" required disabled={busy || !selectedUsage?.enabled} onChange={event => { const value = event.target.files?.[0] || null; setFile(value); if (value && !title.trim()) setTitle(value.name.replace(/\.[^.]+$/, '').slice(0, 200)); setFormError(''); }} />
+              <span className="help-text">MP3, FLAC, WAV, M4A, OGG หรือวิดีโอ MP4{selectedUsage?.maxFileBytes != null ? ` · ไม่เกิน ${bytes(selectedUsage.maxFileBytes)} ต่อไฟล์` : ''} · เก็บต้นฉบับโดยไม่แปลงเสียง</span>
               {file && <span className="help-text audio-break">{file.name} · {bytes(file.size)}</span>}
             </label>
             {fileProblem && <p className="error-text admin-field-full" role="alert">{fileProblem} ใช้ลิงก์ Google Drive สำหรับไฟล์ขนาดใหญ่ได้</p>}

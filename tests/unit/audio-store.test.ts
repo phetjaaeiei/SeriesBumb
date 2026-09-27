@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SupabaseAudioStore } from '../../src/lib/services/audio-store';
 import { firebaseImageStore, FirebaseImageStore } from '../../src/lib/services/firebase-image-store';
-import { audioFormat, canonicalDriveUrl, validatedAudioStream } from '../../src/lib/services/audio-validation';
+import { audioFormat, canonicalDriveUrl, validAudioSignature, validatedAudioStream } from '../../src/lib/services/audio-validation';
 
 const mp3 = new Uint8Array([73, 68, 51, 4, 0, 0, 0, 0, 0, 0, 1, 2]);
 
@@ -130,10 +130,18 @@ describe('stream validation', () => {
     expect(wrong.isComplete()).toBe(false);
   });
 
+  it('accepts an MP4 clip only with an ISO media ftyp box', () => {
+    const ftyp = new Uint8Array([0, 0, 0, 32, 102, 116, 121, 112, 105, 115, 111, 109]);
+    expect(validAudioSignature(ftyp, 'clip.mp4')).toBe(true);
+    expect(validAudioSignature(mp3, 'clip.mp4')).toBe(false);
+  });
+
   it('maps browser MIME aliases and strictly canonicalizes Drive links', () => {
     expect(audioFormat('SONG.WAV', 'audio/x-wav').contentType).toBe('audio/wav');
     expect(audioFormat('song.flac', '').contentType).toBe('audio/flac');
     expect(() => audioFormat('song.mp3', 'text/html')).toThrow();
+    expect(audioFormat('clip.MP4', 'video/mp4').contentType).toBe('video/mp4');
+    expect(() => audioFormat('clip.mp4', 'audio/mpeg')).toThrow();
     expect(canonicalDriveUrl('https://drive.google.com/open?id=abcdefghijklmnop&usp=sharing')).toBe('https://drive.google.com/file/d/abcdefghijklmnop/view');
   });
 });

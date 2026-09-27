@@ -6,11 +6,13 @@ const FORMATS = {
   wav: { mime: 'audio/wav', aliases: ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/vnd.wave'] },
   m4a: { mime: 'audio/mp4', aliases: ['audio/mp4', 'audio/m4a', 'audio/x-m4a'] },
   ogg: { mime: 'audio/ogg', aliases: ['audio/ogg', 'application/ogg'] },
+  // Page clips about a tape, kept privately beside its audio.
+  mp4: { mime: 'video/mp4', aliases: ['video/mp4', 'application/mp4'] },
 } as const;
 
 export function audioFormat(filename: string, suppliedMime: string): { extension: keyof typeof FORMATS; contentType: string } {
   const extension = filename.split('.').at(-1)?.toLowerCase();
-  if (!extension || !Object.hasOwn(FORMATS, extension)) throw new AudioArchiveError(400, 'รองรับไฟล์ MP3, FLAC, WAV, M4A และ OGG เท่านั้น');
+  if (!extension || !Object.hasOwn(FORMATS, extension)) throw new AudioArchiveError(400, 'รองรับไฟล์ MP3, FLAC, WAV, M4A, OGG และวิดีโอ MP4 เท่านั้น');
   const format = FORMATS[extension as keyof typeof FORMATS];
   const mime = suppliedMime.split(';')[0].trim().toLowerCase();
   if (mime && mime !== 'application/octet-stream' && !format.aliases.some(alias => alias === mime)) {
@@ -38,7 +40,7 @@ export function validAudioSignature(bytes: Uint8Array, filename: string): boolea
   if (extension === 'mp3') return text(0, 'ID3') || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0 && (bytes[1] & 0x06) !== 0);
   if (extension === 'flac') return text(0, 'fLaC');
   if (extension === 'wav') return text(0, 'RIFF') && text(8, 'WAVE');
-  if (extension === 'm4a') return text(4, 'ftyp');
+  if (extension === 'm4a' || extension === 'mp4') return text(4, 'ftyp');
   if (extension === 'ogg') return text(0, 'OggS');
   return false;
 }
