@@ -243,6 +243,10 @@ small { font-size: 13px; }
 .advanced-search-form label { display: grid; gap: 6px; color: var(--text-muted); font-size: .9rem; }
 .advanced-search-form .field { width: 100%; }
 .advanced-search-actions { display: flex; align-items: end; gap: 8px; }
+.contribution-form { display: grid; gap: 14px; max-width: 700px; }
+.contribution-form label { display: grid; gap: 6px; color: var(--text-muted); }
+.contribution-form .field { width: 100%; }
+.contribution-form button { justify-self: start; }
 @media (max-width: 700px) { .advanced-search-form { grid-template-columns: 1fr; } }
 .quick-create { max-width: 640px; margin-top: 24px; }
 .quick-create > label { display: block; margin-bottom: 6px; color: var(--label); font-size: 13px; }

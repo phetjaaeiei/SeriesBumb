@@ -1,5 +1,6 @@
 ---
 import { env } from 'cloudflare:workers';
+import { CorrectionForm } from '../../components/islands/ContributionForms';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
 import CreditLine from '../../components/layout/CreditLine.astro';
 import InfoBox from '../../components/ui/InfoBox.astro';
@@ -46,4 +47,5 @@ const firstComments = publicSong ? await listComments(env.DB, { songId: song.id 
     <section id="comments" class="tab-panel" data-tab-panel><h2>คอมเมนต์</h2>{firstComments ? <Comments songId={song.id} initialItems={firstComments.items} initialCursor={firstComments.nextCursor} initialCount={song.commentCount} authenticated={Boolean(viewerId)} banned={Boolean(Astro.locals.user?.commentBanned)} loginNext={Astro.url.pathname} client:visible /> : <p class="empty-state">เพลงนี้ยังไม่อยู่ในเทปที่เผยแพร่</p>}</section>
   </Tabs>
   <CreditLine createdByName={song.createdByName} createdAt={song.createdAt} updatedByName={song.updatedByName} updatedAt={song.updatedAt} />
+  <section class="section"><h2>เสนอแก้ข้อมูลเพลง</h2><CorrectionForm targetKind="song" targetId={song.id} authenticated={Boolean(Astro.locals.user)} loginNext={Astro.url.pathname} client:visible /></section>
 </BaseLayout>

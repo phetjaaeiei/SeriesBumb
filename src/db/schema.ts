@@ -336,6 +336,38 @@ export const catalogSource = sqliteTable('catalog_source', {
   uniqueIndex('catalog_source_entity_url_uq').on(table.entityKind, table.entityId, table.url),
 ]);
 
+export const review = sqliteTable('review', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  tapeId: text('tapeId').notNull().references(() => tape.id, { onDelete: 'cascade' }),
+  body: text('body').notNull(),
+  rating: integer('rating').notNull(),
+  status: text('status', { enum: ['pending', 'published', 'rejected'] }).notNull().default('pending'),
+  createdAt: integer('createdAt').notNull(),
+  reviewedAt: integer('reviewedAt'),
+  reviewedBy: text('reviewedBy').references(() => user.id, { onDelete: 'set null' }),
+}, (table) => [
+  uniqueIndex('review_user_tape_uq').on(table.userId, table.tapeId),
+  index('review_status_created_idx').on(table.status, table.createdAt),
+  index('review_tape_status_created_idx').on(table.tapeId, table.status, table.createdAt),
+]);
+
+export const catalogSubmission = sqliteTable('catalog_submission', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  targetKind: text('targetKind', { enum: ['artist', 'tape', 'song'] }).notNull(),
+  targetId: text('targetId').notNull(),
+  proposedChange: text('proposedChange').notNull(),
+  sourceUrl: text('sourceUrl'),
+  status: text('status', { enum: ['pending', 'accepted', 'rejected'] }).notNull().default('pending'),
+  createdAt: integer('createdAt').notNull(),
+  reviewedAt: integer('reviewedAt'),
+  reviewedBy: text('reviewedBy').references(() => user.id, { onDelete: 'set null' }),
+}, (table) => [
+  index('catalog_submission_status_created_idx').on(table.status, table.createdAt),
+  index('catalog_submission_user_created_idx').on(table.userId, table.createdAt),
+]);
+
 export const searchDoc = sqliteTable('search_doc', {
   docId: integer('docId').primaryKey({ autoIncrement: true }),
   kind: text('kind', { enum: SEARCH_KINDS }).notNull(),

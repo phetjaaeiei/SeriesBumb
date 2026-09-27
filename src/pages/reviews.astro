@@ -1,0 +1,15 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../components/layout/BaseLayout.astro';
+import { decodeCursor, encodeCursor } from '../lib/queries/cursor';
+const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
+const rows = (await env.DB.prepare(`SELECT r.id, r.body, r.rating, r.createdAt, t.slug, t.title, u.name AS authorName FROM review r JOIN tape t ON t.id = r.tapeId JOIN user u ON u.id = r.userId WHERE r.status = 'published' AND t.status = 'published' ${cursor ? 'AND (r.createdAt, r.id) < (?, ?)' : ''} ORDER BY r.createdAt DESC, r.id DESC LIMIT 21`).bind(...(cursor ? [cursor.key, cursor.id] : [])).all<{ id: string; body: string; rating: number; createdAt: number; slug: string; title: string; authorName: string }>()).results;
+const items = rows.slice(0, 20);
+const last = items.at(-1);
+const next = rows.length > 20 && last ? encodeCursor('new', last.createdAt, last.id) : null;
+---
+<BaseLayout title="รีวิวล่าสุด" canonicalPath="/reviews" noindex={Astro.url.searchParams.size > 0}>
+  <h1>รีวิวล่าสุด</h1><p class="page-lede">ความเห็นของสมาชิกที่ผ่านการตรวจแล้ว</p>
+  {items.length ? <ul class="plain-list section">{items.map(review => <li class="section"><h2><a href={`/tapes/${encodeURIComponent(review.slug)}#reviews`}>{review.title}</a></h2><p class="soft">{review.authorName} · {review.rating}/5 ดาว</p><p>{review.body}</p></li>)}</ul> : <p class="empty-state section">ยังไม่มีรีวิวที่เผยแพร่</p>}
+  {next && <p class="pagination"><a class="button" href={`/reviews?cursor=${encodeURIComponent(next)}`} rel="nofollow">รีวิวหน้าถัดไป →</a></p>}
+</BaseLayout>

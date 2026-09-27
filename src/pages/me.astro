@@ -43,6 +43,7 @@ const nextLink = (tab: Tab, value: string) => `/me?tab=${tab}&cursor=${encodeURI
 <BaseLayout title="ของฉัน" noindex>
   <h1>ของฉัน</h1>
   <p class="page-lede">เทปและเพลงที่คุณบันทึกไว้</p>
+  <p><a href="/me/submissions">ดูรีวิวและข้อเสนอแก้ข้อมูลของฉัน →</a></p>
   <Tabs tabs={[{ id: 'liked-tapes', label: 'เทปที่ถูกใจ' }, { id: 'liked-songs', label: 'เพลงที่ถูกใจ' }, { id: 'owned', label: 'เทปที่มี' }]}>
     <section id="liked-tapes" class="tab-panel" data-tab-panel><h2>เทปที่ถูกใจ</h2>
       {likedTapes.items.length ? <ul class="saved-list">{likedTapes.items.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`} class="saved-item"><span class="saved-cover">{item.coverThumbKey && env.IMAGE_BASE_URL ? <img src={imageUrl(item.coverThumbKey, env.IMAGE_BASE_URL)} alt="" loading="lazy" /> : <Placeholder label="ไม่มีรูป" />}</span><span><strong>{item.title}</strong><small>{formatYear(item.year)}</small></span></a></li>)}</ul> : <p class="empty-state">ยังไม่มีเทปที่ถูกใจ <a href="/tapes">เลือกดูเทปในคลัง</a></p>}

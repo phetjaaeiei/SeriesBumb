@@ -14,6 +14,7 @@ import { continueReindex, enqueueFullReindex } from '../lib/services/search-admi
 import { CatalogError, deleteCatalogEntity } from '../lib/services/catalog-delete';
 import { normalizeThai } from '../lib/thai';
 import { addCatalogSource, deleteCatalogSource } from '../lib/services/catalog-sources';
+import { ReviewError, moderateCorrection, moderateReview, submitCorrection, submitReview } from '../lib/services/reviews';
 
 async function runCatalog<T>(action: () => Promise<T>): Promise<T> {
   try { return await action(); }
@@ -35,7 +36,20 @@ async function runComment<T>(action: () => Promise<T>): Promise<T> {
   }
 }
 
+async function runReview<T>(action: () => Promise<T>): Promise<T> {
+  try { return await action(); }
+  catch (error) {
+    if (error instanceof ReviewError) throw new ActionError({ code: error.code, message: error.message });
+    console.error('Review action failed', error instanceof Error ? error.message : 'unknown');
+    throw new ActionError({ code: 'INTERNAL_SERVER_ERROR', message: 'บันทึกไม่สำเร็จ ลองอีกครั้ง' });
+  }
+}
+
 export const server = {
+  reviews: {
+    submit: defineMemberAction({ input: z.object({ tapeId: z.uuid(), rating: z.number().int().min(1).max(5), body: z.string().max(5000) }), handler: (input, context) => runReview(() => submitReview(env.DB, context.user.id, input.tapeId, input.rating, input.body)) }),
+    correct: defineMemberAction({ input: z.object({ targetKind: z.enum(['artist', 'tape', 'song']), targetId: z.uuid(), proposedChange: z.string().max(2500), sourceUrl: z.string().max(2000).optional() }), handler: (input, context) => runReview(() => submitCorrection(env.DB, context.user.id, input.targetKind, input.targetId, input.proposedChange, input.sourceUrl)) }),
+  },
   comments: {
     list: defineAction({
       input: commentTargetSchema.extend({ cursor: z.string().max(512).nullable().optional() }).refine(oneCommentTarget, 'กรุณาระบุเทปหรือเพลงหนึ่งรายการ'),
@@ -56,6 +70,10 @@ export const server = {
     setTapeOwned: defineMemberAction({ input: z.object({ tapeId: z.uuid(), owned: z.boolean() }), handler: (input, context) => setEngagement(env.DB, context.user.id, 'tapeOwned', input.tapeId, input.owned) }),
   },
   admin: {
+    reviews: {
+      moderate: defineAdminAction({ input: z.object({ id: z.uuid(), status: z.enum(['published', 'rejected']) }), handler: (input, context) => runReview(() => moderateReview(env.DB, context.user.id, input.id, input.status)) }),
+      moderateCorrection: defineAdminAction({ input: z.object({ id: z.uuid(), status: z.enum(['accepted', 'rejected']) }), handler: (input, context) => runReview(() => moderateCorrection(env.DB, context.user.id, input.id, input.status)) }),
+    },
     sources: {
       add: defineAdminAction({ input: z.object({ entityKind: z.enum(['artist', 'tape']), entityId: z.uuid(), title: z.string().trim().min(1).max(200), url: z.url().max(2000), claim: z.string().trim().min(1).max(500), accessedAt: z.number().int().min(946684800000).max(4102444800000) }), handler: (input, context) => runCatalog(() => addCatalogSource(env.DB, context.user.id, input)) }),
       delete: defineAdminAction({ input: z.object({ id: z.uuid() }), handler: ({ id }) => runCatalog(() => deleteCatalogSource(env.DB, id)) }),
