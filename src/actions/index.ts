@@ -6,7 +6,7 @@ import { requireAdmin } from '../lib/permissions';
 import { artistSaveSchema, collectionSaveSchema, labelSaveSchema, songSaveSchema, tapeSaveSchema, uploadSchema } from '../lib/schemas';
 import { createArtist, createCollection, createGenre, createLabel, createSong, createTapeDraft, saveArtist, saveCollection, saveGenre, saveLabel, saveSong, saveTape } from '../lib/services/catalog';
 import { deleteTapeImage, uploadImage } from '../lib/services/images';
-import { firebaseImageStore } from '../lib/services/firebase-image-store';
+import { supabaseImageStore } from '../lib/services/supabase-image-store';
 import { setEngagement } from '../lib/services/engagement';
 import { CommentError, createComment, deleteOwnComment, listComments } from '../lib/services/comments';
 import { moderateComment, setCommentBan, setUserRole } from '../lib/services/admin-community';
@@ -61,7 +61,7 @@ export const server = {
     }),
     deleteCatalog: defineAdminAction({
       input: z.object({ kind: z.enum(['tapes', 'songs', 'artists', 'labels', 'genres', 'collections']), id: z.uuid(), confirmation: z.string().max(200).optional() }),
-      handler: (input, context) => runCatalog(() => deleteCatalogEntity(env.DB, firebaseImageStore(env), input.kind, input.id, input.confirmation, promise => context.locals.cfContext.waitUntil(promise))),
+      handler: (input, context) => runCatalog(() => deleteCatalogEntity(env.DB, supabaseImageStore(env), input.kind, input.id, input.confirmation, promise => context.locals.cfContext.waitUntil(promise))),
     }),
     lookup: defineAdminAction({
       input: z.object({ kind: z.enum(['artists', 'labels', 'genres', 'songs', 'tapes']), query: z.string().trim().min(2).max(80) }),
@@ -102,7 +102,7 @@ export const server = {
     },
     tapes: {
       createDraft: defineAdminAction({ input: z.object({ title: z.string().max(200).optional() }), handler: (input, context) => runCatalog(() => createTapeDraft(env.DB, context.user.id, input.title)) }),
-      save: defineAdminAction({ input: tapeSaveSchema, handler: (input, context) => runCatalog(() => saveTape(env.DB, context.user.id, input, firebaseImageStore(env), promise => context.locals.cfContext.waitUntil(promise))) }),
+      save: defineAdminAction({ input: tapeSaveSchema, handler: (input, context) => runCatalog(() => saveTape(env.DB, context.user.id, input, supabaseImageStore(env), promise => context.locals.cfContext.waitUntil(promise))) }),
     },
     collections: {
       create: defineAdminAction({ input: z.object({ title: z.string().trim().min(1).max(200) }), handler: (input, context) => runCatalog(() => createCollection(env.DB, context.user.id, input.title)) }),
@@ -111,16 +111,16 @@ export const server = {
     images: {
       deleteTapeImage: defineAdminAction({
         input: z.object({ imageId: z.uuid() }),
-        handler: ({ imageId }, context) => runCatalog(() => deleteTapeImage(env.DB, firebaseImageStore(env), imageId, promise => context.locals.cfContext.waitUntil(promise))),
+        handler: ({ imageId }, context) => runCatalog(() => deleteTapeImage(env.DB, supabaseImageStore(env), imageId, promise => context.locals.cfContext.waitUntil(promise))),
       }),
       upload: defineAction({
         accept: 'form', input: uploadSchema,
         handler: (input, context) => {
           requireAdmin(context.locals);
-          if (env.FIREBASE_IMAGE_UPLOADS_ENABLED !== 'true') {
-            throw new ActionError({ code: 'SERVICE_UNAVAILABLE', message: 'พักการอัปโหลดรูป Firebase เพื่อควบคุมค่าใช้จ่าย Blaze' });
+          if (env.SUPABASE_IMAGE_UPLOADS_ENABLED !== 'true') {
+            throw new ActionError({ code: 'SERVICE_UNAVAILABLE', message: 'พักการอัปโหลดรูปเพื่อควบคุมพื้นที่จัดเก็บ' });
           }
-          return runCatalog(() => uploadImage(env.DB, firebaseImageStore(env), input));
+          return runCatalog(() => uploadImage(env.DB, supabaseImageStore(env), input));
         },
       }),
     },

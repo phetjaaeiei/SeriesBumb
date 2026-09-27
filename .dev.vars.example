@@ -6,6 +6,8 @@ GOOGLE_CLIENT_ID="replace-with-google-oauth-client-id"
 GOOGLE_CLIENT_SECRET="replace-with-google-oauth-client-secret"
 ADMIN_EMAILS="admin@example.com"
 SUPABASE_SECRET_KEY="replace-with-server-secret-key"
+SUPABASE_IMAGE_BUCKET="SeriesBumbImages"
+SUPABASE_IMAGE_UPLOADS_ENABLED="true"
 # Audio is private. Keep Firebase audio disabled for the free-only setup.
 AUDIO_FIREBASE_ENABLED="false"
 FIREBASE_IMAGE_UPLOADS_ENABLED="false"

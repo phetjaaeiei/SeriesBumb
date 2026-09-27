@@ -1,8 +1,16 @@
 import type { ImageStore } from './image-store';
+import { IMAGE_STORAGE_LIMIT } from './supabase-image-store';
 
 export type ImageEntityType = 'tapes' | 'artists' | 'labels' | 'collections';
 export type ImageVariant = 'full' | 'thumb' | 'og';
 export type ImageKind = 'front' | 'back' | 'inside' | 'cassette' | 'other';
+
+export function assertImageBudget(usedBytes: number, projectedBytes: number): void {
+  if (!Number.isSafeInteger(usedBytes) || usedBytes < 0 || !Number.isSafeInteger(projectedBytes) || projectedBytes < 0
+    || usedBytes + projectedBytes > IMAGE_STORAGE_LIMIT) {
+    throw new Error('พื้นที่รูปของเว็บใกล้เต็ม 50 MB กรุณาลบรูปเก่าก่อน');
+  }
+}
 
 export function sniffImage(bytes: Uint8Array): { extension: 'jpg' | 'webp'; contentType: 'image/jpeg' | 'image/webp' } | null {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { extension: 'jpg', contentType: 'image/jpeg' };
@@ -26,7 +34,7 @@ export interface UploadInput {
 
 export async function uploadImage(db: D1Database, bucket: ImageStore, input: UploadInput) {
   const { entityType, entityId, variant, file } = input;
-  if (file.size < 1 || file.size > 3 * 1024 * 1024) throw new Error('รูปต้องมีขนาดไม่เกิน 3 MB');
+  if (file.size < 1 || file.size > 3_000_000) throw new Error('รูปต้องมีขนาดไม่เกิน 3 MB');
   const bytes = new Uint8Array(await file.arrayBuffer());
   const format = sniffImage(bytes);
   if (!format) throw new Error('รับเฉพาะรูป JPEG หรือ WebP');
@@ -48,6 +56,10 @@ export async function uploadImage(db: D1Database, bucket: ImageStore, input: Upl
     }
     if (!full) throw new Error('ไม่พบรูปเต็มที่คู่กัน');
   }
+  const usage = await db.prepare('SELECT imageBytes FROM site_stats WHERE id = 1').first<{ imageBytes: number }>();
+  const projectedBytes = variant === 'full' ? file.size + 3_000_000 : variant === 'thumb' ? full!.size + file.size : file.size;
+  if (!usage) throw new Error('อ่านข้อมูลพื้นที่รูปไม่สำเร็จ');
+  assertImageBudget(usage.imageBytes, projectedBytes);
   await bucket.put(key, bytes, { httpMetadata: { contentType: format.contentType } });
 
   if (variant === 'thumb' && full) {

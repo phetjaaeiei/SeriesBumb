@@ -21,9 +21,11 @@
     "FIREBASE_STORAGE_BUCKET": "seriesbumb-32f9e.firebasestorage.app",
     "SUPABASE_URL": "https://lgtdhbeocizxxvptofdb.supabase.co",
     "SUPABASE_AUDIO_BUCKET": "SeriesBumb",
+    "SUPABASE_IMAGE_BUCKET": "SeriesBumbImages",
+    "SUPABASE_IMAGE_UPLOADS_ENABLED": "true",
     "AUDIO_FIREBASE_ENABLED": "false",
     "FIREBASE_IMAGE_UPLOADS_ENABLED": "false",
-    "IMAGE_BASE_URL": "https://firebasestorage.googleapis.com/v0/b/seriesbumb-32f9e.firebasestorage.app/o",
+    "IMAGE_BASE_URL": "https://lgtdhbeocizxxvptofdb.supabase.co/storage/v1/object/public/SeriesBumbImages",
     "CF_BEACON_TOKEN": ""
   },
   "observability": {
