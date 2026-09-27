@@ -13,11 +13,13 @@ import { getTapePage } from '../../lib/queries/tapes';
 import { imageUrl } from '../../lib/urls';
 import type { ArtistStatus, ArtistType } from '../../db/enums';
 import type { ReleaseType } from '../../db/enums';
+import { listCatalogSources } from '../../lib/services/catalog-sources';
 
 const slug = Astro.params.slug ?? '';
 const admin = Astro.locals.user?.role === 'admin';
 const artist = await env.DB.prepare(`SELECT a.*, creator.name AS createdByName, editor.name AS updatedByName FROM artist a LEFT JOIN user creator ON creator.id = a.createdBy LEFT JOIN user editor ON editor.id = a.updatedBy WHERE a.slug = ? ${admin ? '' : 'AND (a.publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1))'}`).bind(slug).first<{ id: string; slug: string; name: string; nameAlt: string | null; artistType: ArtistType | null; status: ArtistStatus; province: string | null; formedYear: number | null; themes: string | null; yearsActive: string | null; bio: string; imageKey: string | null; publishedTapeCount: number; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
 if (!artist) return Astro.rewrite('/404');
+const catalogSources = await listCatalogSources(env.DB, 'artist', artist.id);
 const hasPublicSong = (await env.DB.prepare('SELECT 1 AS value FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = ? AND s.isPublic = 1 LIMIT 1').bind(artist.id).first<{ value: number }>()) !== null;
 const publicArtist = artist.publishedTapeCount > 0 || hasPublicSong;
 const songCursor = decodeCursor('title', Astro.url.searchParams.get('songs_cursor'));
@@ -90,6 +92,7 @@ tabs.push({ id: 'similar', label: 'ศิลปินแนวใกล้กั
 <BaseLayout title={artist.name} description={(artist.bio || `ข้อมูลศิลปิน ${artist.name} และเพลงในคลัง`).replace(/\s+/gu, ' ').slice(0, 155)} canonicalPath={`/artists/${slug}`} noindex={!publicArtist || Astro.url.searchParams.size > 0}>
   {!publicArtist && <p class="draft-banner">ศิลปินฉบับร่าง · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
   <h1>{artist.name}</h1>{artist.nameAlt && <p class="subheading">{artist.nameAlt}</p>}
+  {admin && <p><a href={`/admin/sources?kind=artist&id=${artist.id}`}>จัดการแหล่งอ้างอิง</a></p>}
   <div class="entity-top">
     <InfoBox items={[
       { label: 'ประเภท', value: artistTypeLabel(artist.artistType) },
@@ -130,6 +133,7 @@ tabs.push({ id: 'similar', label: 'ศิลปินแนวใกล้กั
       {similarArtists.results.length ? <div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">ศิลปิน</th><th scope="col">แนวเพลงที่ตรงกัน</th></tr></thead><tbody>{similarArtists.results.map(row => <tr><td><a href={`/artists/${encodeURIComponent(row.slug)}`}>{row.name}</a></td><td class="mono">{row.sharedGenres}</td></tr>)}</tbody></table></div> : <p class="empty-state">ยังไม่มีข้อมูลแนวเพลงของเทปที่เผยแพร่เพียงพอสำหรับแนะนำศิลปิน</p>}
     </section>
     <section id="links" class="tab-panel" data-tab-panel><h2>ลิงก์ที่เกี่ยวข้อง</h2>
+      {catalogSources.length > 0 && <div class="section"><h3>แหล่งอ้างอิง</h3><ul class="plain-list">{catalogSources.map(source => <li><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title} ↗</a><p class="soft">{source.claim}</p></li>)}</ul></div>}
       {relatedLinks.results.length ? <ul class="plain-list">{relatedLinks.results.map(row => <li><a href={row.reelUrl} target="_blank" rel="noopener noreferrer">รีวิว {row.title} ↗</a> <span class="muted">· <a href={`/tapes/${encodeURIComponent(row.slug)}`}>ดูข้อมูลเทป</a></span></li>)}</ul> : <p class="empty-state">ยังไม่มีลิงก์รีวิวที่บันทึกไว้กับผลงานของศิลปินนี้</p>}
     </section>
   </Tabs>

@@ -13,6 +13,7 @@ import { moderateComment, setCommentBan, setUserRole } from '../lib/services/adm
 import { continueReindex, enqueueFullReindex } from '../lib/services/search-admin';
 import { CatalogError, deleteCatalogEntity } from '../lib/services/catalog-delete';
 import { normalizeThai } from '../lib/thai';
+import { addCatalogSource, deleteCatalogSource } from '../lib/services/catalog-sources';
 
 async function runCatalog<T>(action: () => Promise<T>): Promise<T> {
   try { return await action(); }
@@ -55,6 +56,10 @@ export const server = {
     setTapeOwned: defineMemberAction({ input: z.object({ tapeId: z.uuid(), owned: z.boolean() }), handler: (input, context) => setEngagement(env.DB, context.user.id, 'tapeOwned', input.tapeId, input.owned) }),
   },
   admin: {
+    sources: {
+      add: defineAdminAction({ input: z.object({ entityKind: z.enum(['artist', 'tape']), entityId: z.uuid(), title: z.string().trim().min(1).max(200), url: z.url().max(2000), claim: z.string().trim().min(1).max(500), accessedAt: z.number().int().min(946684800000).max(4102444800000) }), handler: (input, context) => runCatalog(() => addCatalogSource(env.DB, context.user.id, input)) }),
+      delete: defineAdminAction({ input: z.object({ id: z.uuid() }), handler: ({ id }) => runCatalog(() => deleteCatalogSource(env.DB, id)) }),
+    },
     health: defineAdminAction({
       input: z.object({}),
       handler: (_input, context) => ({ ok: true, userId: context.user.id }),

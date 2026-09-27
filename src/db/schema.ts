@@ -321,6 +321,21 @@ export const comment = sqliteTable('comment', {
   index('comment_created_id_idx').on(table.createdAt, table.id),
 ]);
 
+export const catalogSource = sqliteTable('catalog_source', {
+  id: text('id').primaryKey(),
+  entityKind: text('entityKind', { enum: ['artist', 'tape'] }).notNull(),
+  entityId: text('entityId').notNull(),
+  title: text('title').notNull(),
+  url: text('url').notNull(),
+  claim: text('claim').notNull(),
+  accessedAt: integer('accessedAt').notNull(),
+  createdBy: text('createdBy').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: integer('createdAt').notNull(),
+}, (table) => [
+  index('catalog_source_entity_idx').on(table.entityKind, table.entityId, table.createdAt),
+  uniqueIndex('catalog_source_entity_url_uq').on(table.entityKind, table.entityId, table.url),
+]);
+
 export const searchDoc = sqliteTable('search_doc', {
   docId: integer('docId').primaryKey({ autoIncrement: true }),
   kind: text('kind', { enum: SEARCH_KINDS }).notNull(),
