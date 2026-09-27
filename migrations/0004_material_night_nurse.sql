@@ -1,0 +1,1 @@
+ALTER TABLE `audio_file` ADD `signedAt` integer;

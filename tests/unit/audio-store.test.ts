@@ -6,6 +6,64 @@ import { audioFormat, canonicalDriveUrl, validatedAudioStream } from '../../src/
 const mp3 = new Uint8Array([73, 68, 51, 4, 0, 0, 0, 0, 0, 0, 1, 2]);
 
 describe('audio storage transport', () => {
+  it('issues a private upload token and verifies object metadata plus only twelve signature bytes', async () => {
+    const request = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const target = String(url);
+      const headers = new Headers(init?.headers);
+      expect(headers.get('apikey')).toBe('sb_secret_test-only');
+      expect(init?.redirect).toBe('manual');
+      if (target.endsWith('/bucket/SeriesBumb')) return Response.json({ id: 'SeriesBumb', public: false, file_size_limit: 52_428_800 });
+      if (init?.method === 'POST') {
+        expect(target).toBe('https://test-project.supabase.co/storage/v1/object/upload/sign/SeriesBumb/audio/file.mp3');
+        expect(headers.get('x-upsert')).toBe('false');
+        return Response.json({ url: '/object/upload/sign/SeriesBumb/audio/file.mp3?token=signed-test-token' });
+      }
+      expect(target).toBe('https://test-project.supabase.co/storage/v1/object/authenticated/SeriesBumb/audio/file.mp3');
+      if (init?.method === 'HEAD') return new Response(null, { headers: { 'Content-Length': String(mp3.length), 'Content-Type': 'audio/mpeg', 'Accept-Ranges': 'bytes' } });
+      expect(headers.get('Range')).toBe('bytes=0-11');
+      return new Response(mp3, { status: 206, headers: { 'Content-Length': '12', 'Content-Range': `bytes 0-11/${mp3.length}` } });
+    });
+    const store = new SupabaseAudioStore('https://test-project.supabase.co', 'sb_secret_test-only', 'SeriesBumb', request);
+    await store.assertBucketUploadLimit(52_428_800);
+    expect(await store.signUpload('audio/file.mp3')).toBe('https://test-project.supabase.co/storage/v1/object/upload/sign/SeriesBumb/audio/file.mp3?token=signed-test-token');
+    expect(await store.head('audio/file.mp3')).toEqual({ size: mp3.length, contentType: 'audio/mpeg' });
+    expect(await store.prefix('audio/file.mp3', mp3.length)).toEqual(mp3);
+    expect(request).toHaveBeenCalledTimes(4);
+  });
+
+  it('fails closed when the bucket is public or permits larger files than accounted for', async () => {
+    for (const bucket of [
+      { id: 'SeriesBumb', public: true, file_size_limit: 52_428_800 },
+      { id: 'SeriesBumb', public: false, file_size_limit: 52_428_801 },
+      { id: 'SeriesBumb', public: false, file_size_limit: null },
+    ]) {
+      const store = new SupabaseAudioStore('https://test-project.supabase.co', 'sb_secret_test-only', 'SeriesBumb', async () => Response.json(bucket));
+      await expect(store.assertBucketUploadLimit(52_428_800)).rejects.toMatchObject({ status: 503 });
+    }
+  });
+
+  it('rejects a signed upload URL pointing outside its reserved object key', async () => {
+    const store = new SupabaseAudioStore('https://test-project.supabase.co', 'sb_secret_test-only', 'SeriesBumb', async () => Response.json({ url: '/object/upload/sign/SeriesBumb/audio/other.mp3?token=signed-test-token' }));
+    await expect(store.signUpload('audio/file.mp3')).rejects.toMatchObject({ status: 502 });
+  });
+
+  it('refuses a full-object fallback when a ranged signature fetch is unavailable', async () => {
+    const store = new SupabaseAudioStore('https://test-project.supabase.co', 'sb_secret_test-only', 'SeriesBumb', async () => new Response(mp3, { status: 200 }));
+    await expect(store.prefix('audio/file.mp3', mp3.length)).rejects.toMatchObject({ status: 502 });
+  });
+
+  it('treats Supabase missing-object HEAD 400 as no completed upload', async () => {
+    const store = new SupabaseAudioStore('https://test-project.supabase.co', 'sb_secret_test-only', 'SeriesBumb', async () => new Response(null, { status: 400 }));
+    await expect(store.head('audio/file.mp3')).resolves.toBeNull();
+  });
+
+  it('treats only a NoSuchKey GET 400 as a missing object', async () => {
+    const missing = new SupabaseAudioStore('https://test-project.supabase.co', 'sb_secret_test-only', 'SeriesBumb', async () => Response.json({ statusCode: '404', error: 'not_found', message: 'Object not found', code: 'NoSuchKey' }, { status: 400 }));
+    await expect(missing.get('audio/file.mp3')).resolves.toBeNull();
+    const invalid = new SupabaseAudioStore('https://test-project.supabase.co', 'sb_secret_test-only', 'SeriesBumb', async () => Response.json({ statusCode: '400', error: 'InvalidRequest', message: 'bad' }, { status: 400 }));
+    await expect(invalid.get('audio/file.mp3')).rejects.toMatchObject({ status: 502 });
+  });
+
   it('streams through an authenticated server request without public tokens or upserts', async () => {
     const request = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
       expect(String(url)).toMatch(/^https:\/\/test-project\.supabase\.co\/storage\/v1\/object\//u);

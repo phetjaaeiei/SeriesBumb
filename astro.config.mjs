@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'astro/config';
 import cloudflare from '@astrojs/cloudflare';
 import react from '@astrojs/react';
@@ -12,6 +13,18 @@ const imageOrigin = (() => {
   }
 })();
 
+// Admin audio uploads PUT straight to the project's Supabase Storage origin.
+const supabaseOrigin = (() => {
+  const wrangler = readFileSync(new URL('./wrangler.jsonc', import.meta.url), 'utf8').replace(/^\s*\/\/.*$/gmu, '');
+  const configured = process.env.SUPABASE_URL || JSON.parse(wrangler).vars?.SUPABASE_URL;
+  if (!configured) return '';
+  const url = new URL(configured);
+  if (url.protocol !== 'https:' || !/^[a-z0-9-]+\.supabase\.co$/u.test(url.hostname)) {
+    throw new Error('SUPABASE_URL must be an https://<project>.supabase.co URL');
+  }
+  return url.origin;
+})();
+
 export default defineConfig({
   output: 'server',
   adapter: cloudflare({ imageService: 'passthrough' }),
@@ -24,7 +37,7 @@ export default defineConfig({
       directives: [
         "default-src 'self'",
         `img-src 'self' data: https://*.googleusercontent.com${imageOrigin ? ` ${imageOrigin}` : ''}`,
-        "connect-src 'self' https://cloudflareinsights.com",
+        `connect-src 'self' https://cloudflareinsights.com${supabaseOrigin ? ` ${supabaseOrigin}` : ''}`,
         "font-src 'self'",
         "object-src 'none'",
         "base-uri 'self'",

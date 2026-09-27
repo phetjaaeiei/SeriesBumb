@@ -1,6 +1,7 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
 import React, { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react';
+import { validAudioSignature } from '../../lib/services/audio-validation';
 import './AudioArchive.css';
 
 type Provider = 'supabase' | 'firebase' | 'drive';
@@ -17,7 +18,12 @@ interface Usage {
 }
 interface ArchiveResponse { files: AudioFile[]; nextCursor: string | null; usage: Usage[] }
 interface CreatedResponse { file: AudioFile; uploadUrl?: string }
+interface SignedUploadResponse { uploadUrl: string; uploadMethod: 'PUT'; uploadHeaders: Record<string, string>; expiresInSeconds: number }
+class AudioRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
 const endpoint = '/admin/api/audio';
+const supabaseTemporaryReservationBytes = 52_428_800;
 const providerNames: Record<Provider, string> = { supabase: 'Supabase', firebase: 'Firebase', drive: 'Google Drive' };
 const audioTypes: Record<string, string> = { mp3: 'audio/mpeg', flac: 'audio/flac', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg' };
 
@@ -39,15 +45,50 @@ function errorText(value: unknown, fallback: string) {
   return typeof body.error === 'string' ? body.error : body.error?.message || body.message || fallback;
 }
 
+/** Refuse a mislabeled file before it takes a Supabase slot that stays locked until its link expires. */
+async function signatureProblem(source: File): Promise<string> {
+  let head: Uint8Array;
+  try { head = new Uint8Array(await source.slice(0, 12).arrayBuffer()); }
+  catch { return 'อ่านไฟล์ที่เลือกไม่ได้ กรุณาเลือกไฟล์อีกครั้ง'; }
+  return validAudioSignature(head, source.name) ? '' : 'เนื้อหาไฟล์ไม่ตรงกับชนิดไฟล์เพลงที่ระบุ กรุณาเลือกไฟล์เพลงต้นฉบับ';
+}
+
+function validAudioId(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(value);
+}
+
+function signedUploadUrl(value: unknown, fileId: string, extension: string): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || !/^[a-z0-9-]+\.supabase\.co$/u.test(url.hostname)
+      || url.port || url.username || url.password || url.hash || !url.searchParams.get('token')
+      || !value.startsWith(`${url.origin}/storage/v1/object/upload/sign/`)) return false;
+    const path = url.pathname.match(/^\/storage\/v1\/object\/upload\/sign\/[A-Za-z0-9][A-Za-z0-9_-]{0,62}\/audio\/([0-9a-f-]{36})\/([0-9a-f-]{36})\.([a-z0-9]+)$/u);
+    return Boolean(path && path[1] === fileId && path[2] === fileId && path[3] === extension);
+  }
+  catch { return false; }
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { Accept: 'application/json', ...options?.headers } });
   if (response.redirected || response.status === 401) throw new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้งก่อนจัดการไฟล์');
+  if (options?.method === 'DELETE' && response.status === 204) return undefined as T;
   if (!response.headers.get('content-type')?.includes('application/json')) {
     throw new Error(response.status === 403 ? 'บัญชีนี้ไม่มีสิทธิ์จัดการไฟล์เพลง' : 'อ่านคำตอบจากระบบไม่ได้ กรุณาโหลดหน้านี้ใหม่หรือตรวจสอบการเข้าสู่ระบบ');
   }
   const data: unknown = await response.json();
-  if (!response.ok) throw new Error(errorText(data, 'ดำเนินการไม่สำเร็จ กรุณาลองอีกครั้ง'));
+  if (!response.ok) throw new AudioRequestError(errorText(data, 'ดำเนินการไม่สำเร็จ กรุณาลองอีกครั้ง'), response.status);
   return data as T;
+}
+
+async function signedSupabaseUploadUrl(fileId: string, extension: string, contentType: string): Promise<string> {
+  const signed = await request<SignedUploadResponse>(`${endpoint}/${encodeURIComponent(fileId)}/sign`, { method: 'POST' });
+  if (signed.uploadMethod !== 'PUT' || !signedUploadUrl(signed.uploadUrl, fileId, extension)
+    || signed.uploadHeaders?.['Content-Type'] !== contentType || signed.uploadHeaders?.['x-upsert'] !== 'false') {
+    throw new Error('ระบบส่งตำแหน่งอัปโหลดไม่ถูกต้อง กรุณาลองอีกครั้ง');
+  }
+  return signed.uploadUrl;
 }
 
 function RelatedRecord({ kind, selected, onChange, disabled }: { kind: 'songs' | 'tapes'; selected: Choice | null; onChange: (value: Choice | null) => void; disabled: boolean }) {
@@ -94,7 +135,7 @@ function StorageUsage({ usage }: { usage: Usage[] }) {
           {item.provider === 'drive' ? <p className="help-text">ไฟล์อยู่ในบัญชี Google Drive ของคุณ เว็บไม่สามารถอ่านพื้นที่คงเหลือหรือตรวจสอบสิทธิ์แชร์ได้</p> : <>
             <div className="audio-usage-numbers"><span className="mono">{bytes(total)} / {item.limitBytes === null ? 'ไม่ระบุ' : bytes(item.limitBytes)}</span>{item.maxFileBytes !== null && <span>ไม่เกิน {bytes(item.maxFileBytes)} ต่อไฟล์</span>}</div>
             {item.limitBytes !== null && <progress className="audio-meter" max={100} value={percentage} aria-label={`พื้นที่ ${item.label} ที่ใช้และจองไว้`} />}
-            {item.reservedBytes > 0 && <p className="help-text">รวมพื้นที่จองสำหรับไฟล์ที่ยังอัปโหลดไม่เสร็จ {bytes(item.reservedBytes)}</p>}
+            {item.reservedBytes > 0 && <p className="help-text">รวมพื้นที่ที่จองหรือกำลังคืน {bytes(item.reservedBytes)}{item.provider === 'supabase' ? ` (รายการที่ยังไม่ยืนยันไฟล์จอง ${bytes(supabaseTemporaryReservationBytes)} ต่อรายการ รายการที่กำลังลบนับตามขนาดจริง)` : ''}</p>}
             {item.downloadLimitBytes !== null && <p className="help-text">ดาวน์โหลดใน 32 วันล่าสุด {bytes(item.downloadBytes)} / {bytes(item.downloadLimitBytes)}</p>}
           </>}
           {item.reason && <p className={item.enabled ? 'help-text' : 'audio-blocked-reason'}>{item.reason}</p>}
@@ -128,7 +169,14 @@ export default function AudioArchive() {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
   const [progress, setProgress] = useState<number | null>(null);
+  const [uploadStage, setUploadStage] = useState<'reserving' | 'signing' | 'uploading' | 'finalizing' | null>(null);
+  const [checking, setChecking] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState<string | null>(null);
+  const [retryStage, setRetryStage] = useState<'checking' | 'signing' | 'uploading' | 'finalizing' | null>(null);
+  const [retryProgress, setRetryProgress] = useState<number | null>(null);
+  const [retryError, setRetryError] = useState<{ id: string; message: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const retryInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const titleInput = useRef<HTMLInputElement>(null);
   const requestSequence = useRef(0);
   const currentSearch = useRef('');
@@ -136,7 +184,7 @@ export default function AudioArchive() {
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const mounted = useRef(true);
 
-  const load = useCallback(async (search: string, cursor?: string) => {
+  const load = useCallback(async (search: string, cursor?: string): Promise<AudioFile[] | undefined> => {
     const sequence = ++requestSequence.current;
     activeRequest.current?.abort();
     const controller = new AbortController();
@@ -149,6 +197,7 @@ export default function AudioArchive() {
       if (sequence !== requestSequence.current || !mounted.current) return;
       setFiles(previous => cursor ? [...previous, ...data.files.filter(row => !previous.some(existing => existing.id === row.id))] : data.files);
       setUsage(data.usage); setNextCursor(data.nextCursor); setLoaded(true);
+      return data.files;
     } catch (cause) {
       if (sequence === requestSequence.current && mounted.current && !controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'โหลดคลังไฟล์ไม่ได้');
     } finally { if (sequence === requestSequence.current && mounted.current) setLoading(false); }
@@ -171,6 +220,8 @@ export default function AudioArchive() {
   const remaining = selectedUsage?.limitBytes == null ? null : Math.max(0, selectedUsage.limitBytes - selectedUsage.usedBytes - selectedUsage.reservedBytes);
   const fileProblem = file && file.size < 12 ? 'ไฟล์นี้ว่างหรือมีขนาดเล็กเกินกว่าจะเป็นไฟล์เพลง'
     : file && selectedUsage?.maxFileBytes != null && file.size > selectedUsage.maxFileBytes ? `ไฟล์ใหญ่เกินขีดจำกัด ${bytes(selectedUsage.maxFileBytes)} ของ ${selectedUsage.label}`
+    : file && mode === 'upload' && provider === 'supabase' && remaining !== null && remaining < supabaseTemporaryReservationBytes
+      ? `Supabase ต้องมีพื้นที่ว่างอย่างน้อย ${bytes(supabaseTemporaryReservationBytes)} เพื่อจองอัปโหลดชั่วคราว ตอนนี้เหลือ ${bytes(remaining)}`
     : file && remaining !== null && file.size > remaining ? `พื้นที่เหลือ ${bytes(remaining)} ไม่พอสำหรับไฟล์นี้` : '';
 
   function openForm(next: 'upload' | 'drive') {
@@ -184,14 +235,16 @@ export default function AudioArchive() {
     window.setTimeout(() => titleInput.current?.focus(), 0);
   }
 
-  function upload(url: string, source: File, contentType: string) {
+  function upload(url: string, source: File, headers: Record<string, string>, onProgress: (percentage: number) => void) {
     return new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhrRef.current = xhr;
       xhr.open('PUT', url);
-      xhr.setRequestHeader('Content-Type', contentType);
+      // Signed Supabase uploads must not send the admin's session to the storage origin.
+      xhr.withCredentials = false;
+      for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
       xhr.timeout = 15 * 60 * 1000;
-      xhr.upload.onprogress = event => { if (event.lengthComputable) setProgress(Math.min(100, Math.round(event.loaded / event.total * 100))); };
+      xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.min(100, Math.round(event.loaded / event.total * 100))); };
       xhr.onload = () => {
         xhrRef.current = null;
         if (xhr.responseURL && new URL(xhr.responseURL).pathname === '/login') { reject(new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบแล้วอัปโหลดอีกครั้ง')); return; }
@@ -217,9 +270,18 @@ export default function AudioArchive() {
     const extension = file?.name.split('.').at(-1)?.toLowerCase() || '';
     if (mode === 'upload' && !audioTypes[extension]) { setFormError('รองรับไฟล์ MP3, FLAC, WAV, M4A และ OGG'); return; }
     const contentType = mode === 'upload' ? audioTypes[extension] : 'application/octet-stream';
-    setBusy(true); setProgress(null);
+    setBusy(true); setProgress(null); setUploadStage('reserving');
     let reserved = false;
+    let directUploadFinished = false;
+    let signedUrlIssued = false;
+    let signRequested = false;
+    let reservedId = '';
+    let rowFailure = '';
     try {
+      if (mode === 'upload') {
+        const problem = await signatureProblem(file!);
+        if (problem) throw new Error(problem);
+      }
       const result = await request<CreatedResponse>(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: title.trim(), provider: mode === 'drive' ? 'drive' : provider,
@@ -230,16 +292,132 @@ export default function AudioArchive() {
       });
       if (mode === 'upload') {
         reserved = true;
-        if (!result.uploadUrl || !file) throw new Error('ระบบไม่ได้ส่งตำแหน่งอัปโหลด กรุณาลองอีกครั้ง');
+        if (validAudioId(result.file?.id)) reservedId = result.file.id;
+        if (!file) throw new Error('ไม่พบไฟล์ที่เลือก กรุณาเลือกไฟล์อีกครั้ง');
+        if (!validAudioId(result.file?.id)) throw new Error('ระบบส่งรหัสไฟล์ที่จองไว้ไม่ถูกต้อง กรุณาลองอีกครั้ง');
+        let uploadUrl = result.uploadUrl;
+        let uploadHeaders: Record<string, string> = { 'Content-Type': contentType };
+        if (provider === 'supabase') {
+          setUploadStage('signing');
+          signRequested = true;
+          uploadUrl = await signedSupabaseUploadUrl(result.file.id, extension, contentType);
+          signedUrlIssued = true;
+          uploadHeaders = { 'Content-Type': contentType, 'x-upsert': 'false' };
+        }
+        if (!uploadUrl) throw new Error('ระบบไม่ได้ส่งตำแหน่งอัปโหลด กรุณาลองอีกครั้ง');
+        setUploadStage('uploading');
         setProgress(0);
-        await upload(result.uploadUrl, file, contentType);
+        await upload(uploadUrl, file, uploadHeaders, setProgress);
+        if (provider === 'supabase') {
+          directUploadFinished = true;
+          setUploadStage('finalizing');
+          await request<{ file: AudioFile }>(`${endpoint}/${encodeURIComponent(result.file.id)}/finalize`, { method: 'POST' });
+        }
       }
       setMessage(mode === 'drive' ? 'เพิ่มลิงก์ Google Drive แล้ว' : 'เก็บไฟล์เพลงแล้ว');
       setTitle(''); setNote(''); setFile(null); setDriveUrl(''); setDriveConfirmed(false); setSong(null); setTape(null); setMode(null);
       if (fileInput.current) fileInput.current.value = '';
     } catch (cause) {
-      setFormError(`${cause instanceof Error ? cause.message : 'บันทึกไฟล์ไม่สำเร็จ'}${reserved ? ' หากมีรายการอัปโหลดค้างอยู่ด้านล่าง ให้ลบรายการนั้นเพื่อคืนพื้นที่จองก่อนลองใหม่' : ''}`);
-    } finally { setBusy(false); setProgress(null); await load(currentSearch.current); }
+      const detail = cause instanceof Error ? cause.message : 'บันทึกไฟล์ไม่สำเร็จ';
+      const rejected = cause instanceof AudioRequestError && cause.status === 400;
+      const failure = (directUploadFinished
+        ? rejected
+          ? `${detail} (ลบได้หลังลิงก์อัปโหลดหมดอายุ ประมาณ 2 ชั่วโมง 15 นาที)`
+          : `${detail} ไฟล์ส่งครบแล้วแต่ยังยืนยันไม่สำเร็จ กด “ตรวจสอบไฟล์” ที่รายการนี้ก่อนส่งซ้ำ`
+        : `${detail}${reserved ? provider === 'supabase'
+          ? signedUrlIssued
+            ? ' รายการนี้ยังจองพื้นที่ไว้ กด “ส่งไฟล์เดิม” ที่รายการนี้เพื่อส่งอีกครั้ง อย่าอัปโหลดใหม่เพราะจะจองพื้นที่เพิ่มอีกรายการ รายการนี้ลบได้หลังลิงก์อัปโหลดหมดอายุ'
+            : !signRequested || cause instanceof AudioRequestError
+              ? ' รายการนี้ยังจองพื้นที่ไว้ กด “ส่งไฟล์เดิม” ที่รายการนี้เพื่อลองอีกครั้ง หรือลบเพื่อคืนพื้นที่ได้ทันที'
+              // The Worker may have issued a link whose response never arrived.
+              : ' รายการนี้ยังจองพื้นที่ไว้ กด “ส่งไฟล์เดิม” ที่รายการนี้เพื่อลองอีกครั้ง หากลบไม่ได้ ให้รอลิงก์อัปโหลดหมดอายุก่อน'
+          : ' รายการนี้ยังจองพื้นที่ไว้ ตรวจสอบสถานะด้านล่างก่อนลองใหม่ หากกำลังอัปโหลดจะลบได้หลัง 15 นาที' : ''}`);
+      if (reserved && provider === 'supabase' && reservedId) {
+        // The reserved row now owns this file; keeping the form open invites a second reservation.
+        setRetryError({ id: reservedId, message: failure }); rowFailure = failure;
+        setTitle(''); setNote(''); setFile(null); setSong(null); setTape(null); setMode(null);
+        if (fileInput.current) fileInput.current.value = '';
+      } else setFormError(failure);
+    } finally {
+      setBusy(false); setProgress(null); setUploadStage(null);
+      // Show a newly reserved row even if the prior search would hide it.
+      if (reserved) { currentSearch.current = ''; setQuery(''); setActiveQuery(''); }
+      const rows = await load(currentSearch.current);
+      if (rowFailure && rows && !rows.some(item => item.id === reservedId)) setError(rowFailure);
+    }
+  }
+
+  async function checkUpload(row: AudioFile) {
+    if (busy || checking || deleting) return;
+    setChecking(row.id); setError(''); setMessage('');
+    try {
+      await request<{ file: AudioFile }>(`${endpoint}/${encodeURIComponent(row.id)}/finalize`, { method: 'POST' });
+      setMessage(`ตรวจสอบและบันทึกไฟล์ “${row.title}” แล้ว`);
+      await load(currentSearch.current);
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : 'ตรวจสอบไฟล์ไม่สำเร็จ';
+      // Reload first (it clears errors); a rejected file has just become failed.
+      await load(currentSearch.current);
+      setError(detail);
+    } finally { setChecking(null); }
+  }
+
+  async function retryUpload(row: AudioFile, source: File) {
+    if (busy || checking || deleting || downloading) return;
+    setRetryError(null); setError(''); setMessage('');
+    if (!validAudioId(row.id) || row.provider !== 'supabase' || !['pending', 'uploading'].includes(row.status)) {
+      setRetryError({ id: row.id, message: 'รายการนี้ไม่พร้อมรับไฟล์อีกครั้ง กรุณาโหลดรายการใหม่' });
+      return;
+    }
+    const extension = row.filename.split('.').at(-1)?.toLowerCase() || '';
+    if (source.name !== row.filename) {
+      setRetryError({ id: row.id, message: `เลือกไฟล์ต้นฉบับชื่อ “${row.filename}” เพื่อส่งต่อรายการเดิม` });
+      return;
+    }
+    if (source.size !== row.size) {
+      setRetryError({ id: row.id, message: `ไฟล์ต้องมีขนาด ${row.size.toLocaleString('th-TH')} ไบต์ตรงกับรายการเดิม` });
+      return;
+    }
+    if (audioTypes[extension] !== row.contentType) {
+      setRetryError({ id: row.id, message: 'ชนิดไฟล์ในรายการเดิมไม่ถูกต้อง กรุณาตรวจสอบข้อมูลไฟล์' });
+      return;
+    }
+    const problem = await signatureProblem(source);
+    if (problem) { setRetryError({ id: row.id, message: problem }); return; }
+    setBusy(true); setRetrying(row.id); setRetryStage('checking'); setRetryProgress(null);
+    let uploaded = false;
+    let failure = '';
+    try {
+      const finalizeUrl = `${endpoint}/${encodeURIComponent(row.id)}/finalize`;
+      try {
+        await request<{ file: AudioFile }>(finalizeUrl, { method: 'POST' });
+        setMessage(`พบไฟล์ “${row.title}” ในพื้นที่เก็บและบันทึกเรียบร้อยแล้ว`);
+        return;
+      } catch (cause) {
+        if (!(cause instanceof AudioRequestError) || cause.status !== 409) throw cause;
+      }
+      setRetryStage('signing');
+      const url = await signedSupabaseUploadUrl(row.id, extension, row.contentType);
+      setRetryStage('uploading'); setRetryProgress(0);
+      await upload(url, source, { 'Content-Type': row.contentType, 'x-upsert': 'false' }, setRetryProgress);
+      uploaded = true;
+      setRetryStage('finalizing');
+      await request<{ file: AudioFile }>(finalizeUrl, { method: 'POST' });
+      setMessage(`ส่งและบันทึกไฟล์ “${row.title}” แล้ว`);
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : 'ส่งไฟล์เดิมไม่สำเร็จ';
+      failure = cause instanceof AudioRequestError && cause.status === 400
+        ? `${detail} (ลบได้หลังลิงก์อัปโหลดหมดอายุ ประมาณ 2 ชั่วโมง 15 นาที)`
+        : uploaded
+          ? `${detail} ไฟล์ส่งครบแล้ว กด “ตรวจสอบไฟล์” ก่อนเลือกส่งอีกครั้ง`
+          : `${detail} รายการเดิมยังจองพื้นที่อยู่ เลือกไฟล์เดิมเพื่อลองส่งอีกครั้งได้`;
+      setRetryError({ id: row.id, message: failure });
+    } finally {
+      setBusy(false); setRetrying(null); setRetryStage(null); setRetryProgress(null);
+      const rows = await load(currentSearch.current);
+      // The reload shows only the first page; keep the error visible if the row left it.
+      if (failure && rows && !rows.some(item => item.id === row.id)) setError(`ส่งไฟล์ “${row.title}” ไม่สำเร็จ: ${failure}`);
+    }
   }
 
   async function remove(row: AudioFile) {
@@ -257,7 +435,7 @@ export default function AudioArchive() {
   }
 
   async function download(row: AudioFile) {
-    if (downloading) return;
+    if (busy || downloading) return;
     setDownloading(row.id); setError('');
     try {
       const response = await fetch(`${endpoint}/${encodeURIComponent(row.id)}`, { credentials: 'same-origin' });
@@ -277,6 +455,7 @@ export default function AudioArchive() {
 
   function search(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const value = query.trim();
     currentSearch.current = value;
     setActiveQuery(value); void load(value);
@@ -299,6 +478,7 @@ export default function AudioArchive() {
               {usage.filter(item => item.provider !== 'drive').map(item => <option key={item.provider} value={item.provider}>{item.label}{item.enabled ? '' : ' (ปิดอัปโหลด)'}</option>)}
             </select></label>
             {!selectedUsage?.enabled && <p className="audio-blocked-reason admin-field-full" role="status">{selectedUsage?.reason || 'พื้นที่นี้ยังไม่พร้อมใช้งาน'}</p>}
+            {provider === 'supabase' && selectedUsage?.enabled && <p className="help-text audio-direct-note admin-field-full">ไฟล์จะส่งตรงไปยัง Supabase Storage ต้องมีพื้นที่ว่าง {bytes(supabaseTemporaryReservationBytes)} เพื่อจองชั่วคราว หลังยืนยันแล้วระบบจะนับตามขนาดไฟล์จริง</p>}
             <label className="admin-field admin-field-full">เลือกไฟล์เพลง<input ref={fileInput} className="field" type="file" accept=".mp3,.flac,.wav,.m4a,.ogg,audio/mpeg,audio/flac,audio/wav,audio/mp4,audio/ogg" required disabled={busy || !selectedUsage?.enabled} onChange={event => { const value = event.target.files?.[0] || null; setFile(value); if (value && !title.trim()) setTitle(value.name.replace(/\.[^.]+$/, '').slice(0, 200)); setFormError(''); }} />
               <span className="help-text">MP3, FLAC, WAV, M4A หรือ OGG{selectedUsage?.maxFileBytes != null ? ` · ไม่เกิน ${bytes(selectedUsage.maxFileBytes)} ต่อไฟล์` : ''} · เก็บต้นฉบับโดยไม่แปลงเสียง</span>
               {file && <span className="help-text audio-break">{file.name} · {bytes(file.size)}</span>}
@@ -312,23 +492,23 @@ export default function AudioArchive() {
         </div>
         <details className="audio-relations"><summary>เชื่อมกับข้อมูลเพลงหรือเทป (ไม่บังคับ)</summary><div className="admin-form-grid"><RelatedRecord kind="songs" selected={song} onChange={setSong} disabled={busy} /><RelatedRecord kind="tapes" selected={tape} onChange={setTape} disabled={busy} /></div></details>
         {formError && <p className="error-text" role="alert">{formError}</p>}
-        {busy && <div className="audio-progress" role="status"><p>{progress === null ? 'กำลังเตรียมบันทึก…' : progress === 100 ? 'ส่งไฟล์ครบแล้ว กำลังตรวจสอบและบันทึก…' : `กำลังอัปโหลด ${progress}%`}</p>{progress !== null && <progress className="audio-meter" value={progress} max={100} aria-label="ความคืบหน้าการอัปโหลด" />}<p className="help-text">เปิดหน้านี้ไว้จนกว่าจะบันทึกเสร็จ</p></div>}
-        <div className="audio-actions"><button className="button button-primary" type="submit" disabled={busy || !selectedUsage?.enabled || !!fileProblem}>{busy ? 'กำลังบันทึก…' : mode === 'drive' ? 'บันทึกลิงก์' : 'อัปโหลดไฟล์เพลง'}</button>{busy && progress !== null && <button className="button" type="button" onClick={() => xhrRef.current?.abort()}>ยกเลิกอัปโหลด</button>}</div>
+        {busy && !retrying && <div className="audio-progress" role="status"><p>{mode === 'drive' ? 'กำลังบันทึกลิงก์…' : uploadStage === 'reserving' ? 'กำลังจองพื้นที่สำหรับไฟล์…' : uploadStage === 'signing' ? 'กำลังเตรียมช่องทางอัปโหลด…' : uploadStage === 'finalizing' ? 'ส่งไฟล์ครบแล้ว กำลังตรวจสอบและบันทึก…' : progress === 100 ? 'ส่งไฟล์ครบแล้ว กำลังรอผู้ให้บริการตอบกลับ…' : `กำลังอัปโหลด ${progress ?? 0}%`}</p>{progress !== null && <progress className="audio-meter" value={progress} max={100} aria-label="ความคืบหน้าการอัปโหลด" />}<p className="help-text">เปิดหน้านี้ไว้จนกว่าจะบันทึกเสร็จ</p></div>}
+        <div className="audio-actions"><button className="button button-primary" type="submit" disabled={busy || !selectedUsage?.enabled || !!fileProblem}>{busy ? retrying ? 'กำลังส่งไฟล์เดิม…' : 'กำลังบันทึก…' : mode === 'drive' ? 'บันทึกลิงก์' : 'อัปโหลดไฟล์เพลง'}</button>{busy && !retrying && uploadStage === 'uploading' && progress !== null && progress < 100 && <button className="button" type="button" onClick={() => xhrRef.current?.abort()}>ยกเลิกอัปโหลด</button>}</div>
       </form>}
 
-      <form className="search-page-form audio-search" role="search" onSubmit={search}><label className="sr-only" htmlFor="audio-query">ค้นหาไฟล์เพลง</label><input className="field" id="audio-query" type="search" value={query} maxLength={100} placeholder="ค้นหาชื่อไฟล์เพลง" onChange={event => setQuery(event.target.value)} /><button className="button" disabled={loading} type="submit">ค้นหา</button>{activeQuery && <button className="button" type="button" disabled={loading} onClick={() => { currentSearch.current = ''; setQuery(''); setActiveQuery(''); void load(''); }}>ล้าง</button>}</form>
+      <form className="search-page-form audio-search" role="search" onSubmit={search}><label className="sr-only" htmlFor="audio-query">ค้นหาไฟล์เพลง</label><input className="field" id="audio-query" type="search" value={query} maxLength={100} disabled={busy} placeholder="ค้นหาชื่อไฟล์เพลง" onChange={event => setQuery(event.target.value)} /><button className="button" disabled={loading || busy} type="submit">ค้นหา</button>{activeQuery && <button className="button" type="button" disabled={loading || busy} onClick={() => { currentSearch.current = ''; setQuery(''); setActiveQuery(''); void load(''); }}>ล้าง</button>}</form>
       {message && <p className="success-text" role="status">{message}</p>}
       {error && <div className="audio-error" role="alert"><p className="error-text">{error}</p><button className="button" type="button" disabled={loading} onClick={() => void load(activeQuery)}>ลองโหลดอีกครั้ง</button> <a href="/login?next=%2Fadmin%2Faudio">เข้าสู่ระบบ</a></div>}
       {loading && !loaded ? <div className="audio-loading" role="status"><p>กำลังอ่านรายการไฟล์และพื้นที่คงเหลือ…</p><div /><div /><div /></div> : <>
         {files.length ? <div className="table-wrap"><table className="data-table audio-file-table" aria-busy={loading}><caption className="sr-only">ไฟล์เพลงส่วนตัวของแอดมิน{activeQuery ? ` ผลค้นหา ${activeQuery}` : ''}</caption><thead><tr><th scope="col">ชื่อไฟล์</th><th scope="col">พื้นที่จัดเก็บ</th><th scope="col">ขนาด</th><th scope="col">วันที่เพิ่ม</th><th scope="col">จัดการ</th></tr></thead><tbody>
           {files.map(row => <tr key={row.id}>
-            <td data-label="ชื่อไฟล์"><strong>{row.title}</strong>{row.filename !== row.title && <span className="audio-file-meta">{row.filename}</span>}{row.note && <span className="audio-file-meta">{row.note}</span>}{row.status !== 'ready' && <span className="audio-pending">{row.status === 'pending' ? 'รออัปโหลดให้เสร็จ' : row.status === 'failed' ? 'อัปโหลดไม่สำเร็จ ลบรายการเพื่อคืนพื้นที่จอง' : row.status === 'uploading' ? 'กำลังอัปโหลด' : row.status === 'deleting' ? 'กำลังลบไฟล์' : 'ไฟล์ยังไม่พร้อมใช้งาน'}</span>}{(row.songId || row.tapeId) && <span className="audio-record-links">{row.songId && <a href={`/admin/songs/${encodeURIComponent(row.songId)}`}>ข้อมูลเพลง</a>}{row.tapeId && <a href={`/admin/tapes/${encodeURIComponent(row.tapeId)}`}>ข้อมูลเทป</a>}</span>}</td>
+            <td data-label="ชื่อไฟล์"><strong>{row.title}</strong>{row.filename !== row.title && <span className="audio-file-meta">{row.filename}</span>}{row.note && <span className="audio-file-meta">{row.note}</span>}{row.status !== 'ready' && <span className="audio-pending">{row.status === 'pending' ? 'รออัปโหลดให้เสร็จ' : row.status === 'failed' ? row.provider === 'supabase' ? 'ไฟล์ไม่ผ่านการตรวจสอบ ลบรายการได้หลังลิงก์อัปโหลดหมดอายุ' : 'อัปโหลดไม่สำเร็จ ลบรายการเพื่อคืนพื้นที่จอง' : row.status === 'uploading' ? row.provider === 'supabase' ? 'กำลังอัปโหลดหรือรอตรวจสอบไฟล์' : 'กำลังอัปโหลด' : row.status === 'deleting' ? 'กำลังลบไฟล์' : 'ไฟล์ยังไม่พร้อมใช้งาน'}</span>}{retrying === row.id && <div className="audio-retry-progress" role="status"><p>{retryStage === 'checking' ? 'กำลังตรวจว่ามีไฟล์เดิมอยู่แล้วหรือไม่…' : retryStage === 'signing' ? 'กำลังเตรียมลิงก์ส่งไฟล์เดิม…' : retryStage === 'finalizing' ? 'ส่งไฟล์ครบแล้ว กำลังยืนยัน…' : retryProgress === 100 ? 'ส่งไฟล์ครบแล้ว กำลังรอผู้ให้บริการ…' : `กำลังส่งไฟล์เดิม ${retryProgress ?? 0}%`}</p>{retryProgress !== null && <progress className="audio-meter" value={retryProgress} max={100} aria-label={`ความคืบหน้าการส่งไฟล์ ${row.title}`} />}<p className="help-text">เปิดหน้านี้ไว้จนกว่าจะบันทึกเสร็จ</p></div>}{retryError?.id === row.id && <p className="audio-retry-error error-text" role="alert">{retryError.message}</p>}{(row.songId || row.tapeId) && <span className="audio-record-links">{row.songId && <a href={`/admin/songs/${encodeURIComponent(row.songId)}`}>ข้อมูลเพลง</a>}{row.tapeId && <a href={`/admin/tapes/${encodeURIComponent(row.tapeId)}`}>ข้อมูลเทป</a>}</span>}</td>
             <td data-label="พื้นที่จัดเก็บ">{providerNames[row.provider]}</td><td data-label="ขนาด" className="mono">{row.provider === 'drive' && !row.size ? 'ดูใน Drive' : bytes(row.size)}</td><td data-label="วันที่เพิ่ม">{fileDate(row.createdAt)}</td>
-            <td data-label="จัดการ"><div className="audio-row-actions">{row.status === 'ready' && (row.provider === 'drive' ? <a className="button" href={`${endpoint}/${encodeURIComponent(row.id)}`} target="_blank" rel="noopener noreferrer">เปิดใน Drive<span className="sr-only"> {row.title}</span></a> : <button className="button" type="button" disabled={!!downloading || deleting === row.id} onClick={() => void download(row)}>{downloading === row.id ? 'กำลังดาวน์โหลด…' : 'ดาวน์โหลด'}<span className="sr-only"> {row.title}</span></button>)}<button type="button" className="button button-danger" disabled={busy || !!deleting || downloading === row.id} onClick={() => void remove(row)}>{deleting === row.id ? 'กำลังลบ…' : row.provider === 'drive' ? 'ลบลิงก์' : 'ลบไฟล์'}<span className="sr-only"> {row.title}</span></button></div></td>
+            <td data-label="จัดการ"><div className="audio-row-actions">{row.status === 'ready' && (row.provider === 'drive' ? <a className="button" href={`${endpoint}/${encodeURIComponent(row.id)}`} target="_blank" rel="noopener noreferrer">เปิดใน Drive<span className="sr-only"> {row.title}</span></a> : <button className="button" type="button" disabled={busy || !!downloading || deleting === row.id} onClick={() => void download(row)}>{downloading === row.id ? 'กำลังดาวน์โหลด…' : 'ดาวน์โหลด'}<span className="sr-only"> {row.title}</span></button>)}{row.provider === 'supabase' && row.status === 'uploading' && <button className="button" type="button" disabled={busy || !!checking || !!deleting} onClick={() => void checkUpload(row)}>{checking === row.id ? 'กำลังตรวจสอบ…' : 'ตรวจสอบไฟล์'}<span className="sr-only"> {row.title}</span></button>}{row.provider === 'supabase' && ['pending', 'uploading'].includes(row.status) && <><input className="audio-retry-input" type="file" accept={`.${row.filename.split('.').at(-1)?.toLowerCase() || 'mp3'}`} disabled={busy} aria-label={`เลือกไฟล์ต้นฉบับ ${row.filename} เพื่อส่งอีกครั้ง`} ref={input => { retryInputs.current[row.id] = input; }} onChange={event => { const source = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (source) void retryUpload(row, source); }} /><button className="button" type="button" disabled={busy || !!checking || !!deleting || !!downloading} onClick={() => retryInputs.current[row.id]?.click()}>ส่งไฟล์เดิม<span className="sr-only"> {row.title}</span></button></>}{retrying === row.id && retryStage === 'uploading' && retryProgress !== null && retryProgress < 100 && <button className="button" type="button" onClick={() => xhrRef.current?.abort()}>ยกเลิกส่งไฟล์<span className="sr-only"> {row.title}</span></button>}<button type="button" className="button button-danger" disabled={busy || !!deleting || !!checking || downloading === row.id} onClick={() => void remove(row)}>{deleting === row.id ? 'กำลังลบ…' : row.provider === 'drive' ? 'ลบลิงก์' : 'ลบไฟล์'}<span className="sr-only"> {row.title}</span></button></div></td>
           </tr>)}
         </tbody></table></div> : loaded && !error && <p className="empty-state">{activeQuery ? `ไม่พบไฟล์ที่ตรงกับ “${activeQuery}” ลองค้นด้วยชื่ออื่น` : 'ยังไม่มีไฟล์เพลง เริ่มจากอัปโหลดไฟล์หรือเพิ่มลิงก์ Google Drive ที่จำกัดสิทธิ์ไว้แล้ว'}</p>}
         {loading && loaded && <p className="help-text" role="status">กำลังโหลดรายการ…</p>}
-        {nextCursor && <p className="pagination"><button className="button" type="button" disabled={loading} onClick={() => void load(activeQuery, nextCursor)}>โหลดรายการถัดไป</button></p>}
+        {nextCursor && <p className="pagination"><button className="button" type="button" disabled={loading || busy} onClick={() => void load(activeQuery, nextCursor)}>โหลดรายการถัดไป</button></p>}
       </>}
     </section>
   </div>;

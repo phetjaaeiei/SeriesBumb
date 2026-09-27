@@ -31,7 +31,8 @@ export function canonicalDriveUrl(value: string): string {
   return `https://drive.google.com/file/d/${id}/view`;
 }
 
-function validSignature(bytes: Uint8Array, filename: string): boolean {
+export function validAudioSignature(bytes: Uint8Array, filename: string): boolean {
+  if (bytes.byteLength < 12) return false;
   const text = (offset: number, value: string) => [...value].every((char, index) => bytes[offset + index] === char.charCodeAt(0));
   const extension = filename.split('.').at(-1)?.toLowerCase();
   if (extension === 'mp3') return text(0, 'ID3') || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0 && (bytes[1] & 0x06) !== 0);
@@ -61,7 +62,7 @@ export async function validatedAudioStream(body: ReadableStream<Uint8Array>, exp
       header.set(next.value.subarray(0, copied), signatureBytes);
       signatureBytes += copied;
     }
-    if (!validSignature(header, filename)) throw new AudioArchiveError(400, 'เนื้อหาไฟล์ไม่ใช่ไฟล์เพลงชนิดที่ระบุ');
+    if (!validAudioSignature(header, filename)) throw new AudioArchiveError(400, 'เนื้อหาไฟล์ไม่ใช่ไฟล์เพลงชนิดที่ระบุ');
   } catch (error) {
     await reader.cancel().catch(() => undefined);
     throw error;

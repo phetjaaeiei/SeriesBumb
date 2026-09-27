@@ -29,6 +29,7 @@
 .audio-form .admin-field textarea { min-height: 90px; }
 .audio-form > .audio-actions { margin-top: 20px; }
 .audio-form .error-text { margin: 12px 0; }
+.audio-direct-note { max-width: 70ch; margin: 0; }
 .audio-form input[type="file"] { padding: 8px; }
 .audio-form input[type="file"]::file-selector-button { min-height: 32px; margin-right: 10px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; }
 .audio-break { overflow-wrap: anywhere; }
@@ -62,6 +63,10 @@
 .audio-file-table td strong { font-weight: 500; color: var(--heading); }
 .audio-file-meta { display: block; margin-top: 3px; color: var(--text-soft); font-size: 13px; white-space: pre-wrap; }
 .audio-pending { display: block; margin-top: 5px; color: var(--accent); font-size: 13px; }
+.audio-retry-input { display: none; }
+.audio-retry-progress { max-width: 360px; margin-top: 8px; color: var(--text-soft); font-size: 13px; }
+.audio-retry-progress p { margin: 0; }
+.audio-retry-error { margin: 8px 0 0; }
 .audio-record-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; font-size: 13px; }
 .audio-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .audio-row-actions .button { padding: 5px 10px; font-size: 13px; }

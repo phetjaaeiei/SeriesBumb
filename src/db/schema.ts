@@ -370,6 +370,7 @@ export const audioFile = sqliteTable('audio_file', {
   createdBy: text('createdBy').references(() => user.id, { onDelete: 'set null' }),
   createdAt: integer('createdAt').notNull(),
   updatedAt: integer('updatedAt').notNull(),
+  signedAt: integer('signedAt'),
 }, (table) => [
   index('audio_file_created_id_idx').on(table.createdAt, table.id),
   index('audio_file_provider_status_idx').on(table.provider, table.status),
