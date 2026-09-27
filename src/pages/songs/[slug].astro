@@ -6,6 +6,7 @@ import InfoBox from '../../components/ui/InfoBox.astro';
 import Tabs from '../../components/ui/Tabs.astro';
 import { formatYear } from '../../lib/format';
 import { imageUrl } from '../../lib/urls';
+import { presentSongNotes } from '../../lib/song-notes';
 import EngagementButton from '../../components/islands/EngagementButton';
 import Comments from '../../components/islands/Comments';
 import { listComments } from '../../lib/services/comments';
@@ -20,6 +21,7 @@ const [artists, tapes] = await Promise.all([
   env.DB.prepare(`SELECT t.slug, t.title, t.year, t.ogImageKey, tt.side, tt.position FROM tape_track tt JOIN tape t ON t.id = tt.tapeId WHERE tt.songId = ? AND t.status = 'published' ORDER BY t.yearSort, t.id, tt.side, tt.position LIMIT 100`).bind(song.id).all<{ slug: string; title: string; year: number | null; ogImageKey: string | null; side: string; position: number }>(),
 ]);
 const singerNames = artists.results.map(row => row.name).join(' / ') || '—';
+const songNotes = presentSongNotes(song.notes);
 const firstOg = tapes.results.find(row => row.ogImageKey)?.ogImageKey;
 const ogImage = firstOg && env.IMAGE_BASE_URL ? imageUrl(firstOg, env.IMAGE_BASE_URL) : undefined;
 const tabs = [{ id: 'tapes', label: 'อยู่ในเทป' }];
@@ -32,9 +34,10 @@ const firstComments = publicSong ? await listComments(env.DB, { songId: song.id 
 <BaseLayout title={song.title} description={`ข้อมูลเพลง ${song.title} โดย ${singerNames} | ซีรี่ย์บั้ม คลังเทปเพลงไทย`} canonicalPath={`/songs/${slug}`} ogImage={ogImage} noindex={!publicSong}>
   {!publicSong && <p class="draft-banner">เพลงฉบับร่าง · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
   <h1>{song.title}</h1>{song.titleAlt && <p class="subheading">{song.titleAlt}</p>}
-  <InfoBox items={[{ label: 'ผู้ร้อง', value: singerNames }, { label: 'คำร้อง', value: song.lyricist }, { label: 'ทำนอง', value: song.composer }, { label: 'เรียบเรียง', value: song.arranger }]} />
+  <InfoBox items={[{ label: 'ผู้ร้อง', value: singerNames }, { label: 'ความยาว', value: songNotes.duration }, { label: 'คำร้อง', value: song.lyricist }, { label: 'ทำนอง', value: song.composer }, { label: 'เรียบเรียง', value: song.arranger }]} />
   {publicSong && <p class="engagement-counts"><EngagementButton kind="songLike" targetId={song.id} initialValue={liked} initialCount={song.likeCount} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /></p>}
-  {song.notes && <p class="long-text section soft">{song.notes}</p>}
+  {songNotes.publicNotes.length > 0 && <section class="section song-note" aria-labelledby="song-note-title"><h2 id="song-note-title">หมายเหตุข้อมูล</h2>{songNotes.publicNotes.map(note => <p>{note}</p>)}</section>}
+  {admin && songNotes.sourceNotes && <details class="source-notes section"><summary>ข้อมูลต้นทางสำหรับแอดมิน</summary><p class="long-text">{songNotes.sourceNotes}</p></details>}
   <Tabs tabs={tabs}>
     <section id="tapes" class="tab-panel" data-tab-panel><h2>อยู่ในเทป</h2>
       {tapes.results.length ? <table class="data-table"><thead><tr><th scope="col">เทป</th><th scope="col">ปี</th><th scope="col">ตำแหน่ง</th></tr></thead><tbody>{tapes.results.map(row => <tr><td><a href={`/tapes/${encodeURIComponent(row.slug)}#songs`}>{row.title}</a></td><td class="mono">{formatYear(row.year)}</td><td class="mono">หน้า {row.side} #{row.position}</td></tr>)}</tbody></table> : <p class="empty-state">ข้อมูลเทปของเพลงนี้ยังอยู่ระหว่างตรวจสอบ</p>}
