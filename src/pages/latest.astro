@@ -4,10 +4,12 @@ import BaseLayout from '../components/layout/BaseLayout.astro';
 import TapeList from '../components/ui/TapeList.astro';
 import { getTapeHighlights, getTapePage } from '../lib/queries/tapes';
 const [recent, updated] = await Promise.all([getTapePage(env.DB, { pageSize: 50 }), getTapeHighlights(env.DB, 'updated', 50)]);
+const recentSongs = (await env.DB.prepare('SELECT slug, title, updatedAt FROM song WHERE isPublic = 1 ORDER BY updatedAt DESC, id DESC LIMIT 20').all<{ slug: string; title: string; updatedAt: number }>()).results;
 ---
 <BaseLayout title="เพิ่มล่าสุด" canonicalPath="/latest">
   <h1>เพิ่มล่าสุด</h1>
   <p class="page-lede">เทปที่เพิ่งเผยแพร่และเพิ่งแก้ไขข้อมูล</p>
   <section class="section"><div class="section-heading"><h2>เทปใหม่</h2></div>{recent.items.length ? <TapeList items={recent.items} /> : <p class="empty-state">ยังไม่มีเทปที่เผยแพร่</p>}</section>
   <section class="section"><div class="section-heading"><h2>แก้ไขล่าสุด</h2></div>{updated.length ? <TapeList items={updated} /> : <p class="empty-state">ยังไม่มีรายการแก้ไข</p>}</section>
+  <section class="section"><div class="section-heading"><h2>เพลงที่ปรับข้อมูลล่าสุด</h2></div>{recentSongs.length ? <ul class="browse-list">{recentSongs.map(song => <li><a href={`/songs/${encodeURIComponent(song.slug)}`}>{song.title}</a></li>)}</ul> : <p class="empty-state">ยังไม่มีเพลงที่เผยแพร่</p>}</section>
 </BaseLayout>
