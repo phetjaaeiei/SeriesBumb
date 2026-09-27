@@ -15,8 +15,10 @@ import type { ArtistStatus, ArtistType } from '../../db/enums';
 
 const slug = Astro.params.slug ?? '';
 const admin = Astro.locals.user?.role === 'admin';
-const artist = await env.DB.prepare(`SELECT a.*, creator.name AS createdByName, editor.name AS updatedByName FROM artist a LEFT JOIN user creator ON creator.id = a.createdBy LEFT JOIN user editor ON editor.id = a.updatedBy WHERE a.slug = ? ${admin ? '' : 'AND a.publishedTapeCount > 0'}`).bind(slug).first<{ id: string; slug: string; name: string; nameAlt: string | null; artistType: ArtistType | null; status: ArtistStatus; province: string | null; yearsActive: string | null; bio: string; imageKey: string | null; publishedTapeCount: number; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
+const artist = await env.DB.prepare(`SELECT a.*, creator.name AS createdByName, editor.name AS updatedByName FROM artist a LEFT JOIN user creator ON creator.id = a.createdBy LEFT JOIN user editor ON editor.id = a.updatedBy WHERE a.slug = ? ${admin ? '' : 'AND (a.publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1))'}`).bind(slug).first<{ id: string; slug: string; name: string; nameAlt: string | null; artistType: ArtistType | null; status: ArtistStatus; province: string | null; yearsActive: string | null; bio: string; imageKey: string | null; publishedTapeCount: number; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
 if (!artist) return Astro.rewrite('/404');
+const hasPublicSong = (await env.DB.prepare('SELECT 1 AS value FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = ? AND s.isPublic = 1 LIMIT 1').bind(artist.id).first<{ value: number }>()) !== null;
+const publicArtist = artist.publishedTapeCount > 0 || hasPublicSong;
 const songCursor = decodeCursor('title', Astro.url.searchParams.get('songs_cursor'));
 const songCursorFilter = songCursor ? 'AND (s.titleSort, s.id) > (?, ?)' : '';
 type SongRow = { id: string; slug: string; title: string; titleSort: string; firstTapeSlug: string | null; firstTapeTitle: string | null; firstTapeYear: number | null };
@@ -25,7 +27,7 @@ const [members, songs, genreRows, lastLabel] = await Promise.all([
   env.DB.prepare(`WITH song_page AS MATERIALIZED (
     SELECT s.id, s.slug, s.title, s.titleSort
     FROM song_artist sa JOIN song s ON s.id = sa.songId
-    WHERE sa.artistId = ? AND s.publishedTapeCount > 0 ${songCursorFilter}
+    WHERE sa.artistId = ? AND (s.isPublic = 1 OR s.publishedTapeCount > 0) ${songCursorFilter}
     ORDER BY s.titleSort, s.id LIMIT 101
   )
   SELECT sp.id, sp.slug, sp.title, sp.titleSort,
@@ -58,8 +60,8 @@ const tabs = [{ id: 'discography', label: 'ผลงาน' }];
 if (artist.artistType !== 'solo' && members.results.length) tabs.push({ id: 'members', label: 'สมาชิก' });
 tabs.push({ id: 'songs', label: 'เพลงที่ร้อง' });
 ---
-<BaseLayout title={artist.name} description={(artist.bio || `ศิลปิน ${artist.name} มี ${artist.publishedTapeCount} เทปในคลัง`).replace(/\s+/gu, ' ').slice(0, 155)} canonicalPath={`/artists/${slug}`} noindex={artist.publishedTapeCount === 0 || Astro.url.searchParams.size > 0}>
-  {artist.publishedTapeCount === 0 && <p class="draft-banner">ยังไม่มีเทปเผยแพร่ · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
+<BaseLayout title={artist.name} description={(artist.bio || `ข้อมูลศิลปิน ${artist.name} และเพลงในคลัง`).replace(/\s+/gu, ' ').slice(0, 155)} canonicalPath={`/artists/${slug}`} noindex={!publicArtist || Astro.url.searchParams.size > 0}>
+  {!publicArtist && <p class="draft-banner">ศิลปินฉบับร่าง · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
   <h1>{artist.name}</h1>{artist.nameAlt && <p class="subheading">{artist.nameAlt}</p>}
   <div class="entity-top">
     <InfoBox items={[

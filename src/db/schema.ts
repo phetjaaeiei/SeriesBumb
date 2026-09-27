@@ -219,6 +219,7 @@ export const song = sqliteTable('song', {
   likeCount: integer('likeCount').notNull().default(0),
   commentCount: integer('commentCount').notNull().default(0),
   publishedTapeCount: integer('publishedTapeCount').notNull().default(0),
+  isPublic: integer('isPublic', { mode: 'boolean' }).notNull().default(false),
   ...auditColumns(),
 }, (table) => [index('song_updated_at_id_idx').on(table.updatedAt, table.id)]);
 

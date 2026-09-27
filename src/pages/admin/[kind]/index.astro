@@ -19,7 +19,7 @@ if (query) nextParams.set('q', query);
 if (status !== 'all') nextParams.set('status', status);
 if (unlinked) nextParams.set('unlinked', '1');
 if (nextCursor) nextParams.set('cursor', nextCursor);
-const hasStatus = kind === 'tapes' || kind === 'collections';
+const hasStatus = kind === 'tapes' || kind === 'collections' || kind === 'songs';
 const hasUnlinked = kind === 'songs' || kind === 'artists';
 const hasFilters = Boolean(query || (hasStatus && status !== 'all') || (hasUnlinked && unlinked));
 ---

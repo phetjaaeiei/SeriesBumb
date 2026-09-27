@@ -7,6 +7,28 @@ import { searchPublic } from '../../src/lib/search';
 const db = env.DB;
 
 describe('catalog save and publish', () => {
+  it('publishes a standalone song and its artist without publishing a draft tape', async () => {
+    const userId = crypto.randomUUID();
+    const now = Date.now();
+    await db.prepare('INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)')
+      .bind(userId, 'แอดมินทดสอบ', `${userId}@example.com`, now, now).run();
+    const marker = userId.slice(0, 8);
+    const artist = await createArtist(db, userId, `Solo Artist ${marker}`);
+    const song = await createSong(db, userId, { title: `Solo Song ${marker}`, artistIds: [artist.id] });
+    expect((await db.prepare('SELECT isPublic, publishedTapeCount FROM song WHERE id = ?').bind(song.id).first<{ isPublic: number; publishedTapeCount: number }>()))
+      .toMatchObject({ isPublic: 0, publishedTapeCount: 0 });
+    expect((await searchPublic(db, `Solo Song ${marker}`)).some(item => item.slug === song.slug)).toBe(false);
+
+    await saveSong(db, userId, { id: song.id, title: `Solo Song ${marker}`, artistIds: [artist.id], isPublic: true });
+    expect((await searchPublic(db, `Solo Song ${marker}`)).some(item => item.kind === 'song' && item.slug === song.slug)).toBe(true);
+    expect((await searchPublic(db, `Solo Artist ${marker}`)).some(item => item.kind === 'artist' && item.slug === artist.slug)).toBe(true);
+    expect((await db.prepare('SELECT publishedTapeCount FROM song WHERE id = ?').bind(song.id).first<{ publishedTapeCount: number }>())?.publishedTapeCount).toBe(0);
+
+    await saveSong(db, userId, { id: song.id, title: `Solo Song ${marker}`, artistIds: [artist.id], isPublic: false });
+    expect((await searchPublic(db, `Solo Song ${marker}`)).some(item => item.slug === song.slug)).toBe(false);
+    expect((await searchPublic(db, `Solo Artist ${marker}`)).some(item => item.slug === artist.slug)).toBe(false);
+  });
+
   it('keeps non-tape slugs after ordinary edits and changes them only when requested', async () => {
     const userId = crypto.randomUUID();
     const now = Date.now();

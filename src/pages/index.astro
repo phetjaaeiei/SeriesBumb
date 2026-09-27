@@ -6,14 +6,17 @@ import TapeList from '../components/ui/TapeList.astro';
 import { getTapeHighlights, getTapePage } from '../lib/queries/tapes';
 
 let publishedTapeCount: number | null = null;
+let publicSongCount = 0;
 try {
   const row = await env.DB.prepare('SELECT publishedTapeCount FROM site_stats WHERE id = 1').first<{ publishedTapeCount: number }>();
   publishedTapeCount = row?.publishedTapeCount ?? 0;
+  publicSongCount = (await env.DB.prepare('SELECT COUNT(*) AS count FROM song WHERE isPublic = 1 OR publishedTapeCount > 0').first<{ count: number }>())?.count ?? 0;
 } catch {
   // The shell also renders before a local database has been migrated.
 }
 const browseLinks = [
   { href: '/tapes', label: 'เทปทั้งหมด' },
+  { href: '/songs', label: 'เพลงทั้งหมด' },
   { href: '/artists', label: 'ศิลปิน' },
   { href: '/decades', label: 'เลือกตามยุค' },
   { href: '/genres', label: 'แนวเพลง' },
@@ -26,6 +29,9 @@ const [updated, owned, featured] = publishedTapeCount ? await Promise.all([
   getTapeHighlights(env.DB, 'owned', 10),
   env.DB.prepare("SELECT slug, title FROM collection WHERE status = 'published' AND isFeatured = 1 ORDER BY position LIMIT 3").all<{ slug: string; title: string }>(),
 ]) : [[], [], { results: [] as { slug: string; title: string }[] }];
+const recentSongs = publishedTapeCount === 0 && publicSongCount > 0
+  ? (await env.DB.prepare(`SELECT slug, title FROM song WHERE isPublic = 1 OR publishedTapeCount > 0 ORDER BY updatedAt DESC, id DESC LIMIT 10`).all<{ slug: string; title: string }>()).results
+  : [];
 ---
 <BaseLayout title="ซีรี่ย์บั้ม · คลังเทปเพลง" canonicalPath="/">
   <div class="intro-grid">
@@ -34,9 +40,10 @@ const [updated, owned, featured] = publishedTapeCount ? await Promise.all([
       <h1>คลังเทปเพลงไทย</h1>
       <p class="page-lede">สำรวจตลับเทป เพลง ศิลปิน และเรื่องราวที่ยังอยู่ในความทรงจำ ค้นหาชื่อที่นึกออก หรือค่อย ๆ เปิดดูตามยุคและแนวเพลง</p>
     </div>
-    <div class="intro-count" aria-label="จำนวนเทปที่เผยแพร่">
+    <div class="intro-count" aria-label="จำนวนข้อมูลที่เผยแพร่">
       <strong class="mono">{publishedTapeCount === null ? '—' : publishedTapeCount.toLocaleString('th-TH')}</strong>
       <span class="muted">เทปในคลังตอนนี้</span>
+      {publicSongCount > 0 && <><strong class="mono">{publicSongCount.toLocaleString('th-TH')}</strong><span class="muted">เพลงในคลังตอนนี้</span></>}
     </div>
   </div>
 
@@ -63,7 +70,8 @@ const [updated, owned, featured] = publishedTapeCount ? await Promise.all([
       {owned.length > 0 && <section class="section" aria-labelledby="owned-title"><div class="section-heading"><h2 id="owned-title">เทปที่คนมีเยอะที่สุด</h2></div><TapeList items={owned} /></section>}
     </>
   )}
-  {publishedTapeCount === 0 && (
+  {recentSongs.length > 0 && <section class="section" aria-labelledby="recent-songs-title"><div class="section-heading"><h2 id="recent-songs-title">เพลงในคลัง</h2><a href="/songs">ดูทั้งหมด</a></div><ul class="browse-list">{recentSongs.map(song => <li><a href={`/songs/${encodeURIComponent(song.slug)}`}>{song.title}</a></li>)}</ul></section>}
+  {publishedTapeCount === 0 && recentSongs.length === 0 && (
     <section class="section" aria-labelledby="latest-title">
       <div class="section-heading"><h2 id="latest-title">เพิ่มล่าสุด</h2></div>
       <div class="empty-state">

@@ -21,15 +21,16 @@ async function loadDocuments(db: D1Database, refs: Ref[]): Promise<Doc[]> {
         FROM tape t LEFT JOIN label l ON l.id = t.labelId WHERE t.id IN (SELECT value FROM json_each(?))`).bind(values).all<{ id: string; title: string; titleAlt: string | null; catalogNo: string | null; status: string; labelName: string | null; artistNames: string | null }>()).results;
       result.push(...rows.map(row => doc(kind, row.id, row.title, [row.title, row.titleAlt, row.artistNames, row.labelName, row.catalogNo], row.status === 'published')));
     } else if (kind === 'song') {
-      const rows = (await db.prepare(`SELECT s.id, s.title, s.titleAlt, s.lyricist, s.composer, s.publishedTapeCount,
+      const rows = (await db.prepare(`SELECT s.id, s.title, s.titleAlt, s.lyricist, s.composer, s.publishedTapeCount, s.isPublic,
         (SELECT group_concat(a.name, ' | ') FROM song_artist sa JOIN artist a ON a.id = sa.artistId WHERE sa.songId = s.id) AS singers
-        FROM song s WHERE s.id IN (SELECT value FROM json_each(?))`).bind(values).all<{ id: string; title: string; titleAlt: string | null; lyricist: string | null; composer: string | null; publishedTapeCount: number; singers: string | null }>()).results;
-      result.push(...rows.map(row => doc(kind, row.id, row.title, [row.title, row.titleAlt, row.singers, row.lyricist, row.composer], row.publishedTapeCount > 0)));
+        FROM song s WHERE s.id IN (SELECT value FROM json_each(?))`).bind(values).all<{ id: string; title: string; titleAlt: string | null; lyricist: string | null; composer: string | null; publishedTapeCount: number; isPublic: number; singers: string | null }>()).results;
+      result.push(...rows.map(row => doc(kind, row.id, row.title, [row.title, row.titleAlt, row.singers, row.lyricist, row.composer], row.isPublic === 1 || row.publishedTapeCount > 0)));
     } else if (kind === 'artist') {
       const rows = (await db.prepare(`SELECT a.id, a.name, a.nameAlt, a.publishedTapeCount,
+        EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1) AS hasPublicSong,
         (SELECT group_concat(m.name, ' | ') FROM artist_member m WHERE m.artistId = a.id) AS members
-        FROM artist a WHERE a.id IN (SELECT value FROM json_each(?))`).bind(values).all<{ id: string; name: string; nameAlt: string | null; publishedTapeCount: number; members: string | null }>()).results;
-      result.push(...rows.map(row => doc(kind, row.id, row.name, [row.name, row.nameAlt, row.members], row.publishedTapeCount > 0)));
+        FROM artist a WHERE a.id IN (SELECT value FROM json_each(?))`).bind(values).all<{ id: string; name: string; nameAlt: string | null; publishedTapeCount: number; hasPublicSong: number; members: string | null }>()).results;
+      result.push(...rows.map(row => doc(kind, row.id, row.name, [row.name, row.nameAlt, row.members], row.publishedTapeCount > 0 || row.hasPublicSong === 1)));
     } else if (kind === 'label') {
       const rows = (await db.prepare('SELECT id, name, nameAlt, publishedTapeCount FROM label WHERE id IN (SELECT value FROM json_each(?))').bind(values).all<{ id: string; name: string; nameAlt: string | null; publishedTapeCount: number }>()).results;
       result.push(...rows.map(row => doc(kind, row.id, row.name, [row.name, row.nameAlt], row.publishedTapeCount > 0)));

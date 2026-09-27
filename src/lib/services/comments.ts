@@ -24,7 +24,7 @@ export function normalizeComment(input: string): string {
 function targetConfig(target: CommentTarget) {
   return target.tapeId
     ? { column: 'tapeId' as const, id: target.tapeId, table: 'tape' as const, visible: "status = 'published'" }
-    : { column: 'songId' as const, id: target.songId!, table: 'song' as const, visible: 'publishedTapeCount > 0' };
+    : { column: 'songId' as const, id: target.songId!, table: 'song' as const, visible: '(isPublic = 1 OR publishedTapeCount > 0)' };
 }
 
 async function assertVisible(db: D1Database, target: CommentTarget) {

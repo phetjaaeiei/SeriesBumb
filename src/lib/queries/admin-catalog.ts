@@ -36,9 +36,9 @@ export async function getAdminCatalogPage(db: D1Database, options: AdminCatalogO
   const where: string[] = [];
   const bindings: (string | number)[] = [];
 
-  if ((options.kind === 'tapes' || options.kind === 'collections') && options.status && options.status !== 'all') {
-    where.push('e.status = ?');
-    bindings.push(options.status);
+  if ((options.kind === 'tapes' || options.kind === 'collections' || options.kind === 'songs') && options.status && options.status !== 'all') {
+    where.push(options.kind === 'songs' ? '(e.isPublic = 1 OR e.publishedTapeCount > 0) = ?' : 'e.status = ?');
+    bindings.push(options.kind === 'songs' ? Number(options.status === 'published') : options.status);
   }
   if (options.unlinked && options.kind === 'songs') {
     where.push('NOT EXISTS (SELECT 1 FROM tape_track tt WHERE tt.songId = e.id)');
@@ -75,7 +75,7 @@ export async function getAdminCatalogPage(db: D1Database, options: AdminCatalogO
     bindings.push(cursor.key, cursor.id);
   }
   const direction = config.sort === 'new' ? 'DESC' : 'ASC';
-  const statusColumn = options.kind === 'tapes' || options.kind === 'collections' ? 'e.status' : 'NULL';
+  const statusColumn = options.kind === 'songs' ? "CASE WHEN e.isPublic = 1 OR e.publishedTapeCount > 0 THEN 'published' ELSE 'draft' END" : options.kind === 'tapes' || options.kind === 'collections' ? 'e.status' : 'NULL';
   const result = await db.prepare(`
     SELECT e.id, e.slug, e.${config.name} AS title, ${statusColumn} AS status, e.${config.key} AS sortKey
     FROM ${config.table} e

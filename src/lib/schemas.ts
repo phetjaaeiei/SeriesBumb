@@ -27,6 +27,7 @@ export const labelSaveSchema = z.object({
 
 export const songSaveSchema = z.object({
   id: uuid, title, titleAlt: optionalText(200), slug, artistIds: ids.optional(),
+  isPublic: z.boolean().optional(),
   lyricist: optionalText(200), composer: optionalText(200), arranger: optionalText(200),
   lyrics: optionalText(10000), notes: optionalText(1000),
 });

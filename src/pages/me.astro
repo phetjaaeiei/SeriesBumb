@@ -27,7 +27,7 @@ async function tapePage(table: 'tape_like' | 'tape_owner', pageCursor: typeof cu
 
 async function songPage(pageCursor: typeof cursor) {
   const extra = pageCursor ? 'AND (e.createdAt, e.songId) < (?, ?)' : '';
-  const rows = (await env.DB.prepare(`SELECT e.songId AS id, e.createdAt, s.slug, s.title, s.publishedTapeCount FROM song_like e JOIN song s ON s.id = e.songId WHERE e.userId = ? AND s.publishedTapeCount > 0 ${extra} ORDER BY e.createdAt DESC, e.songId DESC LIMIT 49`).bind(userId, ...(pageCursor ? [pageCursor.key, pageCursor.id] : [])).all<SongEntry>()).results;
+  const rows = (await env.DB.prepare(`SELECT e.songId AS id, e.createdAt, s.slug, s.title, s.publishedTapeCount FROM song_like e JOIN song s ON s.id = e.songId WHERE e.userId = ? AND (s.isPublic = 1 OR s.publishedTapeCount > 0) ${extra} ORDER BY e.createdAt DESC, e.songId DESC LIMIT 49`).bind(userId, ...(pageCursor ? [pageCursor.key, pageCursor.id] : [])).all<SongEntry>()).results;
   const items = rows.slice(0, 48);
   const last = items.at(-1);
   return { items, next: rows.length > 48 && last ? encodeCursor('new', last.createdAt, last.id) : null };
@@ -49,7 +49,7 @@ const nextLink = (tab: Tab, value: string) => `/me?tab=${tab}&cursor=${encodeURI
       {likedTapes.next && <p class="pagination"><a class="button" href={nextLink('liked-tapes', likedTapes.next)} rel="nofollow">หน้าถัดไป</a></p>}
     </section>
     <section id="liked-songs" class="tab-panel" data-tab-panel><h2>เพลงที่ถูกใจ</h2>
-      {likedSongs.items.length ? <ul class="saved-list">{likedSongs.items.map(item => <li><a href={`/songs/${encodeURIComponent(item.slug)}`} class="saved-item"><span><strong>{item.title}</strong><small>อยู่ในเทป {item.publishedTapeCount.toLocaleString('th-TH')} ชุด</small></span></a></li>)}</ul> : <p class="empty-state">ยังไม่มีเพลงที่ถูกใจ <a href="/search">ค้นหาเพลง</a></p>}
+      {likedSongs.items.length ? <ul class="saved-list">{likedSongs.items.map(item => <li><a href={`/songs/${encodeURIComponent(item.slug)}`} class="saved-item"><span><strong>{item.title}</strong><small>{item.publishedTapeCount > 0 ? `อยู่ในเทป ${item.publishedTapeCount.toLocaleString('th-TH')} ชุด` : 'ข้อมูลเพลงในคลัง'}</small></span></a></li>)}</ul> : <p class="empty-state">ยังไม่มีเพลงที่ถูกใจ <a href="/songs">เลือกดูเพลงในคลัง</a></p>}
       {likedSongs.next && <p class="pagination"><a class="button" href={nextLink('liked-songs', likedSongs.next)} rel="nofollow">หน้าถัดไป</a></p>}
     </section>
     <section id="owned" class="tab-panel" data-tab-panel><h2>เทปที่มี</h2>

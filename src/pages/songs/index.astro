@@ -1,0 +1,25 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
+
+const cursor = decodeCursor('title', Astro.url.searchParams.get('cursor'));
+const rows = (await env.DB.prepare(`SELECT s.id, s.slug, s.title, s.titleSort,
+  (SELECT group_concat(a.name, ' / ') FROM song_artist sa JOIN artist a ON a.id = sa.artistId WHERE sa.songId = s.id ORDER BY sa.position) AS artists
+  FROM song s WHERE (s.isPublic = 1 OR s.publishedTapeCount > 0)
+  ${cursor ? 'AND (s.titleSort, s.id) > (?, ?)' : ''}
+  ORDER BY s.titleSort, s.id LIMIT 51`)
+  .bind(...(cursor ? [cursor.key, cursor.id] : []))
+  .all<{ id: string; slug: string; title: string; titleSort: string; artists: string | null }>()).results;
+const songs = rows.slice(0, 50);
+const last = songs.at(-1);
+const next = rows.length > 50 && last ? encodeCursor('title', last.titleSort, last.id) : null;
+---
+<BaseLayout title="เพลงทั้งหมด" description="เปิดดูข้อมูลเพลงในคลังซีรี่ย์บั้ม ไฟล์เสียงต้นฉบับเก็บไว้ในคลังส่วนตัว" canonicalPath="/songs" noindex={Boolean(cursor)}>
+  <h1>เพลงในคลัง</h1>
+  <p class="page-lede">ข้อมูลเพลงที่บันทึกจากเทปและแหล่งเก็บเก่า ไฟล์เสียงต้นฉบับเก็บไว้ในคลังส่วนตัว</p>
+  {songs.length ? <div class="table-wrap section"><table class="data-table"><thead><tr><th scope="col">เพลง</th><th scope="col">ศิลปิน</th></tr></thead><tbody>
+    {songs.map(song => <tr><td><a href={`/songs/${encodeURIComponent(song.slug)}`}>{song.title}</a></td><td>{song.artists || 'ไม่ระบุ'}</td></tr>)}
+  </tbody></table></div> : <p class="empty-state section">ยังไม่มีเพลงที่เผยแพร่</p>}
+  {next && <nav class="pagination" aria-label="หน้ารายการเพลง"><a class="button" href={`/songs?cursor=${encodeURIComponent(next)}`} rel="nofollow">เพลงหน้าถัดไป →</a></nav>}
+</BaseLayout>

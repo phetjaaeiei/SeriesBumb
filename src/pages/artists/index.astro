@@ -11,11 +11,12 @@ const params = Astro.url.searchParams;
 const rawProvince = params.get('province');
 const province = rawProvince && isProvince(rawProvince) ? rawProvince : null;
 const letters = CATALOG_LETTERS;
-const defaultLetter = province ? null : await env.DB.prepare('SELECT nameSort FROM artist WHERE publishedTapeCount > 0 ORDER BY nameSort, id LIMIT 1').first<{ nameSort: string }>();
+const visibleArtist = "(publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1))";
+const defaultLetter = province ? null : await env.DB.prepare(`SELECT nameSort FROM artist WHERE ${visibleArtist} ORDER BY nameSort, id LIMIT 1`).first<{ nameSort: string }>();
 const requested = params.get('l');
 const letter = province ? null : requested && letters.includes(requested) ? requested : defaultLetter?.nameSort.slice(1, 2) ?? null;
 const cursor = decodeCursor('title', params.get('cursor'));
-const where = ['publishedTapeCount > 0'];
+const where = [visibleArtist];
 const bindings: (string | number)[] = [];
 if (province) { where.push('province = ?'); bindings.push(province); }
 else if (letter && letter !== '0-9') { where.push('nameSort >= ? AND nameSort < ?'); bindings.push(`${/[A-Z]/u.test(letter) ? '2' : '1'}${letter.toLowerCase()}`, `${/[A-Z]/u.test(letter) ? '2' : '1'}${letter.toLowerCase()}\uffff`); }
@@ -34,7 +35,7 @@ const title = province ? `ศิลปินจาก${province}` : 'ศิล�
 ---
 <BaseLayout title={title} canonicalPath={province ? `/artists?province=${encodeURIComponent(province)}` : '/artists'} noindex={params.size > 0}>
   <h1>{title}</h1>
-  {province ? <p class="page-lede"><a href="/artists/provinces">เลือกจังหวัดอื่น</a></p> : <p class="page-lede">เลือกตัวอักษรเพื่อเปิดรายชื่อศิลปินที่มีเทปในคลัง</p>}
+  {province ? <p class="page-lede"><a href="/artists/provinces">เลือกจังหวัดอื่น</a></p> : <p class="page-lede">เลือกตัวอักษรเพื่อเปิดรายชื่อศิลปินและเพลงในคลัง</p>}
   {!province && <nav class="letter-bar" aria-label="ตัวอักษรศิลปิน">{letters.map(value => <a href={`/artists?l=${encodeURIComponent(value)}`} aria-current={letter === value ? 'page' : undefined}>{value}</a>)}</nav>}
   {artists.length ? (
     <>

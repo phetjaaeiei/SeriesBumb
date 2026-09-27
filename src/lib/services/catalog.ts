@@ -217,8 +217,8 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
   if (affectedLabels.length) statements.push(db.prepare(`UPDATE label SET publishedTapeCount = (SELECT COUNT(*) FROM tape WHERE labelId = label.id AND status = 'published') WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedLabels)));
   if (affectedGenres.length) statements.push(db.prepare(`UPDATE genre SET publishedTapeCount = (SELECT COUNT(*) FROM tape_genre WHERE genreId = genre.id AND isPublished = 1) WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedGenres)));
   statements.push(...indexStatements(db, 'tape', input.id, title, searchText, input.status === 'published'));
-  if (affectedSongs.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 THEN 1 ELSE 0 END FROM song WHERE id = search_doc.refId) WHERE kind = 'song' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedSongs)));
-  if (affectedArtists.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 THEN 1 ELSE 0 END FROM artist WHERE id = search_doc.refId) WHERE kind = 'artist' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedArtists)));
+  if (affectedSongs.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN isPublic = 1 OR publishedTapeCount > 0 THEN 1 ELSE 0 END FROM song WHERE id = search_doc.refId) WHERE kind = 'song' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedSongs)));
+  if (affectedArtists.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1) THEN 1 ELSE 0 END FROM artist WHERE id = search_doc.refId) WHERE kind = 'artist' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedArtists)));
   if (affectedLabels.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 THEN 1 ELSE 0 END FROM label WHERE id = search_doc.refId) WHERE kind = 'label' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedLabels)));
   statements.push(...redirectStatements(db, `/tapes/${current.slug}`, `/tapes/${slug}`));
   await db.batch(statements);
@@ -238,7 +238,7 @@ export async function saveArtist(db: D1Database, userId: string, input: {
   members?: { name: string; role?: string; years?: string | null; isCurrent?: boolean }[];
 }) {
   const name = requiredName(input.name, 'ชื่อศิลปิน');
-  const old = await db.prepare('SELECT slug, name, publishedTapeCount FROM artist WHERE id = ?').bind(input.id).first<{ slug: string; name: string; publishedTapeCount: number }>();
+  const old = await db.prepare('SELECT slug, name, publishedTapeCount, EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1) AS hasPublicSong FROM artist WHERE id = ?').bind(input.id).first<{ slug: string; name: string; publishedTapeCount: number; hasPublicSong: number }>();
   if (!old) throw new Error('ไม่พบศิลปินนี้');
   const slug = input.slug ? await uniqueSlug(db, 'artist', name, input.slug, input.id) : old.slug;
   const members = (input.members ?? []).slice(0, 40).map((member, position) => ({ id: crypto.randomUUID(), name: requiredName(member.name, 'ชื่อสมาชิก'), role: member.role || '', years: member.years || null, isCurrent: Number(!!member.isCurrent), position }));
@@ -247,7 +247,7 @@ export async function saveArtist(db: D1Database, userId: string, input: {
     db.prepare('UPDATE artist SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, artistType = ?, status = ?, province = ?, yearsActive = ?, bio = ?, imageKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, name, input.nameAlt || null, thaiSortKey(name), input.artistType || null, input.status || 'unknown', input.province || null, input.yearsActive || null, input.bio || '', input.imageKey || null, userId, now, input.id),
     db.prepare('DELETE FROM artist_member WHERE artistId = ?').bind(input.id),
     db.prepare(`INSERT INTO artist_member (id, artistId, name, role, years, isCurrent, position) SELECT json_extract(value,'$.id'), ?, json_extract(value,'$.name'), json_extract(value,'$.role'), json_extract(value,'$.years'), json_extract(value,'$.isCurrent'), json_extract(value,'$.position') FROM json_each(?)`).bind(input.id, jsonParam(members)),
-    ...indexStatements(db, 'artist', input.id, name, [name, input.nameAlt, ...members.map(member => member.name)].filter(Boolean).join(' | '), old.publishedTapeCount > 0),
+    ...indexStatements(db, 'artist', input.id, name, [name, input.nameAlt, ...members.map(member => member.name)].filter(Boolean).join(' | '), old.publishedTapeCount > 0 || old.hasPublicSong === 1),
     ...redirectStatements(db, `/artists/${old.slug}`, `/artists/${slug}`),
   ]);
   if (name !== old.name) await reindexArtistDependents(db, input.id);
@@ -274,24 +274,25 @@ export async function saveLabel(db: D1Database, userId: string, input: {
 export async function saveSong(db: D1Database, userId: string, input: {
   id: string; title: string; titleAlt?: string | null; slug?: string | null;
   artistIds?: string[]; lyricist?: string | null; composer?: string | null;
-  arranger?: string | null; lyrics?: string | null; notes?: string | null;
+  arranger?: string | null; lyrics?: string | null; notes?: string | null; isPublic?: boolean;
 }) {
   const title = requiredName(input.title, 'ชื่อเพลง');
-  const old = await db.prepare('SELECT slug, publishedTapeCount FROM song WHERE id = ?').bind(input.id).first<{ slug: string; publishedTapeCount: number }>();
+  const old = await db.prepare('SELECT slug, publishedTapeCount, isPublic FROM song WHERE id = ?').bind(input.id).first<{ slug: string; publishedTapeCount: number; isPublic: number }>();
   if (!old) throw new Error('ไม่พบเพลงนี้');
   const slug = input.slug ? await uniqueSlug(db, 'song', title, input.slug, input.id) : old.slug;
   const oldArtists = await db.prepare('SELECT artistId FROM song_artist WHERE songId = ?').bind(input.id).all<{ artistId: string }>();
   const artistIds = [...new Set(input.artistIds ?? [])].slice(0, 20);
   const affectedArtists = [...new Set([...oldArtists.results.map(row => row.artistId), ...artistIds])];
+  const isPublic = input.isPublic === undefined ? Boolean(old.isPublic) : input.isPublic;
   const singers = artistIds.length ? await db.prepare(`SELECT name FROM artist WHERE id IN (${artistIds.map(() => '?').join(',')})`).bind(...artistIds).all<{ name: string }>() : { results: [] as { name: string }[] };
   const statements = [
-    db.prepare('UPDATE song SET slug = ?, title = ?, titleAlt = ?, titleSort = ?, lyricist = ?, composer = ?, arranger = ?, lyrics = ?, notes = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, title, input.titleAlt || null, thaiSortKey(title), input.lyricist || null, input.composer || null, input.arranger || null, input.lyrics || null, input.notes || null, userId, Date.now(), input.id),
+    db.prepare('UPDATE song SET slug = ?, title = ?, titleAlt = ?, titleSort = ?, lyricist = ?, composer = ?, arranger = ?, lyrics = ?, notes = ?, isPublic = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, title, input.titleAlt || null, thaiSortKey(title), input.lyricist || null, input.composer || null, input.arranger || null, input.lyrics || null, input.notes || null, Number(isPublic), userId, Date.now(), input.id),
     db.prepare('DELETE FROM song_artist WHERE songId = ?').bind(input.id),
     db.prepare('INSERT INTO song_artist (songId, artistId, position) SELECT ?, value, CAST(key AS INTEGER) FROM json_each(?)').bind(input.id, jsonParam(artistIds)),
   ];
   if (affectedArtists.length) statements.push(db.prepare(`UPDATE artist SET publishedTapeCount = (SELECT COUNT(DISTINCT tapeId) FROM (SELECT ta.tapeId FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId WHERE ta.artistId = artist.id AND t.status = 'published' UNION SELECT tt.tapeId FROM song_artist sa JOIN tape_track tt ON tt.songId = sa.songId JOIN tape t ON t.id = tt.tapeId WHERE sa.artistId = artist.id AND t.status = 'published')) WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedArtists)));
-  statements.push(...indexStatements(db, 'song', input.id, title, [title, input.titleAlt, ...singers.results.map(row => row.name), input.lyricist, input.composer].filter(Boolean).join(' | '), old.publishedTapeCount > 0));
-  if (affectedArtists.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 THEN 1 ELSE 0 END FROM artist WHERE id = search_doc.refId) WHERE kind = 'artist' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedArtists)));
+  statements.push(...indexStatements(db, 'song', input.id, title, [title, input.titleAlt, ...singers.results.map(row => row.name), input.lyricist, input.composer].filter(Boolean).join(' | '), isPublic || old.publishedTapeCount > 0));
+  if (affectedArtists.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1) THEN 1 ELSE 0 END FROM artist WHERE id = search_doc.refId) WHERE kind = 'artist' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedArtists)));
   statements.push(...redirectStatements(db, `/songs/${old.slug}`, `/songs/${slug}`));
   await db.batch(statements);
   return { id: input.id, slug };

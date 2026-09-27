@@ -2,7 +2,7 @@ export type EngagementKind = 'tapeLike' | 'songLike' | 'tapeOwned';
 
 const config = {
   tapeLike: { table: 'tape_like', targetTable: 'tape', idColumn: 'tapeId', countColumn: 'likeCount', visibility: "status = 'published'" },
-  songLike: { table: 'song_like', targetTable: 'song', idColumn: 'songId', countColumn: 'likeCount', visibility: 'publishedTapeCount > 0' },
+  songLike: { table: 'song_like', targetTable: 'song', idColumn: 'songId', countColumn: 'likeCount', visibility: '(isPublic = 1 OR publishedTapeCount > 0)' },
   tapeOwned: { table: 'tape_owner', targetTable: 'tape', idColumn: 'tapeId', countColumn: 'ownerCount', visibility: "status = 'published'" },
 } as const;
 

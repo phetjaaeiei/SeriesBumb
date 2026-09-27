@@ -42,11 +42,11 @@ export async function deleteCatalogEntity(db: D1Database, bucket: ImageStore, ki
     ];
     if (songIds.length) {
       statements.push(db.prepare("UPDATE song SET publishedTapeCount = (SELECT COUNT(DISTINCT t.id) FROM tape_track tt JOIN tape t ON t.id = tt.tapeId WHERE tt.songId = song.id AND t.status = 'published') WHERE id IN (SELECT value FROM json_each(?))").bind(jsonParam(songIds)));
-      statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 THEN 1 ELSE 0 END FROM song WHERE id = search_doc.refId) WHERE kind = 'song' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(songIds)));
+      statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN isPublic = 1 OR publishedTapeCount > 0 THEN 1 ELSE 0 END FROM song WHERE id = search_doc.refId) WHERE kind = 'song' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(songIds)));
     }
     if (artistIds.length) {
       statements.push(db.prepare(`UPDATE artist SET publishedTapeCount = (SELECT COUNT(DISTINCT tapeId) FROM (SELECT ta.tapeId FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId WHERE ta.artistId = artist.id AND t.status = 'published' UNION SELECT tt.tapeId FROM song_artist sa JOIN tape_track tt ON tt.songId = sa.songId JOIN tape t ON t.id = tt.tapeId WHERE sa.artistId = artist.id AND t.status = 'published')) WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(artistIds)));
-      statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 THEN 1 ELSE 0 END FROM artist WHERE id = search_doc.refId) WHERE kind = 'artist' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(artistIds)));
+      statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1) THEN 1 ELSE 0 END FROM artist WHERE id = search_doc.refId) WHERE kind = 'artist' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(artistIds)));
     }
     if (genreIds.length) statements.push(db.prepare('UPDATE genre SET publishedTapeCount = (SELECT COUNT(*) FROM tape_genre WHERE genreId = genre.id AND isPublished = 1) WHERE id IN (SELECT value FROM json_each(?))').bind(jsonParam(genreIds)));
     if (tape.labelId) {
@@ -64,7 +64,13 @@ export async function deleteCatalogEntity(db: D1Database, bucket: ImageStore, ki
     if (!song) throw new CatalogError('ไม่พบเพลงนี้');
     const linked = await db.prepare('SELECT t.title FROM tape_track tt JOIN tape t ON t.id = tt.tapeId WHERE tt.songId = ? LIMIT 3').bind(id).all<{ title: string }>();
     if (linked.results.length) throw new CatalogError(`เพลงนี้ยังอยู่ในเทป: ${linked.results.map(row => row.title).join(', ')}`);
-    await db.batch([...removeIndex(db, 'song', id, `/songs/${song.slug}`), db.prepare('DELETE FROM song WHERE id = ?').bind(id), db.prepare('UPDATE site_stats SET songCount = MAX(0, songCount - 1), updatedAt = ? WHERE id = 1').bind(Date.now())]);
+    const artists = await db.prepare('SELECT artistId FROM song_artist WHERE songId = ?').bind(id).all<{ artistId: string }>();
+    await db.batch([
+      ...removeIndex(db, 'song', id, `/songs/${song.slug}`),
+      db.prepare('DELETE FROM song WHERE id = ?').bind(id),
+      db.prepare('UPDATE site_stats SET songCount = MAX(0, songCount - 1), updatedAt = ? WHERE id = 1').bind(Date.now()),
+      ...artists.results.map(row => db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1) THEN 1 ELSE 0 END FROM artist WHERE id = ?) WHERE kind = 'artist' AND refId = ?").bind(row.artistId, row.artistId)),
+    ]);
     return { id, kind };
   }
 
