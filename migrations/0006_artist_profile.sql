@@ -1,0 +1,2 @@
+ALTER TABLE artist ADD COLUMN formedYear INTEGER;
+ALTER TABLE artist ADD COLUMN themes TEXT;

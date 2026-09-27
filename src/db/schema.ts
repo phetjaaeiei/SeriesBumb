@@ -88,6 +88,8 @@ export const artist = sqliteTable('artist', {
   artistType: text('artistType', { enum: ARTIST_TYPES }),
   status: text('status', { enum: ARTIST_STATUSES }).notNull().default('unknown'),
   province: text('province'),
+  formedYear: integer('formedYear'),
+  themes: text('themes'),
   yearsActive: text('yearsActive'),
   bio: text('bio').notNull().default(''),
   imageKey: text('imageKey'),

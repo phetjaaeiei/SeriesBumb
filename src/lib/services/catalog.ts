@@ -233,7 +233,7 @@ export async function saveArtist(db: D1Database, userId: string, input: {
   id: string; name: string; nameAlt?: string | null; slug?: string | null;
   artistType?: 'band' | 'solo' | 'group' | null;
   status?: 'active' | 'inactive' | 'hiatus' | 'deceased' | 'unknown';
-  province?: string | null; yearsActive?: string | null; bio?: string;
+  province?: string | null; formedYear?: number | null; themes?: string | null; yearsActive?: string | null; bio?: string;
   imageKey?: string | null;
   members?: { name: string; role?: string; years?: string | null; isCurrent?: boolean }[];
 }) {
@@ -244,7 +244,7 @@ export async function saveArtist(db: D1Database, userId: string, input: {
   const members = (input.members ?? []).slice(0, 40).map((member, position) => ({ id: crypto.randomUUID(), name: requiredName(member.name, 'ชื่อสมาชิก'), role: member.role || '', years: member.years || null, isCurrent: Number(!!member.isCurrent), position }));
   const now = Date.now();
   await db.batch([
-    db.prepare('UPDATE artist SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, artistType = ?, status = ?, province = ?, yearsActive = ?, bio = ?, imageKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, name, input.nameAlt || null, thaiSortKey(name), input.artistType || null, input.status || 'unknown', input.province || null, input.yearsActive || null, input.bio || '', input.imageKey || null, userId, now, input.id),
+    db.prepare('UPDATE artist SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, artistType = ?, status = ?, province = ?, formedYear = ?, themes = ?, yearsActive = ?, bio = ?, imageKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, name, input.nameAlt || null, thaiSortKey(name), input.artistType || null, input.status || 'unknown', input.province || null, input.formedYear == null ? null : toCeYear(input.formedYear), input.themes || null, input.yearsActive || null, input.bio || '', input.imageKey || null, userId, now, input.id),
     db.prepare('DELETE FROM artist_member WHERE artistId = ?').bind(input.id),
     db.prepare(`INSERT INTO artist_member (id, artistId, name, role, years, isCurrent, position) SELECT json_extract(value,'$.id'), ?, json_extract(value,'$.name'), json_extract(value,'$.role'), json_extract(value,'$.years'), json_extract(value,'$.isCurrent'), json_extract(value,'$.position') FROM json_each(?)`).bind(input.id, jsonParam(members)),
     ...indexStatements(db, 'artist', input.id, name, [name, input.nameAlt, ...members.map(member => member.name)].filter(Boolean).join(' | '), old.publishedTapeCount > 0 || old.hasPublicSong === 1),
