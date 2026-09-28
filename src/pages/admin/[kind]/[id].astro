@@ -1,5 +1,5 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db, imageBaseUrl } from '../../../platform/runtime';
 import AdminLayout from '../../../components/layout/AdminLayout.astro';
 import AdminEditor from '../../../components/admin/AdminEditor';
 
@@ -11,21 +11,21 @@ const labelMap = { tapes: 'เทป', songs: 'เพลง', artists: 'ศิ�
 const kind = Astro.params.kind as Kind;
 const id = Astro.params.id;
 if (!Object.hasOwn(tableMap, kind) || !id) return Astro.rewrite('/404');
-const record = await env.DB.prepare(`SELECT * FROM ${tableMap[kind]} WHERE id = ?`).bind(id).first<Row>();
+const record = await db().prepare(`SELECT * FROM ${tableMap[kind]} WHERE id = ?`).bind(id).first<Row>();
 if (!record) return Astro.rewrite('/404');
 
-const artistIds = kind === 'tapes' ? (await env.DB.prepare('SELECT artistId AS id FROM tape_artist WHERE tapeId = ? ORDER BY position').bind(id).all<{ id: string }>()).results.map(row => row.id)
-  : kind === 'songs' ? (await env.DB.prepare('SELECT artistId AS id FROM song_artist WHERE songId = ? ORDER BY position').bind(id).all<{ id: string }>()).results.map(row => row.id) : [];
-const genreIds = kind === 'tapes' ? (await env.DB.prepare('SELECT genreId AS id FROM tape_genre WHERE tapeId = ?').bind(id).all<{ id: string }>()).results.map(row => row.id) : [];
-const tracks = kind === 'tapes' ? (await env.DB.prepare('SELECT songId, side, position, durationSec, note FROM tape_track WHERE tapeId = ? ORDER BY side, position').bind(id).all<{ songId: string; side: 'A' | 'B' | 'C' | 'D'; position: number; durationSec: number | null; note: string | null }>()).results : [];
-const members = kind === 'artists' ? (await env.DB.prepare('SELECT id, name, role, years, isCurrent FROM artist_member WHERE artistId = ? ORDER BY position').bind(id).all<{ id: string; name: string; role: string; years: string | null; isCurrent: number }>()).results : [];
-const items = kind === 'collections' ? (await env.DB.prepare('SELECT tapeId, note FROM collection_item WHERE collectionId = ? ORDER BY position').bind(id).all<{ tapeId: string; note: string | null }>()).results : [];
-const images = kind === 'tapes' ? (await env.DB.prepare('SELECT id, kind, fullKey, thumbKey, position FROM tape_image WHERE tapeId = ? ORDER BY position').bind(id).all<{ id: string; kind: 'front' | 'back' | 'inside' | 'cassette' | 'other'; fullKey: string; thumbKey: string; position: number }>()).results : [];
+const artistIds = kind === 'tapes' ? (await db().prepare('SELECT artistId AS id FROM tape_artist WHERE tapeId = ? ORDER BY position').bind(id).all<{ id: string }>()).results.map(row => row.id)
+  : kind === 'songs' ? (await db().prepare('SELECT artistId AS id FROM song_artist WHERE songId = ? ORDER BY position').bind(id).all<{ id: string }>()).results.map(row => row.id) : [];
+const genreIds = kind === 'tapes' ? (await db().prepare('SELECT genreId AS id FROM tape_genre WHERE tapeId = ?').bind(id).all<{ id: string }>()).results.map(row => row.id) : [];
+const tracks = kind === 'tapes' ? (await db().prepare('SELECT songId, side, position, durationSec, note FROM tape_track WHERE tapeId = ? ORDER BY side, position').bind(id).all<{ songId: string; side: 'A' | 'B' | 'C' | 'D'; position: number; durationSec: number | null; note: string | null }>()).results : [];
+const members = kind === 'artists' ? (await db().prepare('SELECT id, name, role, years, isCurrent FROM artist_member WHERE artistId = ? ORDER BY position').bind(id).all<{ id: string; name: string; role: string; years: string | null; isCurrent: number }>()).results : [];
+const items = kind === 'collections' ? (await db().prepare('SELECT tapeId, note FROM collection_item WHERE collectionId = ? ORDER BY position').bind(id).all<{ tapeId: string; note: string | null }>()).results : [];
+const images = kind === 'tapes' ? (await db().prepare('SELECT id, kind, fullKey, thumbKey, position FROM tape_image WHERE tapeId = ? ORDER BY position').bind(id).all<{ id: string; kind: 'front' | 'back' | 'inside' | 'cassette' | 'other'; fullKey: string; thumbKey: string; position: number }>()).results : [];
 const selectedIds = [...new Set([...artistIds, ...genreIds, ...tracks.map(row => String(row.songId)), ...items.map(row => String(row.tapeId)), ...[record.labelId].filter((value): value is string => typeof value === 'string')])];
-const selected = selectedIds.length ? (await env.DB.prepare(`SELECT id, name AS label FROM artist WHERE id IN (SELECT value FROM json_each(?)) UNION ALL SELECT id, name AS label FROM genre WHERE id IN (SELECT value FROM json_each(?)) UNION ALL SELECT id, name AS label FROM label WHERE id IN (SELECT value FROM json_each(?)) UNION ALL SELECT id, title AS label FROM song WHERE id IN (SELECT value FROM json_each(?)) UNION ALL SELECT id, title AS label FROM tape WHERE id IN (SELECT value FROM json_each(?))`).bind(...Array(5).fill(JSON.stringify(selectedIds))).all<Choice>()).results : [];
+const selected = selectedIds.length ? (await db().prepare(`SELECT id, name AS label FROM artist WHERE id IN (SELECT value FROM json_each(?)) UNION ALL SELECT id, name AS label FROM genre WHERE id IN (SELECT value FROM json_each(?)) UNION ALL SELECT id, name AS label FROM label WHERE id IN (SELECT value FROM json_each(?)) UNION ALL SELECT id, title AS label FROM song WHERE id IN (SELECT value FROM json_each(?)) UNION ALL SELECT id, title AS label FROM tape WHERE id IN (SELECT value FROM json_each(?))`).bind(...Array(5).fill(JSON.stringify(selectedIds))).all<Choice>()).results : [];
 ---
 <AdminLayout title={`แก้ไข${labelMap[kind]}`}>
   <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><a href={`/admin/${kind}`}>{labelMap[kind]}</a><span>/</span><span>แก้ไข</span></nav>
   <h1>แก้ไข{labelMap[kind]}</h1>
-  <AdminEditor kind={kind} record={record} artistIds={artistIds} genreIds={genreIds} tracks={tracks} members={members} items={items} images={images} selected={selected} imageBase={env.IMAGE_BASE_URL || ''} client:only="react" />
+  <AdminEditor kind={kind} record={record} artistIds={artistIds} genreIds={genreIds} tracks={tracks} members={members} items={items} images={images} selected={selected} imageBase={imageBaseUrl()} client:only="react" />
 </AdminLayout>

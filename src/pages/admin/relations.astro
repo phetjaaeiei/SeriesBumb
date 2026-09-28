@@ -1,5 +1,5 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import CatalogRelations from '../../components/admin/CatalogRelations';
 const kind = Astro.url.searchParams.get('kind');
@@ -7,12 +7,12 @@ const id = Astro.url.searchParams.get('id') ?? '';
 if ((kind !== 'artist' && kind !== 'tape') || !/^[0-9a-f-]{36}$/iu.test(id)) return Astro.rewrite('/404');
 const table = kind === 'artist' ? 'artist' : 'tape';
 const column = kind === 'artist' ? 'name' : 'title';
-const current = await env.DB.prepare(`SELECT ${column} AS title FROM ${table} WHERE id = ?`).bind(id).first<{ title: string }>();
+const current = await db().prepare(`SELECT ${column} AS title FROM ${table} WHERE id = ?`).bind(id).first<{ title: string }>();
 if (!current) return Astro.rewrite('/404');
 const [choices, sources, rows] = await Promise.all([
-  env.DB.prepare(`SELECT id, ${column} AS title FROM ${table} ORDER BY ${kind === 'artist' ? 'nameSort' : 'titleSort'} LIMIT 100`).all<{ id: string; title: string }>(),
-  env.DB.prepare('SELECT id, title FROM catalog_source WHERE entityKind = ? AND entityId = ? ORDER BY createdAt DESC LIMIT 50').bind(kind, id).all<{ id: string; title: string }>(),
-  kind === 'artist' ? env.DB.prepare('SELECT ar.id, a.name AS targetTitle, ar.relationType FROM artist_relation ar JOIN artist a ON a.id = ar.relatedArtistId WHERE ar.artistId = ? ORDER BY a.nameSort LIMIT 50').bind(id).all<{ id: string; targetTitle: string; relationType: string }>() : env.DB.prepare('SELECT te.id, t.title AS targetTitle, te.format, te.editionYear FROM tape_edition te JOIN tape t ON t.id = te.relatedTapeId WHERE te.tapeId = ? ORDER BY t.titleSort LIMIT 50').bind(id).all<{ id: string; targetTitle: string; format: string; editionYear: number | null }>(),
+  db().prepare(`SELECT id, ${column} AS title FROM ${table} ORDER BY ${kind === 'artist' ? 'nameSort' : 'titleSort'} LIMIT 100`).all<{ id: string; title: string }>(),
+  db().prepare('SELECT id, title FROM catalog_source WHERE entityKind = ? AND entityId = ? ORDER BY createdAt DESC LIMIT 50').bind(kind, id).all<{ id: string; title: string }>(),
+  kind === 'artist' ? db().prepare('SELECT ar.id, a.name AS targetTitle, ar.relationType FROM artist_relation ar JOIN artist a ON a.id = ar.relatedArtistId WHERE ar.artistId = ? ORDER BY a.nameSort LIMIT 50').bind(id).all<{ id: string; targetTitle: string; relationType: string }>() : db().prepare('SELECT te.id, t.title AS targetTitle, te.format, te.editionYear FROM tape_edition te JOIN tape t ON t.id = te.relatedTapeId WHERE te.tapeId = ? ORDER BY t.titleSort LIMIT 50').bind(id).all<{ id: string; targetTitle: string; format: string; editionYear: number | null }>(),
 ]);
 ---
 <AdminLayout title={`ความสัมพันธ์ ${current.title}`}>

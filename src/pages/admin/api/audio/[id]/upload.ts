@@ -1,8 +1,8 @@
-import { env } from 'cloudflare:workers';
+import { config, audioEnvironment } from '../../../../../platform/runtime';
 import type { APIRoute } from 'astro';
 import { uploadAudio } from '../../../../../services/audio-archive';
 import { adminAudioRoute, audioJson } from '../../../../../http/audio-http';
 
-export const PUT: APIRoute = context => adminAudioRoute(context, env.SITE_URL, true, async () => {
-  return audioJson({ file: await uploadAudio(env, context.params.id ?? '', context.request) });
+export const PUT: APIRoute = context => adminAudioRoute(context, config().siteUrl, true, async () => {
+  return audioJson({ file: await uploadAudio(audioEnvironment(), context.params.id ?? '', context.request) });
 });

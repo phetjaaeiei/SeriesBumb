@@ -1,8 +1,7 @@
+import { db, config } from '../platform/runtime';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter';
-import { env } from 'cloudflare:workers';
 import { betterAuth } from 'better-auth';
 import { sql } from 'drizzle-orm';
-import { getConfig } from '../config/config';
 import { getDb, jsonParam, type Db } from '../db/client';
 import * as schema from '../db/schema';
 import { parseAdminEmails } from '../domain/admin-emails';
@@ -106,13 +105,13 @@ let cachedAuth: Auth | undefined;
 
 export function getAuth(): Auth {
   if (!cachedAuth) {
-    const config = getConfig(env);
-    cachedAuth = createAuth(env.DB, {
-      SITE_URL: config.siteUrl,
-      BETTER_AUTH_SECRET: config.auth.secret,
-      GOOGLE_CLIENT_ID: config.auth.googleClientId,
-      GOOGLE_CLIENT_SECRET: config.auth.googleClientSecret,
-      ADMIN_EMAILS: [...config.auth.adminEmails].join(','),
+    const settings = config();
+    cachedAuth = createAuth(db(), {
+      SITE_URL: settings.siteUrl,
+      BETTER_AUTH_SECRET: settings.auth.secret,
+      GOOGLE_CLIENT_ID: settings.auth.googleClientId,
+      GOOGLE_CLIENT_SECRET: settings.auth.googleClientSecret,
+      ADMIN_EMAILS: [...settings.auth.adminEmails].join(','),
     });
   }
   return cachedAuth;

@@ -1,8 +1,8 @@
+import { config, rateLimiters } from '../../../platform/runtime';
 import type { APIRoute } from 'astro';
-import { env } from 'cloudflare:workers';
 import { getAuth } from '../../../auth/auth';
 import { isAllowedAuthPath } from '../../../auth/auth-routes';
-import { getConfig, isProduction } from '../../../config/config';
+import { isProduction } from '../../../config/config';
 import { RATE_LIMITED_MESSAGE, rateLimiter } from '../../../http/rate-limit';
 import { TURNSTILE_FAILED_MESSAGE, verifyTurnstile } from '../../../http/turnstile';
 
@@ -14,16 +14,16 @@ const handle: APIRoute = async ({ request, url }) => {
   if (!isAllowedAuthPath(request.method, url.pathname)) return new Response('Not found', { status: 404, headers: noStore });
   if (url.pathname === '/api/auth/sign-in/social') {
     const ip = request.headers.get('cf-connecting-ip') ?? 'unknown';
-    if (!await rateLimiter(env.AUTH_RATE_LIMITER).allow(`sign-in:${ip}`)) {
+    if (!await rateLimiter(rateLimiters().auth).allow(`sign-in:${ip}`)) {
       return Response.json({ message: RATE_LIMITED_MESSAGE }, { status: 429, headers: { ...noStore, 'Retry-After': '60' } });
     }
-    const config = getConfig(env);
-    if (config.turnstile && !await verifyTurnstile({
-      secret: config.turnstile.secretKey,
+    const settings = config();
+    if (settings.turnstile && !await verifyTurnstile({
+      secret: settings.turnstile.secretKey,
       token: request.headers.get('x-turnstile-token'),
       ip: request.headers.get('cf-connecting-ip'),
-      hostname: new URL(config.siteUrl).hostname,
-      allowTestKeys: !isProduction(config),
+      hostname: new URL(settings.siteUrl).hostname,
+      allowTestKeys: !isProduction(settings),
     })) {
       return Response.json({ message: TURNSTILE_FAILED_MESSAGE }, { status: 403, headers: noStore });
     }

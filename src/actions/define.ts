@@ -1,7 +1,7 @@
+import { db, config, rateLimiters } from '../platform/runtime';
 import { ActionError, defineAction, type ActionAPIContext } from 'astro:actions';
 import { z } from 'astro/zod';
-import { env } from 'cloudflare:workers';
-import { getConfig, isProduction } from '../config/config';
+import { isProduction } from '../config/config';
 import { RATE_LIMITED_MESSAGE, rateLimiter } from '../http/rate-limit';
 import { UNAUDITED_ACTIONS, adminActionNameFrom, auditTargetFromInput, withAudit } from '../services/audit';
 import { TURNSTILE_FAILED_MESSAGE, verifyTurnstile } from '../http/turnstile';
@@ -22,7 +22,7 @@ export async function runAdminAction<R>(context: ActionAPIContext, input: unknow
   const user = requireAdmin(context.locals);
   const action = adminActionNameFrom(context.url);
   if (!action || UNAUDITED_ACTIONS.has(action)) return run(user);
-  return withAudit(env.DB, { actor: user, action, targetId: auditTargetFromInput(input) }, () => run(user), statusOfActionError);
+  return withAudit(db(), { actor: user, action, targetId: auditTargetFromInput(input) }, () => run(user), statusOfActionError);
 }
 
 export function defineAdminAction<T extends Input, R>(options: {
@@ -61,17 +61,17 @@ export function defineMemberWriteAction<T extends Input, R>(options: {
     input: options.input,
     handler: (async (input: unknown, context: ActionAPIContext) => {
       const user = requireUser(context.locals);
-      if (!await rateLimiter(env.WRITE_RATE_LIMITER).allow(`write:${user.id}`)) {
+      if (!await rateLimiter(rateLimiters().write).allow(`write:${user.id}`)) {
         throw new ActionError({ code: 'TOO_MANY_REQUESTS', message: RATE_LIMITED_MESSAGE });
       }
-      const config = getConfig(env);
-      if (options.turnstile && config.turnstile) {
+      const settings = config();
+      if (options.turnstile && settings.turnstile) {
         const passed = await verifyTurnstile({
-          secret: config.turnstile.secretKey,
+          secret: settings.turnstile.secretKey,
           token: (input as { turnstileToken?: string }).turnstileToken,
           ip: context.request.headers.get('cf-connecting-ip'),
-          hostname: new URL(config.siteUrl).hostname,
-          allowTestKeys: !isProduction(config),
+          hostname: new URL(settings.siteUrl).hostname,
+          allowTestKeys: !isProduction(settings),
         });
         if (!passed) throw new ActionError({ code: 'FORBIDDEN', message: TURNSTILE_FAILED_MESSAGE });
       }

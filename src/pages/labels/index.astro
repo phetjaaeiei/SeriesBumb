@@ -1,9 +1,9 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
 import { decodeCursor, encodeCursor } from '../../domain/cursor';
 const cursor = decodeCursor('title', Astro.url.searchParams.get('cursor'));
-const rows = (await env.DB.prepare(`SELECT id, slug, name, nameSort, publishedTapeCount FROM label WHERE publishedTapeCount > 0 ${cursor ? 'AND (nameSort, id) > (?, ?)' : ''} ORDER BY nameSort, id LIMIT 101`).bind(...(cursor ? [cursor.key, cursor.id] : [])).all<{ id: string; slug: string; name: string; nameSort: string; publishedTapeCount: number }>()).results;
+const rows = (await db().prepare(`SELECT id, slug, name, nameSort, publishedTapeCount FROM label WHERE publishedTapeCount > 0 ${cursor ? 'AND (nameSort, id) > (?, ?)' : ''} ORDER BY nameSort, id LIMIT 101`).bind(...(cursor ? [cursor.key, cursor.id] : [])).all<{ id: string; slug: string; name: string; nameSort: string; publishedTapeCount: number }>()).results;
 const labels = rows.slice(0, 100);
 const last = labels.at(-1);
 const next = rows.length > 100 && last ? encodeCursor('title', last.nameSort, last.id) : null;

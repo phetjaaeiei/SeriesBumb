@@ -1,6 +1,5 @@
 ---
-import { env } from 'cloudflare:workers';
-import { getConfig } from '../../config/config';
+import { db, config, imageBaseUrl } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
 import CreditLine from '../../components/layout/CreditLine.astro';
 import InfoBox from '../../components/ui/InfoBox.astro';
@@ -21,16 +20,16 @@ import { creditsForTarget } from '../../services/person-credits';
 
 const slug = Astro.params.slug ?? '';
 const isAdmin = Astro.locals.user?.role === 'admin';
-const tape = await getTapeBySlug(env.DB, slug, isAdmin);
+const tape = await getTapeBySlug(db(), slug, isAdmin);
 if (!tape) return Astro.rewrite('/404');
 const unpublished = tape.status !== 'published';
-const catalogSources = await listCatalogSources(env.DB, 'tape', tape.id);
-const credits = await creditsForTarget(env.DB, 'tape', tape.id);
-const editions = !unpublished ? await publicTapeEditions(env.DB, tape.id) : [];
+const catalogSources = await listCatalogSources(db(), 'tape', tape.id);
+const credits = await creditsForTarget(db(), 'tape', tape.id);
+const editions = !unpublished ? await publicTapeEditions(db(), tape.id) : [];
 const artistNames = tape.artists.map(artist => artist.name).join(' / ') || 'รวมศิลปิน';
 const cover = tape.images.find(image => image.id === tape.coverImageId) ?? tape.images.find(image => image.kind === 'front') ?? tape.images[0];
 const gallery = cover ? [cover, ...tape.images.filter(image => image.id !== cover.id)] : [];
-const ogImage = tape.ogImageKey && env.IMAGE_BASE_URL ? imageUrl(tape.ogImageKey, env.IMAGE_BASE_URL) : undefined;
+const ogImage = tape.ogImageKey && imageBaseUrl() ? imageUrl(tape.ogImageKey, imageBaseUrl()) : undefined;
 const description = (tape.description || `เทป ${tape.title} – ${artistNames}${tape.year ? ` (พ.ศ. ${tape.year + 543})` : ''}${tape.labelName ? ` ค่าย ${tape.labelName}` : ''} | ซีรี่ย์บั้ม เทปเพลง`).replace(/\s+/gu, ' ').slice(0, 155);
 const items = [
   { label: 'ประเภท', value: releaseTypeLabel(tape.releaseType) },
@@ -45,17 +44,17 @@ const sideGroups = sides.map(side => {
   return { side, tracks, total: tracks.reduce((seconds, track) => seconds + (track.durationSec ?? 0), 0), incomplete: tracks.some(track => track.durationSec === null) };
 });
 const relatedStatement = tape.artists[0]
-  ? env.DB.prepare(`SELECT t.slug, t.title, t.year FROM tape_artist ta JOIN artist a ON a.id = ta.artistId JOIN tape t ON t.id = ta.tapeId WHERE a.slug = ? AND t.status = 'published' AND t.id != ? ORDER BY t.yearSort, t.id LIMIT 8`).bind(tape.artists[0].slug, tape.id)
-  : tape.labelId ? env.DB.prepare("SELECT slug, title, year FROM tape WHERE labelId = ? AND status = 'published' AND id != ? ORDER BY yearSort, id LIMIT 8").bind(tape.labelId, tape.id) : null;
+  ? db().prepare(`SELECT t.slug, t.title, t.year FROM tape_artist ta JOIN artist a ON a.id = ta.artistId JOIN tape t ON t.id = ta.tapeId WHERE a.slug = ? AND t.status = 'published' AND t.id != ? ORDER BY t.yearSort, t.id LIMIT 8`).bind(tape.artists[0].slug, tape.id)
+  : tape.labelId ? db().prepare("SELECT slug, title, year FROM tape WHERE labelId = ? AND status = 'published' AND id != ? ORDER BY yearSort, id LIMIT 8").bind(tape.labelId, tape.id) : null;
 const [collections, related] = await Promise.all([
-  env.DB.prepare(`SELECT c.slug, c.title FROM collection_item ci JOIN collection c ON c.id = ci.collectionId WHERE ci.tapeId = ? AND c.status = 'published' ORDER BY c.position`).bind(tape.id).all<{ slug: string; title: string }>(),
+  db().prepare(`SELECT c.slug, c.title FROM collection_item ci JOIN collection c ON c.id = ci.collectionId WHERE ci.tapeId = ? AND c.status = 'published' ORDER BY c.position`).bind(tape.id).all<{ slug: string; title: string }>(),
   relatedStatement?.all<{ slug: string; title: string; year: number | null }>() ?? Promise.resolve({ results: [] as { slug: string; title: string; year: number | null }[] }),
 ]);
 const viewerId = Astro.locals.user?.id;
-const engagement = !unpublished && viewerId ? await env.DB.prepare('SELECT EXISTS(SELECT 1 FROM tape_like WHERE userId = ? AND tapeId = ?) AS liked, EXISTS(SELECT 1 FROM tape_owner WHERE userId = ? AND tapeId = ?) AS owned').bind(viewerId, tape.id, viewerId, tape.id).first<{ liked: number; owned: number }>() : null;
-const firstComments = !unpublished ? await listComments(env.DB, { tapeId: tape.id }, null, viewerId) : null;
-const publicReviews = !unpublished ? (await env.DB.prepare("SELECT r.id, r.body, r.rating, r.createdAt, u.name AS authorName FROM review r JOIN user u ON u.id = r.userId WHERE r.tapeId = ? AND r.status = 'published' ORDER BY r.createdAt DESC, r.id DESC LIMIT 20").bind(tape.id).all<{ id: string; body: string; rating: number; createdAt: number; authorName: string }>()).results : [];
-const turnstileSiteKey = getConfig(env).turnstile?.siteKey ?? null;
+const engagement = !unpublished && viewerId ? await db().prepare('SELECT EXISTS(SELECT 1 FROM tape_like WHERE userId = ? AND tapeId = ?) AS liked, EXISTS(SELECT 1 FROM tape_owner WHERE userId = ? AND tapeId = ?) AS owned').bind(viewerId, tape.id, viewerId, tape.id).first<{ liked: number; owned: number }>() : null;
+const firstComments = !unpublished ? await listComments(db(), { tapeId: tape.id }, null, viewerId) : null;
+const publicReviews = !unpublished ? (await db().prepare("SELECT r.id, r.body, r.rating, r.createdAt, u.name AS authorName FROM review r JOIN user u ON u.id = r.userId WHERE r.tapeId = ? AND r.status = 'published' ORDER BY r.createdAt DESC, r.id DESC LIMIT 20").bind(tape.id).all<{ id: string; body: string; rating: number; createdAt: number; authorName: string }>()).results : [];
+const turnstileSiteKey = config().turnstile?.siteKey ?? null;
 ---
 <BaseLayout title={tape.title} description={description} canonicalPath={`/tapes/${slug}`} ogImage={ogImage} ogImageAlt={`ภาพแชร์เทป ${tape.title}`} ogType="music.album" noindex={unpublished}>
   {unpublished && <p class="draft-banner">ยังไม่เผยแพร่ · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
@@ -75,13 +74,13 @@ const turnstileSiteKey = getConfig(env).turnstile?.siteKey ?? null;
       {!unpublished && <div class="engagement-counts"><EngagementButton kind="tapeLike" targetId={tape.id} initialValue={Boolean(engagement?.liked)} initialCount={tape.likeCount} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /><EngagementButton kind="tapeOwned" targetId={tape.id} initialValue={Boolean(engagement?.owned)} initialCount={tape.ownerCount} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /></div>}
     </div>
     <div class="entity-art">
-      {gallery.length && env.IMAGE_BASE_URL ? <div class="tape-gallery" data-lightbox-gallery>
-        <a class="tape-gallery-cover" href={imageUrl(gallery[0].fullKey, env.IMAGE_BASE_URL)} data-lightbox-open aria-label={`ขยายรูปปก ${tape.title}`}>
-          <img src={imageUrl(gallery[0].fullKey, env.IMAGE_BASE_URL)} width={gallery[0].width} height={gallery[0].height} alt={`ปกหน้า ${tape.title} – ${artistNames}`} decoding="async" />
+      {gallery.length && imageBaseUrl() ? <div class="tape-gallery" data-lightbox-gallery>
+        <a class="tape-gallery-cover" href={imageUrl(gallery[0].fullKey, imageBaseUrl())} data-lightbox-open aria-label={`ขยายรูปปก ${tape.title}`}>
+          <img src={imageUrl(gallery[0].fullKey, imageBaseUrl())} width={gallery[0].width} height={gallery[0].height} alt={`ปกหน้า ${tape.title} – ${artistNames}`} decoding="async" />
         </a>
         {gallery.length > 1 && <div class="tape-gallery-thumbs" aria-label="ภาพเทปเพิ่มเติม">
-          {gallery.slice(1).map((image, index) => <a href={imageUrl(image.fullKey, env.IMAGE_BASE_URL)} data-lightbox-open aria-label={`ขยายภาพเทป ${index + 2} จาก ${gallery.length}`}>
-            <img src={imageUrl(image.thumbKey, env.IMAGE_BASE_URL)} width="68" height="68" loading="lazy" decoding="async" alt={`ภาพเทป ${index + 2}`} />
+          {gallery.slice(1).map((image, index) => <a href={imageUrl(image.fullKey, imageBaseUrl())} data-lightbox-open aria-label={`ขยายภาพเทป ${index + 2} จาก ${gallery.length}`}>
+            <img src={imageUrl(image.thumbKey, imageBaseUrl())} width="68" height="68" loading="lazy" decoding="async" alt={`ภาพเทป ${index + 2}`} />
           </a>)}
         </div>}
         <dialog class="tape-lightbox" data-lightbox aria-label={`ภาพเทป ${tape.title}`}>

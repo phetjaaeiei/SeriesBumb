@@ -1,5 +1,5 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db, config } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import ReindexControl from '../../components/admin/ReindexControl';
 
@@ -32,14 +32,14 @@ let draftTapes: DraftTape[] = [];
 let loadError = false;
 try {
   const [statsResult, queueResult, commentsResult, draftsResult] = await Promise.all([
-    env.DB.prepare('SELECT tapeCount, publishedTapeCount, songCount, userCount, imageBytes, reindexCursor FROM site_stats WHERE id = 1').run<StatsRow>(),
-    env.DB.prepare('SELECT COUNT(*) AS count FROM search_queue').first<{ count: number }>(),
-    env.DB.prepare(`SELECT c.id, c.body, c.createdAt, c.deletedAt, u.name AS authorName,
+    db().prepare('SELECT tapeCount, publishedTapeCount, songCount, userCount, imageBytes, reindexCursor FROM site_stats WHERE id = 1').run<StatsRow>(),
+    db().prepare('SELECT COUNT(*) AS count FROM search_queue').first<{ count: number }>(),
+    db().prepare(`SELECT c.id, c.body, c.createdAt, c.deletedAt, u.name AS authorName,
       t.slug AS tapeSlug, t.title AS tapeTitle, s.slug AS songSlug, s.title AS songTitle
       FROM comment c JOIN user u ON u.id = c.userId
       LEFT JOIN tape t ON t.id = c.tapeId LEFT JOIN song s ON s.id = c.songId
       ORDER BY c.createdAt DESC, c.id DESC LIMIT 10`).all<RecentComment>(),
-    env.DB.prepare("SELECT id, title, updatedAt FROM tape WHERE status = 'draft' ORDER BY updatedAt ASC, id ASC LIMIT 10").all<DraftTape>(),
+    db().prepare("SELECT id, title, updatedAt FROM tape WHERE status = 'draft' ORDER BY updatedAt ASC, id ASC LIMIT 10").all<DraftTape>(),
   ]);
   stats = statsResult.results[0] ?? null;
   dbBytes = typeof statsResult.meta.size_after === 'number' ? statsResult.meta.size_after : null;
@@ -59,7 +59,7 @@ const dateFormat = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeZ
 <AdminLayout title="แดชบอร์ด">
   <h1>แดชบอร์ด</h1>
   <p class="page-lede">ภาพรวมของคลังเทปและพื้นที่เก็บข้อมูล</p>
-  {env.SUPABASE_IMAGE_UPLOADS_ENABLED !== 'true' && <p class="help-text" role="status">พักการอัปโหลดรูปใหม่เพื่อควบคุมพื้นที่จัดเก็บ</p>}
+  {!config().images.uploadsEnabled && <p class="help-text" role="status">พักการอัปโหลดรูปใหม่เพื่อควบคุมพื้นที่จัดเก็บ</p>}
   {loadError && <p class="error-text" role="alert">โหลดข้อมูลแดชบอร์ดไม่สำเร็จ ลองเปิดหน้านี้อีกครั้ง</p>}
   <div class="admin-stats" aria-label="สถิติคลัง">
     <div class="admin-stat"><strong class="mono">{stats ? `${stats.publishedTapeCount.toLocaleString('th-TH')} / ${stats.tapeCount.toLocaleString('th-TH')}` : '—'}</strong><span>เทปที่เผยแพร่ / เทปทั้งหมด</span></div>

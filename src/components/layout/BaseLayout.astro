@@ -1,5 +1,5 @@
 ---
-import { env } from 'cloudflare:workers';
+import { config } from '../../platform/runtime';
 import '../../styles/global.css';
 import Header from './Header.astro';
 import Footer from './Footer.astro';
@@ -23,7 +23,7 @@ const {
 } = Astro.props;
 const siteName = 'ซีรี่ย์บั้ม · คลังเทปเพลง';
 const fullTitle = title === siteName ? siteName : `${title} | ${siteName}`;
-const siteUrl = env.SITE_URL || Astro.url.origin;
+const siteUrl = config().siteUrl || Astro.url.origin;
 const canonical = canonicalUrl(canonicalPath, siteUrl);
 const shareImage = new URL(ogImage || '/og-default.jpg', siteUrl).href;
 const user = Astro.locals.user ?? null;

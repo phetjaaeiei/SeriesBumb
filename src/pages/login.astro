@@ -1,15 +1,14 @@
 ---
-import { env } from 'cloudflare:workers';
+import { config } from '../platform/runtime';
 import BaseLayout from '../components/layout/BaseLayout.astro';
-import { getConfig } from '../config/config';
 import { safeNextPath } from '../domain/urls';
 
-const next = safeNextPath(Astro.url.searchParams.get('next'), env.SITE_URL);
+const next = safeNextPath(Astro.url.searchParams.get('next'), config().siteUrl);
 // ?reauth=1: signed-in admins confirm their identity again before destructive actions.
 const reauth = Astro.url.searchParams.get('reauth') === '1';
 if (Astro.locals.user && !reauth) return Astro.redirect(next);
 const failed = Astro.url.searchParams.has('error');
-const turnstileSiteKey = getConfig(env).turnstile?.siteKey ?? null;
+const turnstileSiteKey = config().turnstile?.siteKey ?? null;
 ---
 <BaseLayout title="เข้าสู่ระบบ" noindex>
   <div class="error-page">

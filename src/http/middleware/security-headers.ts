@@ -1,6 +1,6 @@
+import { config } from '../../platform/runtime';
 import type { MiddlewareHandler } from 'astro';
-import { env } from 'cloudflare:workers';
-import { getConfig, isProduction } from '../../config/config';
+import { isProduction } from '../../config/config';
 import { isD1QuotaError } from '../../errors/d1';
 import { hasSessionCookie, securityHeaderSet } from '../headers';
 
@@ -16,7 +16,7 @@ export const securityHeaders: MiddlewareHandler = async (context, next) => {
   const extra = securityHeaderSet({
     pathname: context.url.pathname,
     hasSessionCookie: hasSessionCookie(context.request.headers.get('cookie')),
-    production: isProduction(getConfig(env)),
+    production: isProduction(config()),
   });
   for (const [name, value] of Object.entries(extra)) {
     // Routes that already chose a stricter or explicit cache policy keep it.

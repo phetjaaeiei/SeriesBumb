@@ -1,9 +1,9 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../platform/runtime';
 import BaseLayout from '../components/layout/BaseLayout.astro';
 import { searchPublic, type SearchResult } from '../domain/search';
 const q = Astro.url.searchParams.get('q')?.trim().slice(0, 100) ?? '';
-const results = q ? await searchPublic(env.DB, q) : [];
+const results = q ? await searchPublic(db(), q) : [];
 const groups: { kind: SearchResult['kind']; label: string; path: string }[] = [
   { kind: 'tape', label: 'เทป', path: 'tapes' },
   { kind: 'song', label: 'เพลง', path: 'songs' },

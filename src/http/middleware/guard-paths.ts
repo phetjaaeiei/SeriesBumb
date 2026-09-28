@@ -1,4 +1,4 @@
-import { env } from 'cloudflare:workers';
+import { config } from '../../platform/runtime';
 import type { MiddlewareHandler } from 'astro';
 import { safeNextPath } from '../../domain/urls';
 
@@ -15,7 +15,7 @@ export const guardPaths: MiddlewareHandler = async (context, next) => {
     }
   }
   if (!context.locals.user) {
-    const wanted = safeNextPath(path + context.url.search, env.SITE_URL);
+    const wanted = safeNextPath(path + context.url.search, config().siteUrl);
     return context.redirect(`/login?next=${encodeURIComponent(wanted)}`, 302);
   }
   if ((path === '/admin' || path.startsWith('/admin/')) && context.locals.user.role !== 'admin') {

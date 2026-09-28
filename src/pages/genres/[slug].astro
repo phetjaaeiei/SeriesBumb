@@ -1,12 +1,12 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
 import TapeResults from '../../components/ui/TapeResults.astro';
 import { getTapePage } from '../../repositories/tapes.repo';
 const slug = Astro.params.slug ?? '';
-const genre = await env.DB.prepare('SELECT id, name, publishedTapeCount FROM genre WHERE slug = ?').bind(slug).first<{ id: string; name: string; publishedTapeCount: number }>();
+const genre = await db().prepare('SELECT id, name, publishedTapeCount FROM genre WHERE slug = ?').bind(slug).first<{ id: string; name: string; publishedTapeCount: number }>();
 if (!genre) return Astro.rewrite('/404');
-const page = await getTapePage(env.DB, { genreId: genre.id, cursor: Astro.url.searchParams.get('cursor') });
+const page = await getTapePage(db(), { genreId: genre.id, cursor: Astro.url.searchParams.get('cursor') });
 ---
 <BaseLayout title={`แนวเพลง ${genre.name}`} description={`เทปเพลงไทยแนว${genre.name}ในคลังซีรี่ย์บั้ม`} canonicalPath={`/genres/${slug}`} noindex={Astro.url.searchParams.size > 0}>
   <p class="eyebrow"><a href="/genres">แนวเพลง</a></p>

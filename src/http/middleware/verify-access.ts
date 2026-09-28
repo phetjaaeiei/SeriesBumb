@@ -1,6 +1,5 @@
+import { config } from '../../platform/runtime';
 import type { MiddlewareHandler } from 'astro';
-import { env } from 'cloudflare:workers';
-import { getConfig } from '../../config/config';
 import { fetchAccessJwks, verifyAccessJwt } from '../../auth/access-jwt';
 import { isAdminSurface } from '../admin-surface';
 
@@ -9,7 +8,7 @@ import { isAdminSurface } from '../admin-surface';
  * and belong to the same person as the app session. Off until ACCESS_TEAM_DOMAIN and ACCESS_AUD are set.
  */
 export const verifyAccess: MiddlewareHandler = async (context, next) => {
-  const access = getConfig(env).access;
+  const access = config().access;
   if (!access || !isAdminSurface(context.url) || !context.locals.user) return next();
   const verified = await verifyAccessJwt(context.request.headers.get('Cf-Access-Jwt-Assertion'), {
     teamDomain: access.teamDomain,

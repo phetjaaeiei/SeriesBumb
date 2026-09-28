@@ -1,5 +1,5 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import { AdminCommentsTable, type AdminCommentRow } from '../../components/admin/CommunityTables';
 import { decodeCursor, encodeCursor } from '../../domain/cursor';
@@ -9,7 +9,7 @@ const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
 const kindWhere = kind === 'tape' ? 'AND c.tapeId IS NOT NULL' : kind === 'song' ? 'AND c.songId IS NOT NULL' : '';
 const page = cursor ? 'AND (c.createdAt, c.id) < (?, ?)' : '';
 type QueryRow = Omit<AdminCommentRow, 'canRestore' | 'targetUrl' | 'targetTitle'> & { tapeSlug: string | null; tapeTitle: string | null; songSlug: string | null; songTitle: string | null; deletedByAdmin: number };
-const all = (await env.DB.prepare(`SELECT c.id, c.body, c.createdAt, c.deletedAt, c.deletedByAdmin, u.name AS authorName, u.email AS authorEmail,
+const all = (await db().prepare(`SELECT c.id, c.body, c.createdAt, c.deletedAt, c.deletedByAdmin, u.name AS authorName, u.email AS authorEmail,
   t.slug AS tapeSlug, t.title AS tapeTitle, s.slug AS songSlug, s.title AS songTitle
   FROM comment c JOIN user u ON u.id = c.userId LEFT JOIN tape t ON t.id = c.tapeId LEFT JOIN song s ON s.id = c.songId
   WHERE 1 = 1 ${kindWhere} ${page}

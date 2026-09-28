@@ -1,5 +1,5 @@
+import { db } from '../../platform/runtime';
 import type { MiddlewareHandler } from 'astro';
-import { env } from 'cloudflare:workers';
 import { auditApiActionFor, auditTargetFromPath, recordAudit } from '../../services/audit';
 
 /**
@@ -12,7 +12,7 @@ export const auditAdmin: MiddlewareHandler = async (context, next) => {
   if (!action || !user || user.role !== 'admin') return next();
   const response = await next();
   try {
-    await recordAudit(env.DB, {
+    await recordAudit(db(), {
       actorUserId: user.id,
       actorEmail: user.email,
       action,

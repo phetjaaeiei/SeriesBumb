@@ -1,5 +1,5 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../../../platform/runtime';
 import AdminLayout from '../../../components/layout/AdminLayout.astro';
 import { getAdminCatalogPage, type AdminCatalogKind } from '../../../repositories/admin-catalog.repo';
 
@@ -11,7 +11,7 @@ const query = (Astro.url.searchParams.get('q') || '').trim().slice(0, 100);
 const requestedStatus = Astro.url.searchParams.get('status');
 const status = requestedStatus === 'draft' || requestedStatus === 'published' ? requestedStatus : 'all';
 const unlinked = Astro.url.searchParams.get('unlinked') === '1';
-const { items, nextCursor } = await getAdminCatalogPage(env.DB, {
+const { items, nextCursor } = await getAdminCatalogPage(db(), {
   kind, query, status, unlinked, cursor: Astro.url.searchParams.get('cursor'),
 });
 const nextParams = new URLSearchParams();

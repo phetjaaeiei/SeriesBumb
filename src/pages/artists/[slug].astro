@@ -1,6 +1,5 @@
 ---
-import { env } from 'cloudflare:workers';
-import { getConfig } from '../../config/config';
+import { db, config, imageBaseUrl } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
 import CreditLine from '../../components/layout/CreditLine.astro';
 import InfoBox from '../../components/ui/InfoBox.astro';
@@ -20,18 +19,18 @@ import { publicArtistRelations } from '../../services/catalog-relations';
 
 const slug = Astro.params.slug ?? '';
 const admin = Astro.locals.user?.role === 'admin';
-const artist = await env.DB.prepare(`SELECT a.*, creator.name AS createdByName, editor.name AS updatedByName FROM artist a LEFT JOIN user creator ON creator.id = a.createdBy LEFT JOIN user editor ON editor.id = a.updatedBy WHERE a.slug = ? ${admin ? '' : 'AND (a.publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1))'}`).bind(slug).first<{ id: string; slug: string; name: string; nameAlt: string | null; artistType: ArtistType | null; status: ArtistStatus; province: string | null; formedYear: number | null; themes: string | null; yearsActive: string | null; bio: string; imageKey: string | null; publishedTapeCount: number; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
+const artist = await db().prepare(`SELECT a.*, creator.name AS createdByName, editor.name AS updatedByName FROM artist a LEFT JOIN user creator ON creator.id = a.createdBy LEFT JOIN user editor ON editor.id = a.updatedBy WHERE a.slug = ? ${admin ? '' : 'AND (a.publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1))'}`).bind(slug).first<{ id: string; slug: string; name: string; nameAlt: string | null; artistType: ArtistType | null; status: ArtistStatus; province: string | null; formedYear: number | null; themes: string | null; yearsActive: string | null; bio: string; imageKey: string | null; publishedTapeCount: number; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
 if (!artist) return Astro.rewrite('/404');
-const catalogSources = await listCatalogSources(env.DB, 'artist', artist.id);
-const explicitRelations = await publicArtistRelations(env.DB, artist.id);
-const hasPublicSong = (await env.DB.prepare('SELECT 1 AS value FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = ? AND s.isPublic = 1 LIMIT 1').bind(artist.id).first<{ value: number }>()) !== null;
+const catalogSources = await listCatalogSources(db(), 'artist', artist.id);
+const explicitRelations = await publicArtistRelations(db(), artist.id);
+const hasPublicSong = (await db().prepare('SELECT 1 AS value FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = ? AND s.isPublic = 1 LIMIT 1').bind(artist.id).first<{ value: number }>()) !== null;
 const publicArtist = artist.publishedTapeCount > 0 || hasPublicSong;
 const songCursor = decodeCursor('title', Astro.url.searchParams.get('songs_cursor'));
 const songCursorFilter = songCursor ? 'AND (s.titleSort, s.id) > (?, ?)' : '';
 type SongRow = { id: string; slug: string; title: string; titleSort: string; firstTapeSlug: string | null; firstTapeTitle: string | null; firstTapeYear: number | null };
 const [members, songs, genreRows, lastLabel] = await Promise.all([
-  env.DB.prepare('SELECT am.name, am.role, am.years, am.isCurrent, p.slug AS personSlug FROM artist_member am LEFT JOIN person p ON p.id = am.personId AND am.sourceId IS NOT NULL WHERE am.artistId = ? ORDER BY am.position LIMIT 40').bind(artist.id).all<{ name: string; role: string; years: string | null; isCurrent: number; personSlug: string | null }>(),
-  env.DB.prepare(`WITH song_page AS MATERIALIZED (
+  db().prepare('SELECT am.name, am.role, am.years, am.isCurrent, p.slug AS personSlug FROM artist_member am LEFT JOIN person p ON p.id = am.personId AND am.sourceId IS NOT NULL WHERE am.artistId = ? ORDER BY am.position LIMIT 40').bind(artist.id).all<{ name: string; role: string; years: string | null; isCurrent: number; personSlug: string | null }>(),
+  db().prepare(`WITH song_page AS MATERIALIZED (
     SELECT s.id, s.slug, s.title, s.titleSort
     FROM song_artist sa JOIN song s ON s.id = sa.songId
     WHERE sa.artistId = ? AND (s.isPublic = 1 OR s.publishedTapeCount > 0) ${songCursorFilter}
@@ -46,33 +45,33 @@ const [members, songs, genreRows, lastLabel] = await Promise.all([
     ORDER BY t.yearSort, t.id LIMIT 1
   )
   ORDER BY sp.titleSort, sp.id`).bind(artist.id, ...(songCursor ? [songCursor.key, songCursor.id] : [])).all<SongRow>(),
-  env.DB.prepare(`SELECT g.name FROM (
+  db().prepare(`SELECT g.name FROM (
     SELECT ta.tapeId FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId
     WHERE ta.artistId = ? AND ta.isPublished = 1 AND t.status = 'published'
     ORDER BY ta.yearSort, ta.tapeId LIMIT 200
   ) artistTapes JOIN tape_genre tg ON tg.tapeId = artistTapes.tapeId AND tg.isPublished = 1
     JOIN genre g ON g.id = tg.genreId
     GROUP BY g.id ORDER BY COUNT(*) DESC, g.name LIMIT 3`).bind(artist.id).all<{ name: string }>(),
-  env.DB.prepare(`SELECT l.name, l.slug FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId JOIN label l ON l.id = t.labelId
+  db().prepare(`SELECT l.name, l.slug FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId JOIN label l ON l.id = t.labelId
     WHERE ta.artistId = ? AND ta.isPublished = 1 AND t.status = 'published'
     ORDER BY (t.year IS NULL), t.yearSort DESC, t.publishedAt DESC, t.id DESC LIMIT 1`).bind(artist.id).first<{ name: string; slug: string }>(),
 ]);
-const page = await getTapePage(env.DB, { artistId: artist.id, sort: 'year', pageSize: 50, cursor: Astro.url.searchParams.get('cursor') });
+const page = await getTapePage(db(), { artistId: artist.id, sort: 'year', pageSize: 50, cursor: Astro.url.searchParams.get('cursor') });
 const [appearances, similarArtists, relatedLinks] = await Promise.all([
-  env.DB.prepare(`SELECT DISTINCT t.slug, t.title, t.year, s.slug AS songSlug, s.title AS songTitle
+  db().prepare(`SELECT DISTINCT t.slug, t.title, t.year, s.slug AS songSlug, s.title AS songTitle
     FROM song_artist sa JOIN song s ON s.id = sa.songId
     JOIN tape_track tt ON tt.songId = s.id JOIN tape t ON t.id = tt.tapeId
     WHERE sa.artistId = ? AND t.status = 'published' AND t.releaseType IN ('compilation', 'soundtrack')
       AND NOT EXISTS (SELECT 1 FROM tape_artist ta WHERE ta.tapeId = t.id AND ta.artistId = ?)
     ORDER BY t.yearSort, t.title, s.title LIMIT 80`).bind(artist.id, artist.id).all<{ slug: string; title: string; year: number | null; songSlug: string; songTitle: string }>(),
-  env.DB.prepare(`SELECT other.name, other.slug, COUNT(DISTINCT tg.genreId) AS sharedGenres
+  db().prepare(`SELECT other.name, other.slug, COUNT(DISTINCT tg.genreId) AS sharedGenres
     FROM tape_artist mine JOIN tape_genre tg ON tg.tapeId = mine.tapeId AND tg.isPublished = 1
     JOIN tape_genre otherGenre ON otherGenre.genreId = tg.genreId AND otherGenre.isPublished = 1
     JOIN tape_artist otherTape ON otherTape.tapeId = otherGenre.tapeId AND otherTape.isPublished = 1
     JOIN artist other ON other.id = otherTape.artistId
     WHERE mine.artistId = ? AND mine.isPublished = 1 AND other.id != ?
     GROUP BY other.id ORDER BY sharedGenres DESC, other.nameSort LIMIT 12`).bind(artist.id, artist.id).all<{ name: string; slug: string; sharedGenres: number }>(),
-  env.DB.prepare(`SELECT t.title, t.slug, t.reelUrl FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId
+  db().prepare(`SELECT t.title, t.slug, t.reelUrl FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId
     WHERE ta.artistId = ? AND ta.isPublished = 1 AND t.status = 'published' AND t.reelUrl IS NOT NULL
     ORDER BY t.yearSort, t.title LIMIT 30`).bind(artist.id).all<{ title: string; slug: string; reelUrl: string }>(),
 ]);
@@ -92,7 +91,7 @@ const tabs = page.items.length
 if (artist.artistType !== 'solo' && members.results.length) tabs.push({ id: 'members', label: 'สมาชิก' });
 if (page.items.length) tabs.push({ id: 'songs', label: 'เพลงที่ร้อง' });
 tabs.push({ id: 'similar', label: 'ศิลปินแนวใกล้กัน' }, { id: 'links', label: 'ลิงก์ที่เกี่ยวข้อง' });
-const turnstileSiteKey = getConfig(env).turnstile?.siteKey ?? null;
+const turnstileSiteKey = config().turnstile?.siteKey ?? null;
 ---
 <BaseLayout title={artist.name} description={(artist.bio || `ข้อมูลศิลปิน ${artist.name} และเพลงในคลัง`).replace(/\s+/gu, ' ').slice(0, 155)} canonicalPath={`/artists/${slug}`} noindex={!publicArtist || Astro.url.searchParams.size > 0}>
   {!publicArtist && <p class="draft-banner">ศิลปินฉบับร่าง · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
@@ -110,7 +109,7 @@ const turnstileSiteKey = getConfig(env).turnstile?.siteKey ?? null;
       { label: 'หัวข้อเพลง', value: artist.themes },
       { label: 'ค่ายล่าสุด', value: lastLabel?.name ?? null, href: lastLabel ? `/labels/${encodeURIComponent(lastLabel.slug)}` : undefined },
     ]} />
-    <div class="entity-art">{artist.imageKey && env.IMAGE_BASE_URL ? <img src={imageUrl(artist.imageKey, env.IMAGE_BASE_URL)} width="240" height="240" loading="lazy" decoding="async" alt={`รูป ${artist.name}`} /> : <Placeholder label={`ยังไม่มีรูป ${artist.name}`} />}</div>
+    <div class="entity-art">{artist.imageKey && imageBaseUrl() ? <img src={imageUrl(artist.imageKey, imageBaseUrl())} width="240" height="240" loading="lazy" decoding="async" alt={`รูป ${artist.name}`} /> : <Placeholder label={`ยังไม่มีรูป ${artist.name}`} />}</div>
   </div>
   {artist.bio && <ExpandableText text={artist.bio} id="artist-bio" className="section soft" />}
   <Tabs tabs={tabs}>
