@@ -5,6 +5,7 @@
 //   npm run parity -- --base <ref> --max 300 --keep
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { diffName, normalizeHtml, pageLinks, shouldCrawl } from './lib.ts';
@@ -24,9 +25,18 @@ const children: ChildProcess[] = [];
 const run = (cwd: string, command: string, commandArgs: string[], env: NodeJS.ProcessEnv = {}) =>
   execFileSync(command, commandArgs, { cwd, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', env: { ...process.env, CI: 'true', ...env } });
 
-function serve(cwd: string, configPath: string, state: string, port: number, vars: Record<string, string>): string {
+function freePort(): Promise<number> {
+  return new Promise((done, fail) => {
+    const server = createServer();
+    server.once('error', fail);
+    server.listen(0, '127.0.0.1', () => { const { port } = server.address() as { port: number }; server.close(() => done(port)); });
+  });
+}
+
+async function serve(cwd: string, configPath: string, state: string, vars: Record<string, string>): Promise<string> {
+  const [port, inspector] = [await freePort(), await freePort()];
   const varArgs = Object.entries(vars).flatMap(([key, value]) => ['--var', `${key}:${value}`]);
-  const child = spawn('npx', ['wrangler', 'dev', '--config', configPath, '--persist-to', state, '--port', String(port), '--ip', '127.0.0.1', '--local', ...varArgs], {
+  const child = spawn('npx', ['wrangler', 'dev', '--config', configPath, '--persist-to', state, '--port', String(port), '--inspector-port', String(inspector), '--ip', '127.0.0.1', '--local', ...varArgs], {
     cwd, detached: true, stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, CI: 'true' },
   });
   let stderr = '';
@@ -72,7 +82,7 @@ async function main() {
   const seedState = join(work, 'state');
   mkdirSync(seedState);
   run(root, 'npx', ['wrangler', 'd1', 'migrations', 'apply', 'seriesbumb', '--local', '--persist-to', seedState]);
-  const seeder = serve(join(root, 'scripts/parity'), 'wrangler.seed.jsonc', seedState, 8791, { PARITY_AUTH_SECRET: secret });
+  const seeder = await serve(join(root, 'scripts/parity'), 'wrangler.seed.jsonc', seedState, { PARITY_AUTH_SECRET: secret });
   await ready(seeder).catch(async () => { await new Promise((done) => setTimeout(done, 1000)); });
   const seeded = await (await fetch(`${seeder}/seed?size=parity`, { method: 'POST' })).json() as { cookies: Record<string, string>; adminEmail: string };
   stop();
@@ -81,8 +91,8 @@ async function main() {
   const vars = { BETTER_AUTH_SECRET: secret, GOOGLE_CLIENT_ID: 'parity', GOOGLE_CLIENT_SECRET: 'parity', ADMIN_EMAILS: seeded.adminEmail, SITE_URL: 'http://localhost:4321' };
   cpSync(seedState, join(work, 'state-base'), { recursive: true });
   cpSync(seedState, join(work, 'state-head'), { recursive: true });
-  const base = serve(baseTree, 'dist/server/wrangler.json', join(work, 'state-base'), 8792, vars);
-  const head = serve(root, 'dist/server/wrangler.json', join(work, 'state-head'), 8793, vars);
+  const base = await serve(baseTree, 'dist/server/wrangler.json', join(work, 'state-base'), vars);
+  const head = await serve(root, 'dist/server/wrangler.json', join(work, 'state-head'), vars);
   await Promise.all([ready(base), ready(head)]);
 
   const starts = ['/', '/tapes', '/songs', '/artists', '/labels', '/genres', '/collections', '/decades', '/latest', '/reviews', '/search?q=%E0%B8%A3%E0%B8%B1%E0%B8%81', '/search/advanced', '/search/advanced?q=%E0%B8%9D%E0%B8%99', '/me', '/me/submissions', '/robots.txt', '/no-such-page', '/admin'];
