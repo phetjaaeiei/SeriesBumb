@@ -13,11 +13,14 @@ export async function setEngagement(db: D1Database, userId: string, kind: Engage
   const write = value
     ? db.prepare(`INSERT OR IGNORE INTO ${table} (userId, ${idColumn}, createdAt) VALUES (?, ?, ?)`).bind(userId, targetId, Date.now())
     : db.prepare(`DELETE FROM ${table} WHERE userId = ? AND ${idColumn} = ?`).bind(userId, targetId);
+  // One atomic batch; the counter UPDATE matches no row unless the like/owner row really changed,
+  // so repeated clicks cost no counter writes.
   const result = await db.batch([
     write,
-    db.prepare(`UPDATE ${targetTable} SET ${countColumn} = (SELECT COUNT(*) FROM ${table} WHERE ${idColumn} = ?) WHERE id = ?`).bind(targetId, targetId),
+    db.prepare(`UPDATE ${targetTable} SET ${countColumn} = MAX(0, ${countColumn} ${value ? '+' : '-'} 1) WHERE id = ? AND changes() > 0`).bind(targetId),
     db.prepare(`SELECT ${countColumn} AS count FROM ${targetTable} WHERE id = ?`).bind(targetId),
   ]);
+  const changed = (result[0].meta.changes ?? 0) > 0;
   const count = (result[2].results[0] as { count: number } | undefined)?.count;
-  return { value, count: count ?? 0 };
+  return { value, count: count ?? 0, changed };
 }
