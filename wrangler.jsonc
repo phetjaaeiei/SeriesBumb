@@ -69,7 +69,10 @@
         "AUDIO_FIREBASE_ENABLED": "false",
         "FIREBASE_IMAGE_UPLOADS_ENABLED": "false",
         "IMAGE_BASE_URL": "https://lgtdhbeocizxxvptofdb.supabase.co/storage/v1/object/public/SeriesBumbImages",
-        "CF_BEACON_TOKEN": ""
+        "CF_BEACON_TOKEN": "",
+        // Cloudflare's public always-pass test site key keeps the Turnstile path exercised on staging.
+        // The matching test secret is a staging Worker secret; test keys are rejected when APP_ENV is production.
+        "TURNSTILE_SITE_KEY": "1x00000000000000000000AA"
       },
       "observability": {
         "enabled": true
