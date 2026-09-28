@@ -26,4 +26,16 @@ describe('verifyTurnstile', () => {
     const broken = vi.fn().mockRejectedValue(new Error('down')) as unknown as typeof fetch;
     expect(await verifyTurnstile({ secret: 's', token: 't', ip: null, hostname: 'h', fetcher: broken })).toBe(false);
   });
+
+  it("accepts Cloudflare's test keys outside production only, whatever hostname they report", async () => {
+    const testResult = { success: true, hostname: 'example.com', metadata: { result_with_testing_key: true } };
+    const check = { secret: 's', token: 't', ip: null, hostname: 'seriesbumb-staging.phetjaa.workers.dev' };
+    expect(await verifyTurnstile({ ...check, allowTestKeys: true, fetcher: fakeFetch(testResult) })).toBe(true);
+    expect(await verifyTurnstile({ ...check, allowTestKeys: false, fetcher: fakeFetch(testResult) })).toBe(false);
+    expect(await verifyTurnstile({ ...check, allowTestKeys: true, fetcher: fakeFetch({ ...testResult, success: false }) })).toBe(false);
+  });
+
+  it('keeps the hostname check for real keys even when test keys are allowed', async () => {
+    expect(await verifyTurnstile({ secret: 's', token: 't', ip: null, hostname: 'h', allowTestKeys: true, fetcher: fakeFetch({ success: true, hostname: 'evil.example' }) })).toBe(false);
+  });
 });

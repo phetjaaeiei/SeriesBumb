@@ -3,7 +3,8 @@ import { z } from 'astro/zod';
 // Empty strings in wrangler vars mean "not configured".
 const optionalText = z.string().trim().min(1).optional().catch(undefined);
 const flag = z.enum(['true', 'false']).optional().transform((value) => value === 'true');
-const optionalHttpsUrl = z.url({ protocol: /^https$/ }).optional();
+const blankAsUnset = (value: unknown) => (typeof value === 'string' && value.trim() === '' ? undefined : value);
+const optionalHttpsUrl = z.preprocess(blankAsUnset, z.url({ protocol: /^https$/ }).optional());
 const siteUrl = z.url({ protocol: /^https?$/ }).refine((value) => {
   const url = new URL(value);
   return url.protocol === 'https:' || url.hostname === 'localhost' || url.hostname === '127.0.0.1';
@@ -29,7 +30,7 @@ export const envSchema = z.object({
   AUDIO_FIREBASE_ENABLED: flag,
   CF_BEACON_TOKEN: optionalText,
   // Cloudflare Access in front of /admin (Zero Trust Free). Both values or neither.
-  ACCESS_TEAM_DOMAIN: z.url({ protocol: /^https$/, hostname: /^[a-z0-9-]+\.cloudflareaccess\.com$/ }).optional(),
+  ACCESS_TEAM_DOMAIN: z.preprocess(blankAsUnset, z.url({ protocol: /^https$/, hostname: /^[a-z0-9-]+\.cloudflareaccess\.com$/ }).optional()),
   ACCESS_AUD: optionalText,
   // Turnstile on sign-in and member submissions. Site key is public (vars), secret is a Worker secret.
   TURNSTILE_SITE_KEY: optionalText,

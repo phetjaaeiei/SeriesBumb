@@ -68,5 +68,10 @@ describe('getConfig', () => {
   it('only accepts a Cloudflare Access team domain', () => {
     expect(() => getConfig({ ...base, ACCESS_TEAM_DOMAIN: 'https://evil.example', ACCESS_AUD: 'aud' })).toThrow(ConfigError);
   });
-});
 
+  it('treats blank optional URLs as not configured instead of failing the whole site', () => {
+    const config = getConfig({ ...base, ACCESS_TEAM_DOMAIN: ' ', ACCESS_AUD: 'aud', IMAGE_BASE_URL: '', SUPABASE_URL: '' });
+    expect(config.access).toBeNull();
+    expect(config.images.baseUrl).toBeNull();
+  });
+});

@@ -1,7 +1,7 @@
 import { ActionError, defineAction, type ActionAPIContext } from 'astro:actions';
 import { z } from 'astro/zod';
 import { env } from 'cloudflare:workers';
-import { getConfig } from '../config/config';
+import { getConfig, isProduction } from '../config/config';
 import { RATE_LIMITED_MESSAGE, rateLimiter } from './rate-limit';
 import { UNAUDITED_ACTIONS, adminActionNameFrom, auditTargetFromInput, withAudit } from './services/audit';
 import { TURNSTILE_FAILED_MESSAGE, verifyTurnstile } from './turnstile';
@@ -71,6 +71,7 @@ export function defineMemberWriteAction<T extends Input, R>(options: {
           token: (input as { turnstileToken?: string }).turnstileToken,
           ip: context.request.headers.get('cf-connecting-ip'),
           hostname: new URL(config.siteUrl).hostname,
+          allowTestKeys: !isProduction(config),
         });
         if (!passed) throw new ActionError({ code: 'FORBIDDEN', message: TURNSTILE_FAILED_MESSAGE });
       }

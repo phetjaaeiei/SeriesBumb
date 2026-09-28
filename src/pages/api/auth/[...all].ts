@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
 import { getAuth } from '../../../lib/auth';
 import { isAllowedAuthPath } from '../../../lib/auth-routes';
-import { getConfig } from '../../../config/config';
+import { getConfig, isProduction } from '../../../config/config';
 import { RATE_LIMITED_MESSAGE, rateLimiter } from '../../../lib/rate-limit';
 import { TURNSTILE_FAILED_MESSAGE, verifyTurnstile } from '../../../lib/turnstile';
 
@@ -23,6 +23,7 @@ const handle: APIRoute = async ({ request, url }) => {
       token: request.headers.get('x-turnstile-token'),
       ip: request.headers.get('cf-connecting-ip'),
       hostname: new URL(config.siteUrl).hostname,
+      allowTestKeys: !isProduction(config),
     })) {
       return Response.json({ message: TURNSTILE_FAILED_MESSAGE }, { status: 403, headers: noStore });
     }

@@ -26,8 +26,11 @@
 
 1. Cloudflare dashboard → Turnstile → Add widget: hostname `seriesbumb.phetjaa.workers.dev` (และ staging ถ้าต้องการ), mode **Managed**
 2. ใส่ site key ใน `wrangler.jsonc` → `vars`: `"TURNSTILE_SITE_KEY": "<site key>"` (เป็นค่าสาธารณะ) และ secret: `npx wrangler secret put TURNSTILE_SECRET_KEY`
+   - site key ต้องอยู่ใน `wrangler.jsonc` เท่านั้น ห้ามตั้งผ่าน dashboard หรือเป็น secret เพราะ CSP คำนวณตอน build จากไฟล์นี้ ถ้าไม่มี widget จะโหลดไม่ได้ และปุ่มเข้าสู่ระบบจะกดไม่ได้
 3. commit การแก้ `wrangler.jsonc` ผ่าน branch + PR แล้ว merge เข้า `main`
 4. `npm run deploy:prod` จาก worktree ของ `main` ที่สะอาด — build จะเพิ่ม `https://challenges.cloudflare.com` ใน CSP ให้เองเมื่อมี site key
 5. ตรวจ: หน้า `/login` มีกล่องยืนยัน, ปุ่มกดได้หลังผ่าน, และคอมเมนต์ส่งได้ตามปกติ
 
-ย้อนกลับ: ลบ `TURNSTILE_SITE_KEY` จาก vars แล้ว deploy ใหม่
+ลองบน staging ก่อนได้ด้วย test key ของ Cloudflare (ผ่านทุกครั้ง): ใส่ `"TURNSTILE_SITE_KEY": "1x00000000000000000000AA"` ใน `env.staging.vars` และ `npx wrangler secret put TURNSTILE_SECRET_KEY --env staging` เป็น `1x0000000000000000000000000000000AA` ระบบยอมรับ test key เฉพาะเมื่อ `APP_ENV` ไม่ใช่ `production`
+
+ย้อนกลับ: ลบ `TURNSTILE_SITE_KEY` จาก vars (commit + merge) แล้ว deploy ใหม่
