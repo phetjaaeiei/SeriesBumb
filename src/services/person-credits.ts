@@ -29,7 +29,7 @@ export async function creditsForTarget(db: SqlClient, kind: CreditKind, id: stri
     .all<{ id: string; creditedAs: string; role: string; personSlug: string; personName: string; sourceTitle: string; sourceUrl: string }>()).results;
 }
 
-export async function publicCreditsForPerson(db: D1Database, personId: string) {
+export async function publicCreditsForPerson(db: SqlClient, personId: string) {
   return (await db.prepare(`SELECT pc.creditedAs, pc.role, pc.targetKind, t.slug AS tapeSlug, t.title AS tapeTitle, s.slug AS songSlug, s.title AS songTitle, cs.title AS sourceTitle, cs.url AS sourceUrl
     FROM person_credit pc LEFT JOIN tape t ON pc.targetKind = 'tape' AND t.id = pc.targetId AND t.status = 'published'
     LEFT JOIN song s ON pc.targetKind = 'song' AND s.id = pc.targetId AND (s.isPublic = 1 OR s.publishedTapeCount > 0)

@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { randomPublicArtist } from '../../src/repositories/random-artist.repo';
+import { randomPublicArtist } from '../../src/repositories/artists.repo';
 
 describe('random artist', () => {
   it('never selects an artist without a public song or tape', async () => {

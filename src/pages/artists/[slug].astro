@@ -8,87 +8,27 @@ import Tabs from '../../components/ui/Tabs.astro';
 import TapeList from '../../components/ui/TapeList.astro';
 import ExpandableText from '../../components/ui/ExpandableText.astro';
 import { artistStatusLabel, artistTypeLabel, formatYear } from '../../domain/format';
-import { decodeCursor, encodeCursor } from '../../domain/cursor';
-import { getTapePage } from '../../repositories/tapes.repo';
 import { imageUrl } from '../../domain/urls';
-import type { ArtistStatus, ArtistType } from '../../domain/enums';
 import type { ReleaseType } from '../../domain/enums';
-import { listCatalogSources } from '../../services/catalog-sources';
 import { CorrectionForm } from '../../components/islands/ContributionForms';
-import { publicArtistRelations } from '../../services/catalog-relations';
+import { loadArtistDetail } from '../../loaders/artist-detail';
 
 const slug = Astro.params.slug ?? '';
+const model = await loadArtistDetail(db(), slug, Astro.url.searchParams, Astro.locals.user);
+if (!model) return Astro.rewrite('/404');
+const { artist, publicArtist, catalogSources, explicitRelations, members, songs: visibleSongs, nextSongCursor, genreNames, lastLabel, page, appearances, similarArtists, relatedLinks } = model;
 const admin = Astro.locals.user?.role === 'admin';
-const artist = await db().prepare(`SELECT a.*, creator.name AS createdByName, editor.name AS updatedByName FROM artist a LEFT JOIN user creator ON creator.id = a.createdBy LEFT JOIN user editor ON editor.id = a.updatedBy WHERE a.slug = ? ${admin ? '' : 'AND (a.publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1))'}`).bind(slug).first<{ id: string; slug: string; name: string; nameAlt: string | null; artistType: ArtistType | null; status: ArtistStatus; province: string | null; formedYear: number | null; themes: string | null; yearsActive: string | null; bio: string; imageKey: string | null; publishedTapeCount: number; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
-if (!artist) return Astro.rewrite('/404');
-const catalogSources = await listCatalogSources(db(), 'artist', artist.id);
-const explicitRelations = await publicArtistRelations(db(), artist.id);
-const hasPublicSong = (await db().prepare('SELECT 1 AS value FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = ? AND s.isPublic = 1 LIMIT 1').bind(artist.id).first<{ value: number }>()) !== null;
-const publicArtist = artist.publishedTapeCount > 0 || hasPublicSong;
-const songCursor = decodeCursor('title', Astro.url.searchParams.get('songs_cursor'));
-const songCursorFilter = songCursor ? 'AND (s.titleSort, s.id) > (?, ?)' : '';
-type SongRow = { id: string; slug: string; title: string; titleSort: string; firstTapeSlug: string | null; firstTapeTitle: string | null; firstTapeYear: number | null };
-const [members, songs, genreRows, lastLabel] = await Promise.all([
-  db().prepare('SELECT am.name, am.role, am.years, am.isCurrent, p.slug AS personSlug FROM artist_member am LEFT JOIN person p ON p.id = am.personId AND am.sourceId IS NOT NULL WHERE am.artistId = ? ORDER BY am.position LIMIT 40').bind(artist.id).all<{ name: string; role: string; years: string | null; isCurrent: number; personSlug: string | null }>(),
-  db().prepare(`WITH song_page AS MATERIALIZED (
-    SELECT s.id, s.slug, s.title, s.titleSort
-    FROM song_artist sa JOIN song s ON s.id = sa.songId
-    WHERE sa.artistId = ? AND (s.isPublic = 1 OR s.publishedTapeCount > 0) ${songCursorFilter}
-    ORDER BY s.titleSort, s.id LIMIT 101
-  )
-  SELECT sp.id, sp.slug, sp.title, sp.titleSort,
-    firstTape.slug AS firstTapeSlug, firstTape.title AS firstTapeTitle, firstTape.year AS firstTapeYear
-  FROM song_page sp
-  LEFT JOIN tape firstTape ON firstTape.id = (
-    SELECT t.id FROM tape_track tt JOIN tape t ON t.id = tt.tapeId
-    WHERE tt.songId = sp.id AND t.status = 'published'
-    ORDER BY t.yearSort, t.id LIMIT 1
-  )
-  ORDER BY sp.titleSort, sp.id`).bind(artist.id, ...(songCursor ? [songCursor.key, songCursor.id] : [])).all<SongRow>(),
-  db().prepare(`SELECT g.name FROM (
-    SELECT ta.tapeId FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId
-    WHERE ta.artistId = ? AND ta.isPublished = 1 AND t.status = 'published'
-    ORDER BY ta.yearSort, ta.tapeId LIMIT 200
-  ) artistTapes JOIN tape_genre tg ON tg.tapeId = artistTapes.tapeId AND tg.isPublished = 1
-    JOIN genre g ON g.id = tg.genreId
-    GROUP BY g.id ORDER BY COUNT(*) DESC, g.name LIMIT 3`).bind(artist.id).all<{ name: string }>(),
-  db().prepare(`SELECT l.name, l.slug FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId JOIN label l ON l.id = t.labelId
-    WHERE ta.artistId = ? AND ta.isPublished = 1 AND t.status = 'published'
-    ORDER BY (t.year IS NULL), t.yearSort DESC, t.publishedAt DESC, t.id DESC LIMIT 1`).bind(artist.id).first<{ name: string; slug: string }>(),
-]);
-const page = await getTapePage(db(), { artistId: artist.id, sort: 'year', pageSize: 50, cursor: Astro.url.searchParams.get('cursor') });
-const [appearances, similarArtists, relatedLinks] = await Promise.all([
-  db().prepare(`SELECT DISTINCT t.slug, t.title, t.year, s.slug AS songSlug, s.title AS songTitle
-    FROM song_artist sa JOIN song s ON s.id = sa.songId
-    JOIN tape_track tt ON tt.songId = s.id JOIN tape t ON t.id = tt.tapeId
-    WHERE sa.artistId = ? AND t.status = 'published' AND t.releaseType IN ('compilation', 'soundtrack')
-      AND NOT EXISTS (SELECT 1 FROM tape_artist ta WHERE ta.tapeId = t.id AND ta.artistId = ?)
-    ORDER BY t.yearSort, t.title, s.title LIMIT 80`).bind(artist.id, artist.id).all<{ slug: string; title: string; year: number | null; songSlug: string; songTitle: string }>(),
-  db().prepare(`SELECT other.name, other.slug, COUNT(DISTINCT tg.genreId) AS sharedGenres
-    FROM tape_artist mine JOIN tape_genre tg ON tg.tapeId = mine.tapeId AND tg.isPublished = 1
-    JOIN tape_genre otherGenre ON otherGenre.genreId = tg.genreId AND otherGenre.isPublished = 1
-    JOIN tape_artist otherTape ON otherTape.tapeId = otherGenre.tapeId AND otherTape.isPublished = 1
-    JOIN artist other ON other.id = otherTape.artistId
-    WHERE mine.artistId = ? AND mine.isPublished = 1 AND other.id != ?
-    GROUP BY other.id ORDER BY sharedGenres DESC, other.nameSort LIMIT 12`).bind(artist.id, artist.id).all<{ name: string; slug: string; sharedGenres: number }>(),
-  db().prepare(`SELECT t.title, t.slug, t.reelUrl FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId
-    WHERE ta.artistId = ? AND ta.isPublished = 1 AND t.status = 'published' AND t.reelUrl IS NOT NULL
-    ORDER BY t.yearSort, t.title LIMIT 30`).bind(artist.id).all<{ title: string; slug: string; reelUrl: string }>(),
-]);
 const releaseGroups: { type: ReleaseType; label: string }[] = [
   { type: 'album', label: 'อัลบั้ม' }, { type: 'single', label: 'ซิงเกิล' },
   { type: 'compilation', label: 'รวมศิลปิน' }, { type: 'soundtrack', label: 'เพลงประกอบ' },
   { type: 'other', label: 'อื่น ๆ' },
 ];
-const currentMembers = members.results.filter(member => member.isCurrent);
-const pastMembers = members.results.filter(member => !member.isCurrent);
-const visibleSongs = songs.results.slice(0, 100);
-const lastSong = visibleSongs.at(-1);
-const nextSongCursor = songs.results.length > 100 && lastSong ? encodeCursor('title', lastSong.titleSort, lastSong.id) : null;
+const currentMembers = members.filter(member => member.isCurrent);
+const pastMembers = members.filter(member => !member.isCurrent);
 const tabs = page.items.length
   ? [{ id: 'discography', label: 'ผลงาน' }]
   : [{ id: 'songs', label: 'เพลงที่ร้อง' }, { id: 'discography', label: 'ผลงาน' }];
-if (artist.artistType !== 'solo' && members.results.length) tabs.push({ id: 'members', label: 'สมาชิก' });
+if (artist.artistType !== 'solo' && members.length) tabs.push({ id: 'members', label: 'สมาชิก' });
 if (page.items.length) tabs.push({ id: 'songs', label: 'เพลงที่ร้อง' });
 tabs.push({ id: 'similar', label: 'ศิลปินแนวใกล้กัน' }, { id: 'links', label: 'ลิงก์ที่เกี่ยวข้อง' });
 const turnstileSiteKey = config().turnstile?.siteKey ?? null;
@@ -105,7 +45,7 @@ const turnstileSiteKey = config().turnstile?.siteKey ?? null;
       { label: 'มาจาก', value: artist.province, href: artist.province ? `/artists?province=${encodeURIComponent(artist.province)}` : undefined },
       { label: 'เริ่มทำงาน', value: artist.formedYear ? formatYear(artist.formedYear) : null },
       { label: 'ปีที่ทำงาน', value: artist.yearsActive },
-      { label: 'แนวเพลง', value: genreRows.results.map(row => row.name).join(', ') || null },
+      { label: 'แนวเพลง', value: genreNames.join(', ') || null },
       { label: 'หัวข้อเพลง', value: artist.themes },
       { label: 'ค่ายล่าสุด', value: lastLabel?.name ?? null, href: lastLabel ? `/labels/${encodeURIComponent(lastLabel.slug)}` : undefined },
     ]} />
@@ -116,9 +56,9 @@ const turnstileSiteKey = config().turnstile?.siteKey ?? null;
     <section id="discography" class="tab-panel" data-tab-panel><h2>ผลงาน</h2>
       {page.items.length ? releaseGroups.map(group => { const items = page.items.filter(item => item.releaseType === group.type); return items.length ? <div class="section"><h3>{group.label}</h3><TapeList items={items} showLabel={false} /></div> : null; }) : <p class="empty-state">ยังไม่มีเทปของศิลปินนี้ที่เผยแพร่ <a href="#songs">ดูเพลงที่มีข้อมูลแล้ว</a></p>}
       {page.nextCursor && <nav class="pagination" aria-label="ผลงานหน้าถัดไป"><a class="button" href={`/artists/${encodeURIComponent(slug)}?cursor=${encodeURIComponent(page.nextCursor)}#discography`} rel="nofollow">ผลงานหน้าถัดไป →</a></nav>}
-      {appearances.results.length > 0 && <div class="section"><h3>เพลงที่ปรากฏในชุดรวม</h3><div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">เพลง</th><th scope="col">ชุดเทป</th><th scope="col">ปี</th></tr></thead><tbody>{appearances.results.map(row => <tr><td><a href={`/songs/${encodeURIComponent(row.songSlug)}`}>{row.songTitle}</a></td><td><a href={`/tapes/${encodeURIComponent(row.slug)}`}>{row.title}</a></td><td class="mono">{formatYear(row.year)}</td></tr>)}</tbody></table></div></div>}
+      {appearances.length > 0 && <div class="section"><h3>เพลงที่ปรากฏในชุดรวม</h3><div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">เพลง</th><th scope="col">ชุดเทป</th><th scope="col">ปี</th></tr></thead><tbody>{appearances.map(row => <tr><td><a href={`/songs/${encodeURIComponent(row.songSlug)}`}>{row.songTitle}</a></td><td><a href={`/tapes/${encodeURIComponent(row.slug)}`}>{row.title}</a></td><td class="mono">{formatYear(row.year)}</td></tr>)}</tbody></table></div></div>}
     </section>
-    {artist.artistType !== 'solo' && members.results.length > 0 && <section id="members" class="tab-panel" data-tab-panel>
+    {artist.artistType !== 'solo' && members.length > 0 && <section id="members" class="tab-panel" data-tab-panel>
       <h2>สมาชิก</h2>
       {([{ title: 'สมาชิกล่าสุด', rows: currentMembers }, { title: 'อดีตสมาชิก', rows: pastMembers }]).map(group => group.rows.length > 0 && <div class="section">
         <h3>{group.title}</h3>
@@ -136,11 +76,11 @@ const turnstileSiteKey = config().turnstile?.siteKey ?? null;
     <section id="similar" class="tab-panel" data-tab-panel><h2>ศิลปินแนวใกล้กัน</h2>
       {explicitRelations.length > 0 && <div class="section"><h3>ความสัมพันธ์ที่มีหลักฐาน</h3><ul class="plain-list">{explicitRelations.map(item => <li><a href={`/artists/${encodeURIComponent(item.slug)}`}>{item.name}</a> · {item.relationType === 'former_name' ? 'ชื่อเดิม' : item.relationType === 'collaboration' ? 'ร่วมงาน' : 'เกี่ยวข้อง'} · <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer">{item.sourceTitle} ↗</a></li>)}</ul></div>}
       <p class="soft">แสดงศิลปินที่มีแนวเพลงร่วมกันจากเทปที่เผยแพร่แล้ว</p>
-      {similarArtists.results.length ? <div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">ศิลปิน</th><th scope="col">แนวเพลงที่ตรงกัน</th></tr></thead><tbody>{similarArtists.results.map(row => <tr><td><a href={`/artists/${encodeURIComponent(row.slug)}`}>{row.name}</a></td><td class="mono">{row.sharedGenres}</td></tr>)}</tbody></table></div> : <p class="empty-state">ยังไม่มีข้อมูลแนวเพลงของเทปที่เผยแพร่เพียงพอสำหรับแนะนำศิลปิน</p>}
+      {similarArtists.length ? <div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">ศิลปิน</th><th scope="col">แนวเพลงที่ตรงกัน</th></tr></thead><tbody>{similarArtists.map(row => <tr><td><a href={`/artists/${encodeURIComponent(row.slug)}`}>{row.name}</a></td><td class="mono">{row.sharedGenres}</td></tr>)}</tbody></table></div> : <p class="empty-state">ยังไม่มีข้อมูลแนวเพลงของเทปที่เผยแพร่เพียงพอสำหรับแนะนำศิลปิน</p>}
     </section>
     <section id="links" class="tab-panel" data-tab-panel><h2>ลิงก์ที่เกี่ยวข้อง</h2>
       {catalogSources.length > 0 && <div class="section"><h3>แหล่งอ้างอิง</h3><ul class="plain-list">{catalogSources.map(source => <li><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title} ↗</a><p class="soft">{source.claim}</p></li>)}</ul></div>}
-      {relatedLinks.results.length ? <ul class="plain-list">{relatedLinks.results.map(row => <li><a href={row.reelUrl} target="_blank" rel="noopener noreferrer">รีวิว {row.title} ↗</a> <span class="muted">· <a href={`/tapes/${encodeURIComponent(row.slug)}`}>ดูข้อมูลเทป</a></span></li>)}</ul> : <p class="empty-state">ยังไม่มีลิงก์รีวิวที่บันทึกไว้กับผลงานของศิลปินนี้</p>}
+      {relatedLinks.length ? <ul class="plain-list">{relatedLinks.map(row => <li><a href={row.reelUrl} target="_blank" rel="noopener noreferrer">รีวิว {row.title} ↗</a> <span class="muted">· <a href={`/tapes/${encodeURIComponent(row.slug)}`}>ดูข้อมูลเทป</a></span></li>)}</ul> : <p class="empty-state">ยังไม่มีลิงก์รีวิวที่บันทึกไว้กับผลงานของศิลปินนี้</p>}
     </section>
   </Tabs>
   <section class="section"><h2>เสนอแก้ข้อมูลศิลปิน</h2><CorrectionForm turnstileSiteKey={turnstileSiteKey} targetKind="artist" targetId={artist.id} authenticated={Boolean(Astro.locals.user)} loginNext={Astro.url.pathname} client:visible /></section>

@@ -33,7 +33,7 @@ export async function addTapeEdition(db: D1Database, tapeId: string, relatedTape
 export async function deleteArtistRelation(db: D1Database, id: string) { await db.prepare('DELETE FROM artist_relation WHERE id = ?').bind(id).run(); }
 export async function deleteTapeEdition(db: D1Database, id: string) { await db.prepare('DELETE FROM tape_edition WHERE id = ?').bind(id).run(); }
 
-export async function publicArtistRelations(db: D1Database, artistId: string) {
+export async function publicArtistRelations(db: SqlClient, artistId: string) {
   return (await db.prepare(`SELECT ar.relationType, a.slug, a.name, cs.title AS sourceTitle, cs.url AS sourceUrl FROM artist_relation ar
     JOIN artist a ON a.id = ar.relatedArtistId JOIN catalog_source cs ON cs.id = ar.sourceId
     WHERE ar.artistId = ? AND (a.publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1))
