@@ -1,5 +1,5 @@
-import { authClient } from '../lib/client/auth-client';
-import { renderTurnstile, type TurnstileWidget } from '../lib/client/turnstile';
+import { authClient } from '../client/auth-client';
+import { renderTurnstile, type TurnstileWidget } from '../client/turnstile';
 
 const button = document.querySelector<HTMLButtonElement>('[data-google-login]');
 const challenge = document.querySelector<HTMLElement>('[data-turnstile-sitekey]');

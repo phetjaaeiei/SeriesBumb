@@ -1,7 +1,7 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
 import React, { useEffect, useState, type SyntheticEvent } from 'react';
-import type { CommentDto } from '../../lib/services/comments';
+import type { CommentDto } from '../../services/comments';
 import { TurnstileField } from './TurnstileField';
 
 interface Props {

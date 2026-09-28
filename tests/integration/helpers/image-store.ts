@@ -1,4 +1,4 @@
-import type { ImageStore } from '../../../src/lib/services/image-store';
+import type { ImageStore } from '../../../src/storage/image-store';
 
 export class MemoryImageStore implements ImageStore {
   private objects = new Map<string, { bytes: Uint8Array; contentType?: string }>();

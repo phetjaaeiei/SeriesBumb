@@ -1,6 +1,6 @@
 /** @jsxRuntime classic */
 import React, { useEffect, useRef } from 'react';
-import { renderTurnstile } from '../../lib/client/turnstile';
+import { renderTurnstile } from '../../client/turnstile';
 
 /** Renders nothing unless Turnstile is configured; `resetKey` changes re-issue a fresh token after each submit. */
 export function TurnstileField({ siteKey, onToken, resetKey = 0 }: { siteKey: string | null | undefined; onToken: (token: string | null) => void; resetKey?: number }) {

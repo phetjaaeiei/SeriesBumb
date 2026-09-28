@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { listAudit, recordAudit, withAudit } from '../../src/lib/services/audit';
+import { listAudit, recordAudit, withAudit } from '../../src/services/audit';
 
 describe('audit log', () => {
   it('records admin writes and lists them newest first with a cursor', async () => {

@@ -18,7 +18,7 @@ import {
   SEARCH_KINDS,
   SIDES,
   TAPE_STATUSES,
-} from './enums';
+} from '../domain/enums';
 
 // Better Auth stores Date values; application timestamps below are plain unix milliseconds.
 export const user = sqliteTable('user', {

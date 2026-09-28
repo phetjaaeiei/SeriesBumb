@@ -1,11 +1,11 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db, imageBaseUrl } from '../platform/runtime';
 import BaseLayout from '../components/layout/BaseLayout.astro';
 import Tabs from '../components/ui/Tabs.astro';
 import Placeholder from '../components/ui/Placeholder.astro';
-import { decodeCursor, encodeCursor } from '../lib/queries/cursor';
-import { formatYear } from '../lib/format';
-import { imageUrl } from '../lib/urls';
+import { decodeCursor, encodeCursor } from '../domain/cursor';
+import { formatYear } from '../domain/format';
+import { imageUrl } from '../domain/urls';
 
 const user = Astro.locals.user;
 if (!user) return Astro.redirect('/login?next=%2Fme', 302);
@@ -19,7 +19,7 @@ const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
 
 async function tapePage(table: 'tape_like' | 'tape_owner', pageCursor: typeof cursor) {
   const extra = pageCursor ? 'AND (e.createdAt, e.tapeId) < (?, ?)' : '';
-  const rows = (await env.DB.prepare(`SELECT e.tapeId AS id, e.createdAt, t.slug, t.title, t.year, t.coverThumbKey FROM ${table} e JOIN tape t ON t.id = e.tapeId WHERE e.userId = ? AND t.status = 'published' ${extra} ORDER BY e.createdAt DESC, e.tapeId DESC LIMIT 49`).bind(userId, ...(pageCursor ? [pageCursor.key, pageCursor.id] : [])).all<TapeEntry>()).results;
+  const rows = (await db().prepare(`SELECT e.tapeId AS id, e.createdAt, t.slug, t.title, t.year, t.coverThumbKey FROM ${table} e JOIN tape t ON t.id = e.tapeId WHERE e.userId = ? AND t.status = 'published' ${extra} ORDER BY e.createdAt DESC, e.tapeId DESC LIMIT 49`).bind(userId, ...(pageCursor ? [pageCursor.key, pageCursor.id] : [])).all<TapeEntry>()).results;
   const items = rows.slice(0, 48);
   const last = items.at(-1);
   return { items, next: rows.length > 48 && last ? encodeCursor('new', last.createdAt, last.id) : null };
@@ -27,7 +27,7 @@ async function tapePage(table: 'tape_like' | 'tape_owner', pageCursor: typeof cu
 
 async function songPage(pageCursor: typeof cursor) {
   const extra = pageCursor ? 'AND (e.createdAt, e.songId) < (?, ?)' : '';
-  const rows = (await env.DB.prepare(`SELECT e.songId AS id, e.createdAt, s.slug, s.title, s.publishedTapeCount FROM song_like e JOIN song s ON s.id = e.songId WHERE e.userId = ? AND (s.isPublic = 1 OR s.publishedTapeCount > 0) ${extra} ORDER BY e.createdAt DESC, e.songId DESC LIMIT 49`).bind(userId, ...(pageCursor ? [pageCursor.key, pageCursor.id] : [])).all<SongEntry>()).results;
+  const rows = (await db().prepare(`SELECT e.songId AS id, e.createdAt, s.slug, s.title, s.publishedTapeCount FROM song_like e JOIN song s ON s.id = e.songId WHERE e.userId = ? AND (s.isPublic = 1 OR s.publishedTapeCount > 0) ${extra} ORDER BY e.createdAt DESC, e.songId DESC LIMIT 49`).bind(userId, ...(pageCursor ? [pageCursor.key, pageCursor.id] : [])).all<SongEntry>()).results;
   const items = rows.slice(0, 48);
   const last = items.at(-1);
   return { items, next: rows.length > 48 && last ? encodeCursor('new', last.createdAt, last.id) : null };
@@ -46,7 +46,7 @@ const nextLink = (tab: Tab, value: string) => `/me?tab=${tab}&cursor=${encodeURI
   <p><a href="/me/submissions">ดูรีวิวและข้อเสนอแก้ข้อมูลของฉัน →</a></p>
   <Tabs tabs={[{ id: 'liked-tapes', label: 'เทปที่ถูกใจ' }, { id: 'liked-songs', label: 'เพลงที่ถูกใจ' }, { id: 'owned', label: 'เทปที่มี' }]}>
     <section id="liked-tapes" class="tab-panel" data-tab-panel><h2>เทปที่ถูกใจ</h2>
-      {likedTapes.items.length ? <ul class="saved-list">{likedTapes.items.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`} class="saved-item"><span class="saved-cover">{item.coverThumbKey && env.IMAGE_BASE_URL ? <img src={imageUrl(item.coverThumbKey, env.IMAGE_BASE_URL)} alt="" loading="lazy" /> : <Placeholder label="ไม่มีรูป" />}</span><span><strong>{item.title}</strong><small>{formatYear(item.year)}</small></span></a></li>)}</ul> : <p class="empty-state">ยังไม่มีเทปที่ถูกใจ <a href="/tapes">เลือกดูเทปในคลัง</a></p>}
+      {likedTapes.items.length ? <ul class="saved-list">{likedTapes.items.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`} class="saved-item"><span class="saved-cover">{item.coverThumbKey && imageBaseUrl() ? <img src={imageUrl(item.coverThumbKey, imageBaseUrl())} alt="" loading="lazy" /> : <Placeholder label="ไม่มีรูป" />}</span><span><strong>{item.title}</strong><small>{formatYear(item.year)}</small></span></a></li>)}</ul> : <p class="empty-state">ยังไม่มีเทปที่ถูกใจ <a href="/tapes">เลือกดูเทปในคลัง</a></p>}
       {likedTapes.next && <p class="pagination"><a class="button" href={nextLink('liked-tapes', likedTapes.next)} rel="nofollow">หน้าถัดไป</a></p>}
     </section>
     <section id="liked-songs" class="tab-panel" data-tab-panel><h2>เพลงที่ถูกใจ</h2>
@@ -54,7 +54,7 @@ const nextLink = (tab: Tab, value: string) => `/me?tab=${tab}&cursor=${encodeURI
       {likedSongs.next && <p class="pagination"><a class="button" href={nextLink('liked-songs', likedSongs.next)} rel="nofollow">หน้าถัดไป</a></p>}
     </section>
     <section id="owned" class="tab-panel" data-tab-panel><h2>เทปที่มี</h2>
-      {owned.items.length ? <ul class="saved-list">{owned.items.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`} class="saved-item"><span class="saved-cover">{item.coverThumbKey && env.IMAGE_BASE_URL ? <img src={imageUrl(item.coverThumbKey, env.IMAGE_BASE_URL)} alt="" loading="lazy" /> : <Placeholder label="ไม่มีรูป" />}</span><span><strong>{item.title}</strong><small>{formatYear(item.year)}</small></span></a></li>)}</ul> : <p class="empty-state">ยังไม่ได้บันทึกเทปที่มี <a href="/tapes">เลือกดูเทปในคลัง</a></p>}
+      {owned.items.length ? <ul class="saved-list">{owned.items.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`} class="saved-item"><span class="saved-cover">{item.coverThumbKey && imageBaseUrl() ? <img src={imageUrl(item.coverThumbKey, imageBaseUrl())} alt="" loading="lazy" /> : <Placeholder label="ไม่มีรูป" />}</span><span><strong>{item.title}</strong><small>{formatYear(item.year)}</small></span></a></li>)}</ul> : <p class="empty-state">ยังไม่ได้บันทึกเทปที่มี <a href="/tapes">เลือกดูเทปในคลัง</a></p>}
       {owned.next && <p class="pagination"><a class="button" href={nextLink('owned', owned.next)} rel="nofollow">หน้าถัดไป</a></p>}
     </section>
   </Tabs>

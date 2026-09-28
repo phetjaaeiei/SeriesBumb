@@ -1,13 +1,13 @@
-import { env } from 'cloudflare:workers';
+import { config, audioEnvironment } from '../../../../platform/runtime';
 import type { APIRoute } from 'astro';
-import { listAudio, reserveAudio } from '../../../../lib/services/audio-archive';
-import { adminAudioRoute, audioJson, readAudioJson } from '../../../../lib/services/audio-http';
+import { listAudio, reserveAudio } from '../../../../services/audio-archive';
+import { adminAudioRoute, audioJson, readAudioJson } from '../../../../http/audio-http';
 
-export const GET: APIRoute = context => adminAudioRoute(context, env.SITE_URL, false, async () => {
+export const GET: APIRoute = context => adminAudioRoute(context, config().siteUrl, false, async () => {
   const url = new URL(context.request.url);
-  return audioJson(await listAudio(env, url.searchParams.get('query') ?? '', url.searchParams.get('cursor')));
+  return audioJson(await listAudio(audioEnvironment(), url.searchParams.get('query') ?? '', url.searchParams.get('cursor')));
 });
 
-export const POST: APIRoute = context => adminAudioRoute(context, env.SITE_URL, true, async () => {
-  return audioJson(await reserveAudio(env, await readAudioJson(context.request), context.locals.user!.id), 201);
+export const POST: APIRoute = context => adminAudioRoute(context, config().siteUrl, true, async () => {
+  return audioJson(await reserveAudio(audioEnvironment(), await readAudioJson(context.request), context.locals.user!.id), 201);
 });

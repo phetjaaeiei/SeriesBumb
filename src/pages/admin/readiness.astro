@@ -1,9 +1,9 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
-import { getTapeReadiness } from '../../lib/queries/tape-readiness';
+import { getTapeReadiness } from '../../repositories/tape-readiness.repo';
 
-const tapes = await getTapeReadiness(env.DB);
+const tapes = await getTapeReadiness(db());
 ---
 <AdminLayout title="ตรวจข้อมูลเทป">
   <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><span>ตรวจข้อมูลเทป</span></nav>

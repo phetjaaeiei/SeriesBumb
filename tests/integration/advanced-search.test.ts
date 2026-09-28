@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { advancedSearch, parseAdvancedSearch } from '../../src/lib/queries/advanced-search';
-import { normalizeSearchField } from '../../src/lib/search';
+import { advancedSearch, parseAdvancedSearch } from '../../src/repositories/advanced-search.repo';
+import { normalizeSearchField } from '../../src/domain/search';
 
 describe('advanced public search', () => {
   it('bounds and normalizes filters', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { robotsTxt } from '../../src/lib/robots';
+import { robotsTxt } from '../../src/http/robots';
 
 describe('robotsTxt', () => {
   it('keeps the production crawl rules and lets Facebook fetch share previews', () => {

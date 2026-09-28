@@ -1,5 +1,5 @@
 ---
-import type { TapeListItem } from '../../lib/queries/tapes';
+import type { TapeListItem } from '../../repositories/tapes.repo';
 import TapeList from './TapeList.astro';
 interface Props { items: TapeListItem[]; nextCursor: string | null; path: string; params: URLSearchParams; view?: 'table' | 'grid'; showLabel?: boolean; emptyText?: string }
 const { items, nextCursor, path, params, view = 'table', showLabel = true, emptyText = 'ยังไม่มีเทปในหมวดนี้' } = Astro.props;

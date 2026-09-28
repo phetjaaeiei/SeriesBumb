@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { getAdminCatalogPage } from '../../src/lib/queries/admin-catalog';
-import { normalizeThai } from '../../src/lib/thai';
+import { getAdminCatalogPage } from '../../src/repositories/admin-catalog.repo';
+import { normalizeThai } from '../../src/domain/thai';
 
 const db = env.DB;
 

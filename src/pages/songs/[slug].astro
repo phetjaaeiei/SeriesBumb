@@ -1,41 +1,40 @@
 ---
-import { env } from 'cloudflare:workers';
-import { getConfig } from '../../config/config';
+import { db, config, imageBaseUrl } from '../../platform/runtime';
 import { CorrectionForm } from '../../components/islands/ContributionForms';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
 import CreditLine from '../../components/layout/CreditLine.astro';
 import InfoBox from '../../components/ui/InfoBox.astro';
 import Tabs from '../../components/ui/Tabs.astro';
-import { formatYear } from '../../lib/format';
-import { imageUrl } from '../../lib/urls';
-import { presentSongNotes } from '../../lib/song-notes';
+import { formatYear } from '../../domain/format';
+import { imageUrl } from '../../domain/urls';
+import { presentSongNotes } from '../../domain/song-notes';
 import EngagementButton from '../../components/islands/EngagementButton';
 import Comments from '../../components/islands/Comments';
-import { listComments } from '../../lib/services/comments';
-import { listCatalogSources } from '../../lib/services/catalog-sources';
-import { creditsForTarget } from '../../lib/services/person-credits';
+import { listComments } from '../../services/comments';
+import { listCatalogSources } from '../../services/catalog-sources';
+import { creditsForTarget } from '../../services/person-credits';
 
 const slug = Astro.params.slug ?? '';
 const admin = Astro.locals.user?.role === 'admin';
-const song = await env.DB.prepare(`SELECT s.*, creator.name AS createdByName, editor.name AS updatedByName FROM song s LEFT JOIN user creator ON creator.id = s.createdBy LEFT JOIN user editor ON editor.id = s.updatedBy WHERE s.slug = ? ${admin ? '' : 'AND (s.isPublic = 1 OR s.publishedTapeCount > 0)'}`).bind(slug).first<{ id: string; title: string; titleAlt: string | null; lyricist: string | null; composer: string | null; arranger: string | null; lyrics: string | null; notes: string | null; likeCount: number; commentCount: number; publishedTapeCount: number; isPublic: number; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
+const song = await db().prepare(`SELECT s.*, creator.name AS createdByName, editor.name AS updatedByName FROM song s LEFT JOIN user creator ON creator.id = s.createdBy LEFT JOIN user editor ON editor.id = s.updatedBy WHERE s.slug = ? ${admin ? '' : 'AND (s.isPublic = 1 OR s.publishedTapeCount > 0)'}`).bind(slug).first<{ id: string; title: string; titleAlt: string | null; lyricist: string | null; composer: string | null; arranger: string | null; lyrics: string | null; notes: string | null; likeCount: number; commentCount: number; publishedTapeCount: number; isPublic: number; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
 if (!song) return Astro.rewrite('/404');
-const [catalogSources, credits] = await Promise.all([listCatalogSources(env.DB, 'song', song.id), creditsForTarget(env.DB, 'song', song.id)]);
+const [catalogSources, credits] = await Promise.all([listCatalogSources(db(), 'song', song.id), creditsForTarget(db(), 'song', song.id)]);
 const publicSong = song.isPublic === 1 || song.publishedTapeCount > 0;
 const [artists, tapes] = await Promise.all([
-  env.DB.prepare('SELECT a.name, a.slug FROM song_artist sa JOIN artist a ON a.id = sa.artistId WHERE sa.songId = ? ORDER BY sa.position').bind(song.id).all<{ name: string; slug: string }>(),
-  env.DB.prepare(`SELECT t.slug, t.title, t.year, t.ogImageKey, tt.side, tt.position FROM tape_track tt JOIN tape t ON t.id = tt.tapeId WHERE tt.songId = ? AND t.status = 'published' ORDER BY t.yearSort, t.id, tt.side, tt.position LIMIT 100`).bind(song.id).all<{ slug: string; title: string; year: number | null; ogImageKey: string | null; side: string; position: number }>(),
+  db().prepare('SELECT a.name, a.slug FROM song_artist sa JOIN artist a ON a.id = sa.artistId WHERE sa.songId = ? ORDER BY sa.position').bind(song.id).all<{ name: string; slug: string }>(),
+  db().prepare(`SELECT t.slug, t.title, t.year, t.ogImageKey, tt.side, tt.position FROM tape_track tt JOIN tape t ON t.id = tt.tapeId WHERE tt.songId = ? AND t.status = 'published' ORDER BY t.yearSort, t.id, tt.side, tt.position LIMIT 100`).bind(song.id).all<{ slug: string; title: string; year: number | null; ogImageKey: string | null; side: string; position: number }>(),
 ]);
 const singerNames = artists.results.map(row => row.name).join(' / ') || '—';
 const songNotes = presentSongNotes(song.notes);
 const firstOg = tapes.results.find(row => row.ogImageKey)?.ogImageKey;
-const ogImage = firstOg && env.IMAGE_BASE_URL ? imageUrl(firstOg, env.IMAGE_BASE_URL) : undefined;
+const ogImage = firstOg && imageBaseUrl() ? imageUrl(firstOg, imageBaseUrl()) : undefined;
 const tabs = [{ id: 'tapes', label: 'อยู่ในเทป' }];
 if (song.lyrics) tabs.push({ id: 'lyrics', label: 'เนื้อเพลง' });
 tabs.push({ id: 'comments', label: `คอมเมนต์ (${song.commentCount})` });
 const viewerId = Astro.locals.user?.id;
-const liked = publicSong && viewerId ? (await env.DB.prepare('SELECT 1 AS value FROM song_like WHERE userId = ? AND songId = ?').bind(viewerId, song.id).first<{ value: number }>()) !== null : false;
-const firstComments = publicSong ? await listComments(env.DB, { songId: song.id }, null, viewerId) : null;
-const turnstileSiteKey = getConfig(env).turnstile?.siteKey ?? null;
+const liked = publicSong && viewerId ? (await db().prepare('SELECT 1 AS value FROM song_like WHERE userId = ? AND songId = ?').bind(viewerId, song.id).first<{ value: number }>()) !== null : false;
+const firstComments = publicSong ? await listComments(db(), { songId: song.id }, null, viewerId) : null;
+const turnstileSiteKey = config().turnstile?.siteKey ?? null;
 ---
 <BaseLayout title={song.title} description={`ข้อมูลเพลง ${song.title} โดย ${singerNames} | ซีรี่ย์บั้ม คลังเทปเพลงไทย`} canonicalPath={`/songs/${slug}`} ogImage={ogImage} noindex={!publicSong}>
   {!publicSong && <p class="draft-banner">เพลงฉบับร่าง · หน้านี้เห็นได้เฉพาะแอดมิน</p>}

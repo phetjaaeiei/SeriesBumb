@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAdminSurface } from '../../src/lib/admin-surface';
+import { isAdminSurface } from '../../src/http/admin-surface';
 
 describe('isAdminSurface', () => {
   it.each([

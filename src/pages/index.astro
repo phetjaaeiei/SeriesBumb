@@ -1,16 +1,16 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../platform/runtime';
 import BaseLayout from '../components/layout/BaseLayout.astro';
 import Placeholder from '../components/ui/Placeholder.astro';
 import TapeList from '../components/ui/TapeList.astro';
-import { getTapeHighlights, getTapePage } from '../lib/queries/tapes';
+import { getTapeHighlights, getTapePage } from '../repositories/tapes.repo';
 
 let publishedTapeCount: number | null = null;
 let publicSongCount = 0;
 try {
-  const row = await env.DB.prepare('SELECT publishedTapeCount FROM site_stats WHERE id = 1').first<{ publishedTapeCount: number }>();
+  const row = await db().prepare('SELECT publishedTapeCount FROM site_stats WHERE id = 1').first<{ publishedTapeCount: number }>();
   publishedTapeCount = row?.publishedTapeCount ?? 0;
-  publicSongCount = (await env.DB.prepare('SELECT COUNT(*) AS count FROM song WHERE isPublic = 1 OR publishedTapeCount > 0').first<{ count: number }>())?.count ?? 0;
+  publicSongCount = (await db().prepare('SELECT COUNT(*) AS count FROM song WHERE isPublic = 1 OR publishedTapeCount > 0').first<{ count: number }>())?.count ?? 0;
 } catch {
   // The shell also renders before a local database has been migrated.
 }
@@ -23,14 +23,14 @@ const browseLinks = [
   { href: '/labels', label: 'ค่ายเพลง' },
   { href: '/collections', label: 'Collection' },
 ];
-const recent = publishedTapeCount ? await getTapePage(env.DB, { pageSize: 10 }) : null;
+const recent = publishedTapeCount ? await getTapePage(db(), { pageSize: 10 }) : null;
 const [updated, owned, featured] = publishedTapeCount ? await Promise.all([
-  getTapeHighlights(env.DB, 'updated', 10),
-  getTapeHighlights(env.DB, 'owned', 10),
-  env.DB.prepare("SELECT slug, title FROM collection WHERE status = 'published' AND isFeatured = 1 ORDER BY position LIMIT 3").all<{ slug: string; title: string }>(),
+  getTapeHighlights(db(), 'updated', 10),
+  getTapeHighlights(db(), 'owned', 10),
+  db().prepare("SELECT slug, title FROM collection WHERE status = 'published' AND isFeatured = 1 ORDER BY position LIMIT 3").all<{ slug: string; title: string }>(),
 ]) : [[], [], { results: [] as { slug: string; title: string }[] }];
 const recentSongs = publishedTapeCount === 0 && publicSongCount > 0
-  ? (await env.DB.prepare(`SELECT slug, title FROM song WHERE isPublic = 1 OR publishedTapeCount > 0 ORDER BY updatedAt DESC, id DESC LIMIT 10`).all<{ slug: string; title: string }>()).results
+  ? (await db().prepare(`SELECT slug, title FROM song WHERE isPublic = 1 OR publishedTapeCount > 0 ORDER BY updatedAt DESC, id DESC LIMIT 10`).all<{ slug: string; title: string }>()).results
   : [];
 ---
 <BaseLayout title="ซีรี่ย์บั้ม · คลังเทปเพลง" canonicalPath="/">

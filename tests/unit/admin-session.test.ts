@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ADMIN_SESSION_MAX_AGE_MS, FRESH_SESSION_MS, adminSessionExpired, isFreshSession } from '../../src/lib/admin-session';
+import { ADMIN_SESSION_MAX_AGE_MS, FRESH_SESSION_MS, adminSessionExpired, isFreshSession } from '../../src/domain/admin-session';
 
 const start = new Date('2026-09-28T00:00:00Z');
 

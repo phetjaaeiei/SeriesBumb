@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { createTapeDraft, saveTape } from '../../src/lib/services/catalog';
+import { createTapeDraft, saveTape } from '../../src/services/catalog';
 
 const db = env.DB;
 

@@ -1,10 +1,10 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
-import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
+import { decodeCursor, encodeCursor } from '../../domain/cursor';
 
 const cursor = decodeCursor('title', Astro.url.searchParams.get('cursor'));
-const rows = (await env.DB.prepare(`SELECT s.id, s.slug, s.title, s.titleSort,
+const rows = (await db().prepare(`SELECT s.id, s.slug, s.title, s.titleSort,
   (SELECT group_concat(a.name, ' / ') FROM song_artist sa JOIN artist a ON a.id = sa.artistId WHERE sa.songId = s.id ORDER BY sa.position) AS artists
   FROM song s WHERE (s.isPublic = 1 OR s.publishedTapeCount > 0)
   ${cursor ? 'AND (s.titleSort, s.id) > (?, ?)' : ''}

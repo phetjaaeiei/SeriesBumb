@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SupabaseImageStore } from '../../src/lib/services/supabase-image-store';
+import { SupabaseImageStore } from '../../src/storage/supabase-image-store';
 
 describe('SupabaseImageStore', () => {
   it('checks a public image-only bucket before uploading and supports object operations', async () => {

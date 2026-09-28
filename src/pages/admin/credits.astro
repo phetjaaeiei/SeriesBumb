@@ -1,17 +1,17 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import PersonCredits from '../../components/admin/PersonCredits';
-import { creditsForTarget } from '../../lib/services/person-credits';
+import { creditsForTarget } from '../../services/person-credits';
 const kind = Astro.url.searchParams.get('kind');
 const id = Astro.url.searchParams.get('id') ?? '';
 if ((kind !== 'tape' && kind !== 'song') || !/^[0-9a-f-]{36}$/iu.test(id)) return Astro.rewrite('/404');
-const current = await env.DB.prepare(`SELECT title FROM ${kind} WHERE id = ?`).bind(id).first<{ title: string }>();
+const current = await db().prepare(`SELECT title FROM ${kind} WHERE id = ?`).bind(id).first<{ title: string }>();
 if (!current) return Astro.rewrite('/404');
 const [people, sources, credits] = await Promise.all([
-  env.DB.prepare('SELECT id, name AS title FROM person ORDER BY name LIMIT 500').all<{ id: string; title: string }>(),
-  env.DB.prepare('SELECT id, title FROM catalog_source WHERE entityKind = ? AND entityId = ? ORDER BY createdAt DESC LIMIT 50').bind(kind, id).all<{ id: string; title: string }>(),
-  creditsForTarget(env.DB, kind, id),
+  db().prepare('SELECT id, name AS title FROM person ORDER BY name LIMIT 500').all<{ id: string; title: string }>(),
+  db().prepare('SELECT id, title FROM catalog_source WHERE entityKind = ? AND entityId = ? ORDER BY createdAt DESC LIMIT 50').bind(kind, id).all<{ id: string; title: string }>(),
+  creditsForTarget(db(), kind, id),
 ]);
 ---
 <AdminLayout title={`เครดิตบุคคล ${current.title}`}>

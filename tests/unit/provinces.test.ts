@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FOREIGN, isProvince, PROVINCE_NAMES, PROVINCES, REGIONS } from '../../src/lib/provinces';
+import { FOREIGN, isProvince, PROVINCE_NAMES, PROVINCES, REGIONS } from '../../src/domain/provinces';
 
 describe('provinces', () => {
   it('contains each of Thailand\'s 77 province names exactly once, plus foreign', () => {

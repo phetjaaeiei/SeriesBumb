@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { createTapeDraft, saveTape } from '../../src/lib/services/catalog';
-import { deleteTapeImage } from '../../src/lib/services/images';
+import { createTapeDraft, saveTape } from '../../src/services/catalog';
+import { deleteTapeImage } from '../../src/services/images';
 import { MemoryImageStore } from './helpers/image-store';
 
 describe('tape image deletion', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeComment } from '../../src/lib/services/comments';
+import { normalizeComment } from '../../src/services/comments';
 
 describe('comment normalization', () => {
   it('removes control and bidi override characters while preserving readable newlines', () => {

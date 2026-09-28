@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { presentSongNotes } from '../../src/lib/song-notes';
+import { presentSongNotes } from '../../src/domain/song-notes';
 
 describe('presentSongNotes', () => {
   it('keeps import provenance private while showing readable duration and uncertainty', () => {

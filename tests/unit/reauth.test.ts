@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { REAUTH_MESSAGE } from '../../src/lib/admin-session';
-import { needsReauth, reauthUrl } from '../../src/lib/client/reauth';
+import { REAUTH_MESSAGE } from '../../src/domain/admin-session';
+import { needsReauth, reauthUrl } from '../../src/client/reauth';
 
 describe('reauth helpers', () => {
   it('sends the admin back to the page they were on', () => {

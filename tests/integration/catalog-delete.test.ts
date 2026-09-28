@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { createArtist, createCollection, createGenre, createLabel, createSong, createTapeDraft, saveTape } from '../../src/lib/services/catalog';
-import { deleteCatalogEntity } from '../../src/lib/services/catalog-delete';
+import { createArtist, createCollection, createGenre, createLabel, createSong, createTapeDraft, saveTape } from '../../src/services/catalog';
+import { deleteCatalogEntity } from '../../src/services/catalog-delete';
 import { MemoryImageStore } from './helpers/image-store';
 
 describe('catalog deletion', () => {

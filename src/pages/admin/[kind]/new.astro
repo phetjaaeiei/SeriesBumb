@@ -1,5 +1,5 @@
 ---
-import { env } from 'cloudflare:workers';
+import { imageBaseUrl } from '../../../platform/runtime';
 import AdminLayout from '../../../components/layout/AdminLayout.astro';
 import AdminEditor from '../../../components/admin/AdminEditor';
 
@@ -16,5 +16,5 @@ const record: Row = {
 <AdminLayout title={`เพิ่ม${labelMap[kind]}`}>
   <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><a href={`/admin/${kind}`}>{labelMap[kind]}</a><span>/</span><span>เพิ่มรายการ</span></nav>
   <h1>เพิ่ม{labelMap[kind]}</h1>
-  <AdminEditor kind={kind} record={record} artistIds={[]} genreIds={[]} tracks={[]} members={[]} items={[]} images={[]} selected={[]} imageBase={env.IMAGE_BASE_URL || ''} client:only="react" />
+  <AdminEditor kind={kind} record={record} artistIds={[]} genreIds={[]} tracks={[]} members={[]} items={[]} images={[]} selected={[]} imageBase={imageBaseUrl()} client:only="react" />
 </AdminLayout>

@@ -1,7 +1,7 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
 import React, { useState } from 'react';
-import { resizeImage } from '../../lib/client/image-resize';
+import { resizeImage } from '../../client/image-resize';
 
 type EntityType = 'tapes' | 'artists' | 'labels' | 'collections';
 type ImageKind = 'front' | 'back' | 'inside' | 'cassette' | 'other';

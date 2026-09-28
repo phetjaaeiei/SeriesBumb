@@ -1,10 +1,10 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../platform/runtime';
 import BaseLayout from '../components/layout/BaseLayout.astro';
 import TapeList from '../components/ui/TapeList.astro';
-import { getTapeHighlights, getTapePage } from '../lib/queries/tapes';
-const [recent, updated] = await Promise.all([getTapePage(env.DB, { pageSize: 50 }), getTapeHighlights(env.DB, 'updated', 50)]);
-const recentSongs = (await env.DB.prepare('SELECT slug, title, updatedAt FROM song WHERE isPublic = 1 ORDER BY updatedAt DESC, id DESC LIMIT 20').all<{ slug: string; title: string; updatedAt: number }>()).results;
+import { getTapeHighlights, getTapePage } from '../repositories/tapes.repo';
+const [recent, updated] = await Promise.all([getTapePage(db(), { pageSize: 50 }), getTapeHighlights(db(), 'updated', 50)]);
+const recentSongs = (await db().prepare('SELECT slug, title, updatedAt FROM song WHERE isPublic = 1 ORDER BY updatedAt DESC, id DESC LIMIT 20').all<{ slug: string; title: string; updatedAt: number }>()).results;
 ---
 <BaseLayout title="เพิ่มล่าสุด" canonicalPath="/latest">
   <h1>เพิ่มล่าสุด</h1>

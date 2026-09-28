@@ -5,10 +5,26 @@ Thai cassette-tape encyclopedia. All UI copy is Thai. Production: https://series
 ## Stack (actual, not the original spec)
 
 - Astro 7 SSR (`output: 'server'`) on one Cloudflare Worker via `@astrojs/cloudflare`; React 19 islands; Tailwind 4 tokens + hand-written CSS in `src/styles/global.css`
-- Cloudflare D1 (SQLite) through binding `DB`; Drizzle schema in `src/db/schema.ts`, mostly raw SQL via `env.DB.prepare().bind()` and `db.batch()`
+- Cloudflare D1 (SQLite) through binding `DB`; Drizzle schema in `src/db/schema.ts`, mostly raw SQL via `db().prepare().bind()` and `batch()`
 - better-auth + Google OAuth; roles `member` / `admin`; bootstrap admins from secret `ADMIN_EMAILS`
 - Public images: Supabase Storage bucket `SeriesBumbImages`. Private admin audio: Supabase bucket `SeriesBumb` via signed upload URLs. Firebase Storage is legacy and disabled — never re-enable uploads there (Blaze has no spend cap)
-- Config: every env value goes through `src/config/env.schema.ts` → `getConfig(env)`; add new keys there, never read `env.X` strings in new code
+- Config: every env value goes through `src/config/env.schema.ts` → `config()` from `src/platform/runtime.ts`; add new keys to the schema, never read `env.X` outside `src/platform/`
+
+## Layers (enforced by `eslint.config.mjs`, guarded by `tests/unit/lint-boundaries.test.ts`)
+
+| Directory | Holds | May not import |
+| --- | --- | --- |
+| `src/platform/` | `runtime.ts`: the only code that touches `cloudflare:workers` (`db()`, `config()`, `imageStore()`, `background()`…); `siteUrlOr()` for page shells that must render even with invalid config | — |
+| `src/domain/` | Pure rules and types (Thai text, slugs, cursors, URLs, enums, admin session policy) | packages, or anything outside `domain/` except `errors/app-error` |
+| `src/errors/` | `AppError` taxonomy; `toActionError` / `toJsonError` mappers | — |
+| `src/repositories/` | SQL reads (moving here in Phase 3b) | `astro:*`, `cloudflare:*` |
+| `src/services/` | Write use cases and invariants | `astro:*`, `cloudflare:*` |
+| `src/storage/` | Image/audio store adapters (Supabase, legacy Firebase) | — |
+| `src/auth/`, `src/http/` | better-auth, permissions, Access JWT; middleware, headers, Turnstile, rate limits | — |
+| `src/actions/` | `define.ts` wrappers, zod schemas, one file per domain, `index.ts` composes names | `cloudflare:*`, `db/*` |
+| `src/pages/`, `src/components/` | Rendering | `cloudflare:*`, `db/*` |
+
+`scripts/lib/rewrite-imports.ts` rewrites relative imports when modules move; keep `tests/unit/action-names.test.ts` green (client code calls actions by those names).
 
 ## Free-tier limits the code must respect
 

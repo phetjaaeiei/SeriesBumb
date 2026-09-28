@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { verifyTurnstile } from '../../src/lib/turnstile';
+import { verifyTurnstile } from '../../src/http/turnstile';
 
 function fakeFetch(body: unknown, ok = true) {
   return vi.fn().mockResolvedValue({ ok, json: async () => body }) as unknown as typeof fetch;

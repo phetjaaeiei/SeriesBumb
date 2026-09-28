@@ -1,8 +1,8 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { createArtist, createCollection, createGenre, createLabel, createSong, createTapeDraft, saveArtist, saveCollection, saveGenre, saveLabel, saveSong, saveTape } from '../../src/lib/services/catalog';
-import { getTapeBySlug } from '../../src/lib/queries/tapes';
-import { searchPublic } from '../../src/lib/search';
+import { createArtist, createCollection, createGenre, createLabel, createSong, createTapeDraft, saveArtist, saveCollection, saveGenre, saveLabel, saveSong, saveTape } from '../../src/services/catalog';
+import { getTapeBySlug } from '../../src/repositories/tapes.repo';
+import { searchPublic } from '../../src/domain/search';
 
 const db = env.DB;
 

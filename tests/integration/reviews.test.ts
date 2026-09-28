@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { moderateCorrection, moderateReview, submitCorrection, submitReview } from '../../src/lib/services/reviews';
+import { moderateCorrection, moderateReview, submitCorrection, submitReview } from '../../src/services/reviews';
 
 describe('moderated contributions', () => {
   it('holds a review and correction for moderation, rejects duplicates and banned members', async () => {

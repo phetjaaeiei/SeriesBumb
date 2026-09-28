@@ -1,15 +1,15 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
-import { publicCreditsForPerson } from '../../lib/services/person-credits';
+import { publicCreditsForPerson } from '../../services/person-credits';
 const slug = Astro.params.slug ?? '';
-const person = await env.DB.prepare('SELECT id, name, bio FROM person WHERE slug = ?').bind(slug).first<{ id: string; name: string; bio: string }>();
+const person = await db().prepare('SELECT id, name, bio FROM person WHERE slug = ?').bind(slug).first<{ id: string; name: string; bio: string }>();
 if (!person) return Astro.rewrite('/404');
-const appearances = (await env.DB.prepare(`SELECT a.slug AS artistSlug, a.name AS artistName, am.name AS creditedName, am.role, am.years, am.isCurrent, cs.title AS sourceTitle, cs.url AS sourceUrl
+const appearances = (await db().prepare(`SELECT a.slug AS artistSlug, a.name AS artistName, am.name AS creditedName, am.role, am.years, am.isCurrent, cs.title AS sourceTitle, cs.url AS sourceUrl
   FROM artist_member am JOIN artist a ON a.id = am.artistId JOIN catalog_source cs ON cs.id = am.sourceId
   WHERE am.personId = ? AND (a.publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1))
   ORDER BY a.nameSort, am.position LIMIT 50`).bind(person.id).all<{ artistSlug: string; artistName: string; creditedName: string; role: string; years: string | null; isCurrent: number; sourceTitle: string; sourceUrl: string }>()).results;
-const credits = await publicCreditsForPerson(env.DB, person.id);
+const credits = await publicCreditsForPerson(db(), person.id);
 if (!appearances.length && !credits.length && Astro.locals.user?.role !== 'admin') return Astro.rewrite('/404');
 ---
 <BaseLayout title={person.name} canonicalPath={`/people/${slug}`} noindex={!appearances.length && !credits.length}>

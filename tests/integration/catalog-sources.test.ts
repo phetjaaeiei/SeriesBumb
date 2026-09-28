@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { addCatalogSource, deleteCatalogSource, listCatalogSources, validateSourceUrl } from '../../src/lib/services/catalog-sources';
+import { addCatalogSource, deleteCatalogSource, listCatalogSources, validateSourceUrl } from '../../src/services/catalog-sources';
 
 describe('catalog sources', () => {
   it('accepts public HTTPS URLs and rejects unsafe schemes', () => {

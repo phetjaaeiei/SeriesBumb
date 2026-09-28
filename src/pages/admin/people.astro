@@ -1,13 +1,13 @@
 ---
-import { env } from 'cloudflare:workers';
+import { db } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import PeopleManager from '../../components/admin/PeopleManager';
 const artistId = Astro.url.searchParams.get('artistId');
-const artist = artistId ? await env.DB.prepare('SELECT id, name FROM artist WHERE id = ?').bind(artistId).first<{ id: string; name: string }>() : null;
+const artist = artistId ? await db().prepare('SELECT id, name FROM artist WHERE id = ?').bind(artistId).first<{ id: string; name: string }>() : null;
 const [people, members, sources] = await Promise.all([
-  env.DB.prepare('SELECT id, slug, name FROM person ORDER BY name LIMIT 100').all<{ id: string; slug: string; name: string }>(),
-  artist ? env.DB.prepare('SELECT id, name, role, personId, sourceId FROM artist_member WHERE artistId = ? ORDER BY position LIMIT 40').bind(artist.id).all<{ id: string; name: string; role: string; personId: string | null; sourceId: string | null }>() : Promise.resolve({ results: [] }),
-  artist ? env.DB.prepare("SELECT id, title FROM catalog_source WHERE entityKind = 'artist' AND entityId = ? ORDER BY createdAt DESC LIMIT 50").bind(artist.id).all<{ id: string; title: string }>() : Promise.resolve({ results: [] }),
+  db().prepare('SELECT id, slug, name FROM person ORDER BY name LIMIT 100').all<{ id: string; slug: string; name: string }>(),
+  artist ? db().prepare('SELECT id, name, role, personId, sourceId FROM artist_member WHERE artistId = ? ORDER BY position LIMIT 40').bind(artist.id).all<{ id: string; name: string; role: string; personId: string | null; sourceId: string | null }>() : Promise.resolve({ results: [] }),
+  artist ? db().prepare("SELECT id, title FROM catalog_source WHERE entityKind = 'artist' AND entityId = ? ORDER BY createdAt DESC LIMIT 50").bind(artist.id).all<{ id: string; title: string }>() : Promise.resolve({ results: [] }),
 ]);
 ---
 <AdminLayout title="บุคคลและสมาชิกวง">

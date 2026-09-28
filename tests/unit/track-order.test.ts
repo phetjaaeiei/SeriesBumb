@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changeTrackSide, moveTrack, numberTracks, reorderSide, type OrderedTrack } from '../../src/lib/client/track-order';
+import { changeTrackSide, moveTrack, numberTracks, reorderSide, type OrderedTrack } from '../../src/client/track-order';
 
 const rows: OrderedTrack[] = [
   { clientId: 'a1', side: 'A' },

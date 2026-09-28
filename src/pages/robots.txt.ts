@@ -1,8 +1,7 @@
+import { config } from '../platform/runtime';
 import type { APIRoute } from 'astro';
-import { env } from 'cloudflare:workers';
-import { getConfig } from '../config/config';
-import { robotsTxt } from '../lib/robots';
+import { robotsTxt } from '../http/robots';
 
-export const GET: APIRoute = () => new Response(robotsTxt(getConfig(env).appEnv), {
+export const GET: APIRoute = () => new Response(robotsTxt(config().appEnv), {
   headers: { 'Content-Type': 'text/plain; charset=utf-8' },
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isD1QuotaError } from '../../src/lib/errors';
+import { isD1QuotaError } from '../../src/errors/d1';
 
 describe('isD1QuotaError', () => {
   it('recognizes the documented daily row limits in wrapped D1 errors', () => {
