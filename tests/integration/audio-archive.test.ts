@@ -362,10 +362,21 @@ describe('direct audio REST authorization', () => {
   const routes = [listRoute, reserveRoute, downloadRoute, deleteRoute, uploadRoute, signRoute, finalizeRoute];
   function context(role: 'admin' | 'member' | null, withSession: boolean, origin = 'http://localhost:4321'): APIContext {
     return {
-      locals: { user: role ? { id: userId, role, name: 'User', email: 'user@example.test', image: null, commentBanned: false } : null, session: withSession ? { id: 'test-session', expiresAt: new Date(Date.now() + 60_000) } : null },
+      locals: { user: role ? { id: userId, role, name: 'User', email: 'user@example.test', image: null, commentBanned: false } : null, session: withSession ? { id: 'test-session', expiresAt: new Date(Date.now() + 60_000), createdAt: new Date(Date.now() - 60_000) } : null },
       request: new Request('http://localhost:4321/admin/api/audio', { headers: { Origin: origin } }), params: {},
     } as APIContext;
   }
+  it('requires a fresh sign-in before deleting an audio file', async () => {
+    const stale = {
+      locals: { user: { id: userId, role: 'admin', name: 'Admin', email: 'admin@example.test', image: null, commentBanned: false }, session: { id: 'stale', expiresAt: new Date(Date.now() + 60_000), createdAt: new Date(Date.now() - 20 * 60_000) } },
+      request: new Request('http://localhost:4321/admin/api/audio/x', { method: 'DELETE', headers: { Origin: 'http://localhost:4321' } }),
+      params: { id: '00000000-0000-4000-8000-000000000000' },
+    } as unknown as APIContext;
+    const response = await deleteRoute(stale);
+    expect(response.status).toBe(403);
+    expect(((await response.json()) as { error: string }).error).toContain('เข้าสู่ระบบใหม่');
+  });
+
   it('rejects every direct handler for anonymous callers, missing sessions and members', async () => {
     for (const route of routes) {
       for (const ctx of [context(null, false), context('admin', false), context('member', true)]) {
