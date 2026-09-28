@@ -44,6 +44,8 @@ export default defineConfig({
         "font-src 'self'",
         "object-src 'none'",
         "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
       ],
       scriptDirective: {
         resources: ["'self'", 'https://static.cloudflareinsights.com'],

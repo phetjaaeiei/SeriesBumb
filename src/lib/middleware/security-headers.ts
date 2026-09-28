@@ -2,6 +2,7 @@ import type { MiddlewareHandler } from 'astro';
 import { env } from 'cloudflare:workers';
 import { getConfig, isProduction } from '../../config/config';
 import { isD1QuotaError } from '../errors';
+import { hasSessionCookie, securityHeaderSet } from '../http-headers';
 
 export const securityHeaders: MiddlewareHandler = async (context, next) => {
   let response: Response;
@@ -12,14 +13,16 @@ export const securityHeaders: MiddlewareHandler = async (context, next) => {
     response = await context.rewrite('/503');
   }
   const headers = new Headers(response.headers);
-  headers.set('X-Content-Type-Options', 'nosniff');
-  headers.set('X-Frame-Options', 'DENY');
-  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  if (context.url.pathname === '/admin' || context.url.pathname.startsWith('/admin/')) {
-    headers.set('Cache-Control', 'private, no-store');
-    headers.set('X-Robots-Tag', 'noindex, nofollow');
+  const extra = securityHeaderSet({
+    pathname: context.url.pathname,
+    hasSessionCookie: hasSessionCookie(context.request.headers.get('cookie')),
+    production: isProduction(getConfig(env)),
+  });
+  for (const [name, value] of Object.entries(extra)) {
+    // Routes that already chose a stricter or explicit cache policy keep it.
+    if (name === 'Cache-Control' && headers.has('Cache-Control')) continue;
+    if (name === 'Vary') { headers.append('Vary', value); continue; }
+    headers.set(name, value);
   }
-  // Staging and local builds must never be indexed or compete with production URLs.
-  if (!isProduction(getConfig(env))) headers.set('X-Robots-Tag', 'noindex, nofollow');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 };
