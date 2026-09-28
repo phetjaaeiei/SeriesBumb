@@ -15,13 +15,15 @@ import Comments from '../../components/islands/Comments';
 import { listComments } from '../../lib/services/comments';
 import { listCatalogSources } from '../../lib/services/catalog-sources';
 import { CorrectionForm, ReviewForm } from '../../components/islands/ContributionForms';
+import { publicTapeEditions } from '../../lib/services/catalog-relations';
 
 const slug = Astro.params.slug ?? '';
 const isAdmin = Astro.locals.user?.role === 'admin';
 const tape = await getTapeBySlug(env.DB, slug, isAdmin);
 if (!tape) return Astro.rewrite('/404');
-const catalogSources = await listCatalogSources(env.DB, 'tape', tape.id);
 const unpublished = tape.status !== 'published';
+const catalogSources = await listCatalogSources(env.DB, 'tape', tape.id);
+const editions = !unpublished ? await publicTapeEditions(env.DB, tape.id) : [];
 const artistNames = tape.artists.map(artist => artist.name).join(' / ') || 'รวมศิลปิน';
 const cover = tape.images.find(image => image.id === tape.coverImageId) ?? tape.images.find(image => image.kind === 'front') ?? tape.images[0];
 const gallery = cover ? [cover, ...tape.images.filter(image => image.id !== cover.id)] : [];
@@ -55,6 +57,7 @@ const publicReviews = !unpublished ? (await env.DB.prepare("SELECT r.id, r.body,
   {unpublished && <p class="draft-banner">ยังไม่เผยแพร่ · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
   <h1>{tape.title}</h1>
   {isAdmin && <p><a href={`/admin/sources?kind=tape&id=${tape.id}`}>จัดการแหล่งอ้างอิง</a></p>}
+  {isAdmin && <p><a href={`/admin/relations?kind=tape&id=${tape.id}`}>จัดการฉบับออกใหม่</a></p>}
   {tape.titleAlt && <p class="subheading">{tape.titleAlt}</p>}
   <p class="entity-byline">{tape.artists.length ? tape.artists.map((artist, index) => <>{index > 0 && ' / '}<a href={`/artists/${encodeURIComponent(artist.slug)}`}>{artist.name}</a></>) : 'รวมศิลปิน'}</p>
   <div class="entity-top">
@@ -106,6 +109,7 @@ const publicReviews = !unpublished ? (await env.DB.prepare("SELECT r.id, r.body,
       {tape.description ? <ExpandableText text={tape.description} id="tape-description" /> : <p class="empty-state">ยังไม่มีรายละเอียดเพิ่มเติม</p>}
       {tape.reelUrl && <a href={tape.reelUrl} target="_blank" rel="noopener noreferrer">ดูรีวิวบนเพจ</a>}
       {catalogSources.length > 0 && <div class="section"><h3>แหล่งอ้างอิง</h3><ul class="plain-list">{catalogSources.map(source => <li><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title} ↗</a><p class="soft">{source.claim}</p></li>)}</ul></div>}
+      {editions.length > 0 && <div class="section"><h3>ฉบับอื่น</h3><ul class="plain-list">{editions.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`}>{item.title}</a> · {item.format}{item.editionYear ? ` · ${item.editionYear}` : ''}{item.note && ` · ${item.note}`} · <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer">{item.sourceTitle} ↗</a></li>)}</ul></div>}
       {!unpublished && <div class="section"><h3>เสนอแก้ข้อมูล</h3><CorrectionForm targetKind="tape" targetId={tape.id} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /></div>}
     </section>
     <section id="collections" class="tab-panel" data-tab-panel>

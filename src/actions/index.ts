@@ -16,6 +16,7 @@ import { normalizeThai } from '../lib/thai';
 import { addCatalogSource, deleteCatalogSource } from '../lib/services/catalog-sources';
 import { ReviewError, moderateCorrection, moderateReview, submitCorrection, submitReview } from '../lib/services/reviews';
 import { createPerson, linkArtistMember } from '../lib/services/people';
+import { addArtistRelation, addTapeEdition, deleteArtistRelation, deleteTapeEdition } from '../lib/services/catalog-relations';
 
 async function runCatalog<T>(action: () => Promise<T>): Promise<T> {
   try { return await action(); }
@@ -71,6 +72,12 @@ export const server = {
     setTapeOwned: defineMemberAction({ input: z.object({ tapeId: z.uuid(), owned: z.boolean() }), handler: (input, context) => setEngagement(env.DB, context.user.id, 'tapeOwned', input.tapeId, input.owned) }),
   },
   admin: {
+    relations: {
+      addArtist: defineAdminAction({ input: z.object({ artistId: z.uuid(), relatedArtistId: z.uuid(), relationType: z.enum(['former_name', 'collaboration', 'related']), sourceId: z.uuid() }), handler: input => runCatalog(() => addArtistRelation(env.DB, input.artistId, input.relatedArtistId, input.relationType, input.sourceId)) }),
+      deleteArtist: defineAdminAction({ input: z.object({ id: z.uuid() }), handler: ({ id }) => runCatalog(() => deleteArtistRelation(env.DB, id)) }),
+      addEdition: defineAdminAction({ input: z.object({ tapeId: z.uuid(), relatedTapeId: z.uuid(), format: z.enum(['cassette', 'cd', 'digital', 'other']), editionYear: z.number().int().min(1900).max(2100).nullable(), note: z.string().max(300), sourceId: z.uuid() }), handler: input => runCatalog(() => addTapeEdition(env.DB, input.tapeId, input.relatedTapeId, input.format, input.editionYear, input.note, input.sourceId)) }),
+      deleteEdition: defineAdminAction({ input: z.object({ id: z.uuid() }), handler: ({ id }) => runCatalog(() => deleteTapeEdition(env.DB, id)) }),
+    },
     people: {
       create: defineAdminAction({ input: z.object({ name: z.string().trim().min(1).max(100) }), handler: ({ name }) => runCatalog(() => createPerson(env.DB, name)) }),
       link: defineAdminAction({ input: z.object({ memberId: z.uuid(), personId: z.uuid().nullable(), sourceId: z.uuid().nullable() }), handler: input => runCatalog(() => linkArtistMember(env.DB, input.memberId, input.personId, input.sourceId)) }),

@@ -379,6 +379,32 @@ export const catalogSubmission = sqliteTable('catalog_submission', {
   index('catalog_submission_user_created_idx').on(table.userId, table.createdAt),
 ]);
 
+export const artistRelation = sqliteTable('artist_relation', {
+  id: text('id').primaryKey(),
+  artistId: text('artistId').notNull().references(() => artist.id, { onDelete: 'cascade' }),
+  relatedArtistId: text('relatedArtistId').notNull().references(() => artist.id, { onDelete: 'cascade' }),
+  relationType: text('relationType', { enum: ['former_name', 'collaboration', 'related'] }).notNull(),
+  sourceId: text('sourceId').notNull().references(() => catalogSource.id, { onDelete: 'cascade' }),
+  createdAt: integer('createdAt').notNull(),
+}, (table) => [
+  uniqueIndex('artist_relation_unique').on(table.artistId, table.relatedArtistId, table.relationType),
+  index('artist_relation_related_idx').on(table.relatedArtistId),
+]);
+
+export const tapeEdition = sqliteTable('tape_edition', {
+  id: text('id').primaryKey(),
+  tapeId: text('tapeId').notNull().references(() => tape.id, { onDelete: 'cascade' }),
+  relatedTapeId: text('relatedTapeId').notNull().references(() => tape.id, { onDelete: 'cascade' }),
+  format: text('format', { enum: ['cassette', 'cd', 'digital', 'other'] }).notNull(),
+  editionYear: integer('editionYear'),
+  note: text('note').notNull().default(''),
+  sourceId: text('sourceId').notNull().references(() => catalogSource.id, { onDelete: 'cascade' }),
+  createdAt: integer('createdAt').notNull(),
+}, (table) => [
+  uniqueIndex('tape_edition_unique').on(table.tapeId, table.relatedTapeId),
+  index('tape_edition_related_idx').on(table.relatedTapeId),
+]);
+
 export const searchDoc = sqliteTable('search_doc', {
   docId: integer('docId').primaryKey({ autoIncrement: true }),
   kind: text('kind', { enum: SEARCH_KINDS }).notNull(),
