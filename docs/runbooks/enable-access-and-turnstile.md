@@ -7,7 +7,7 @@
 1. Cloudflare dashboard → Zero Trust → ตั้งชื่อ team (เช่น `seriesbumb`) แล้วเลือกแผน Free
 2. Settings → Authentication → Login methods: เพิ่ม **Google** (ใช้ Gmail ธรรมดาได้) และ **One-time PIN** ไว้เป็นทางสำรอง
 3. Access → Applications → Add → Self-hosted:
-   - Domain: `seriesbumb.phetjaa.workers.dev` ใส่ path `/admin`, `/admin/*`, `/_actions/admin.*` (ต้องใส่ `/admin` แยก เพราะ wildcard ไม่ครอบ path แม่)
+   - Domain: `seriesbumb.phetjaa.workers.dev` ใส่ path `/admin`, `/admin/*`, `/_actions/admin.*` (ต้องใส่ `/admin` แยก เพราะ wildcard ไม่ครอบ path แม่) ส่วน admin action ที่เรียกผ่าน `?_action=admin.*` บนหน้าอื่น Access ที่ edge ครอบไม่ถึง แต่ Worker จะตอบ 403 ให้เองเมื่อไม่มี JWT (ใน UI ไม่มีการเรียกแบบนี้)
    - Policy: Allow → Emails → ใส่อีเมลแอดมินทีละอีเมล (ห้ามใช้ “ทุก Gmail”)
    - Session duration 12 ชั่วโมง
 4. คัดลอก **Application Audience (AUD) Tag**

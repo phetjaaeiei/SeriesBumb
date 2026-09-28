@@ -2,8 +2,7 @@ import type { MiddlewareHandler } from 'astro';
 import { env } from 'cloudflare:workers';
 import { getConfig } from '../../config/config';
 import { fetchAccessJwks, verifyAccessJwt } from '../access-jwt';
-
-const ADMIN_SURFACE = /^\/admin(?:\/|$)|^\/_actions\/admin\./u;
+import { isAdminSurface } from '../admin-surface';
 
 /**
  * Defense in depth once Cloudflare Access protects the admin surface: the edge JWT must be valid
@@ -11,7 +10,7 @@ const ADMIN_SURFACE = /^\/admin(?:\/|$)|^\/_actions\/admin\./u;
  */
 export const verifyAccess: MiddlewareHandler = async (context, next) => {
   const access = getConfig(env).access;
-  if (!access || !ADMIN_SURFACE.test(context.url.pathname) || !context.locals.user) return next();
+  if (!access || !isAdminSurface(context.url) || !context.locals.user) return next();
   const verified = await verifyAccessJwt(context.request.headers.get('Cf-Access-Jwt-Assertion'), {
     teamDomain: access.teamDomain,
     audience: access.audience,
