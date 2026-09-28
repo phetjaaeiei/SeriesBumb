@@ -31,5 +31,35 @@
   },
   "observability": {
     "enabled": true
+  },
+  // Staging: separate Worker and D1, uploads off, no Supabase secret. Deploy with `npm run deploy:staging`.
+  "env": {
+    "staging": {
+      "name": "seriesbumb-staging",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "seriesbumb-staging",
+          "database_id": "caadae3c-245c-46f2-a422-af80b2ca2cfe",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "vars": {
+        "APP_ENV": "staging",
+        "SITE_URL": "https://seriesbumb-staging.phetjaa.workers.dev",
+        "FIREBASE_STORAGE_BUCKET": "seriesbumb-32f9e.firebasestorage.app",
+        "SUPABASE_URL": "https://lgtdhbeocizxxvptofdb.supabase.co",
+        "SUPABASE_AUDIO_BUCKET": "SeriesBumb",
+        "SUPABASE_IMAGE_BUCKET": "SeriesBumbImages",
+        "SUPABASE_IMAGE_UPLOADS_ENABLED": "false",
+        "AUDIO_FIREBASE_ENABLED": "false",
+        "FIREBASE_IMAGE_UPLOADS_ENABLED": "false",
+        "IMAGE_BASE_URL": "https://lgtdhbeocizxxvptofdb.supabase.co/storage/v1/object/public/SeriesBumbImages",
+        "CF_BEACON_TOKEN": ""
+      },
+      "observability": {
+        "enabled": true
+      }
+    }
   }
 }
