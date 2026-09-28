@@ -23,6 +23,7 @@
     "backup:export": "node --experimental-strip-types scripts/backup-export.ts",
     "backup:storage": "node --experimental-strip-types scripts/backup-storage.ts",
     "restore:export": "node --experimental-strip-types scripts/restore-export.ts",
+    "parity": "node --experimental-strip-types scripts/parity/run.ts",
     "deploy:prod": "node --experimental-strip-types scripts/deploy.ts production",
     "deploy:staging": "node --experimental-strip-types scripts/deploy.ts staging"
   },
