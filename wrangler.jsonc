@@ -4,6 +4,9 @@
   "main": "@astrojs/cloudflare/entrypoints/server",
   "compatibility_date": "2026-09-25",
   "compatibility_flags": ["nodejs_compat"],
+  // Preview URLs of the production Worker share production bindings, so keep them off here.
+  "workers_dev": true,
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS"
@@ -36,6 +39,8 @@
   "env": {
     "staging": {
       "name": "seriesbumb-staging",
+      "workers_dev": true,
+      "preview_urls": true,
       "d1_databases": [
         {
           "binding": "DB",

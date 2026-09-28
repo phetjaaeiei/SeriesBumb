@@ -54,9 +54,14 @@ console.log(`• D1 bookmark before migrate (${database}): ${bookmark ?? 'unknow
 run('npx', ['wrangler', 'd1', 'migrations', 'apply', database, '--remote', ...envArgs]);
 run('npx', ['wrangler', 'deploy', '--config', 'dist/server/wrangler.json']);
 
-const response = await fetch(siteUrl, { redirect: 'manual' });
-if (response.status !== 200) {
-  console.error(`✗ smoke check ${siteUrl} returned ${response.status}`);
+// A brand-new workers.dev route can answer 404 for a few seconds after the first deploy.
+let status = 0;
+for (let attempt = 1; attempt <= 6 && status !== 200; attempt += 1) {
+  if (attempt > 1) await new Promise((resolve) => setTimeout(resolve, 5_000));
+  status = (await fetch(siteUrl, { redirect: 'manual' })).status;
+}
+if (status !== 200) {
+  console.error(`✗ smoke check ${siteUrl} returned ${status}`);
   console.error(`  roll back code: npx wrangler rollback --name ${worker}`);
   if (bookmark) console.error(`  roll back data: npx wrangler d1 time-travel restore ${database} --bookmark ${bookmark} ${envArgs.join(' ')}`);
   process.exit(1);
