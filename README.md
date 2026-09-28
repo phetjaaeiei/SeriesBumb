@@ -75,7 +75,7 @@ Deploy จาก worktree ที่ commit ครบแล้วเท่าน�
 
 ใช้ D1 Time Travel สำหรับการย้อนข้อมูลภายใน 7 วัน (`npx wrangler d1 time-travel restore seriesbumb --timestamp ...`) และสำรองออกนอกระบบอย่างน้อยสัปดาห์ละครั้ง คำสั่งสำรองด้านล่างอ่านตารางปกติทั้งหมดผ่าน `wrangler d1 execute --remote --json` แล้วสร้าง `manifest.json` กับไฟล์ JSON แยกชุด ไม่รวมตาราง FTS5 ที่สร้างใหม่ได้
 
-ก่อนสำรองหรือกู้คืน ให้หยุดการเขียนข้อมูลจากเว็บไซต์/แอดมินจนเสร็จ และกำหนด D1 `database_id` จริงใน `wrangler.jsonc` สคริปต์สำรองจะหยุดถ้าพบ foreign key ที่เสีย เก็บโฟลเดอร์สำรองไว้นอก Git ในที่ปลอดภัย เพราะมีข้อมูลบัญชีและ OAuth token; สำรองไฟล์รูปและเสียงใน Supabase Storage แยกต่างหาก
+ก่อนสำรองหรือกู้คืน ให้หยุดการเขียนข้อมูลจากเว็บไซต์/แอดมินจนเสร็จ และกำหนด D1 `database_id` จริงใน `wrangler.jsonc` สคริปต์สำรองจะหยุดถ้าพบ foreign key ที่เสีย เก็บโฟลเดอร์สำรองไว้นอก Git ในที่ปลอดภัย เพราะมีชื่อและอีเมลของสมาชิก (ไฟล์สำรองไม่รวมตาราง session/verification และไม่มี OAuth token ผู้ใช้จึงต้องเข้าสู่ระบบใหม่หลังกู้คืน); สำรองไฟล์รูปและเสียงใน Supabase Storage แยกต่างหาก
 
 ```sh
 node --experimental-strip-types scripts/backup.ts --database seriesbumb --out "$HOME/seriesbumb-backups/$(date -u +%F)" --writes-paused

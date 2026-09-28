@@ -306,7 +306,7 @@ function main(): void {
     finish(db, manifest);
     state.complete = true;
     atomicJson(statePath, state);
-    console.log('Restore complete. In /admin, run “สร้างดัชนีใหม่ทั้งหมด” before reopening writes. Restore R2 images separately.');
+    console.log('Restore complete. In /admin, run “สร้างดัชนีใหม่ทั้งหมด” before reopening writes. Restore Supabase Storage files (images and audio) separately; members sign in again because sessions are not backed up.');
   } finally {
     closeSync(lock);
     unlinkSync(lockPath);

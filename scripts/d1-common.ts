@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { BACKUP_EXCLUDED_TABLES } from './lib/backup-redaction.ts';
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const format = 'seriesbumb-d1-json-v1';
@@ -67,7 +68,7 @@ export function tableSchemas(db: DbOptions): TableSchema[] {
   const all = query<{ name: string; sql: string | null }>(db, "SELECT name, sql FROM sqlite_schema WHERE type = 'table' ORDER BY name").results;
   const ftsRoots = all.filter(row => /^CREATE VIRTUAL TABLE\b/i.test(row.sql ?? '') && /\bUSING\s+fts5\b/i.test(row.sql ?? '')).map(row => row.name);
   const tables = all.filter(row => {
-    if (/^(sqlite_|_cf_)/i.test(row.name) || row.name === 'd1_migrations') return false;
+    if (/^(sqlite_|_cf_)/i.test(row.name) || row.name === 'd1_migrations' || BACKUP_EXCLUDED_TABLES.includes(row.name)) return false;
     if (ftsRoots.some(rootName => row.name === rootName || row.name.startsWith(`${rootName}_`))) return false;
     if (/^CREATE VIRTUAL TABLE\b/i.test(row.sql ?? '')) throw new Error(`Unsupported virtual table: ${row.name}`);
     return true;

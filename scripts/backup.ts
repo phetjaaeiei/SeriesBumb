@@ -5,12 +5,13 @@ import {
   atomicJson, format, hash, identifier, literal, query, sameSchema, tableSchemas,
   type BackupRow, type BackupTable, type DbOptions, type Manifest,
 } from './d1-common.ts';
+import { redactBackupValues } from './lib/backup-redaction.ts';
 
 const usage = `Usage: node --experimental-strip-types scripts/backup.ts --database seriesbumb --out /secure/seriesbumb-YYYY-MM-DD --writes-paused
 
 Backs up ordinary D1 tables to checksummed JSON chunks. Remote D1 is used by default.
 Options: --local [--persist-to DIR] for an isolated local D1; --help.
-Pause all application writes before a remote backup and keep the output private: it contains OAuth account data.`;
+Pause all application writes before a remote backup and keep the output private: it contains member names and emails. Sessions, verification rows and OAuth tokens are never exported.`;
 const pageSize = 50;
 
 function options(args: string[]): { db: DbOptions; out: string } | null {
@@ -61,7 +62,7 @@ function backupTable(db: DbOptions, out: string, schema: BackupTable): void {
         if (typeof value === 'number') literal(value);
         values[col.name] = value;
       }
-      return { rowid, values };
+      return { rowid, values: redactBackupValues(schema.name, values) };
     });
     const file = `${schema.name}/${String(schema.chunks.length).padStart(6, '0')}.json`;
     const contents = `${JSON.stringify(chunkRows)}\n`;
