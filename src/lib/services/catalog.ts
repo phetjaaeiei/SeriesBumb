@@ -5,6 +5,7 @@ import { slugCandidates, SLUG_MAX, SLUG_RE } from '../slug';
 import { thaiSortKey } from '../thai';
 import { reindexArtistDependents, reindexLabelDependents } from './search-admin';
 import { CatalogError } from './catalog-delete';
+import { assertEntityImageKey } from './image-keys';
 import { normalizeSearchField, searchDocument } from '../search';
 import type { ImageKind } from './images';
 import type { ImageStore } from './image-store';
@@ -254,7 +255,7 @@ export async function saveArtist(db: D1Database, userId: string, input: {
   });
   const now = Date.now();
   await db.batch([
-    db.prepare('UPDATE artist SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, artistType = ?, status = ?, province = ?, formedYear = ?, themes = ?, yearsActive = ?, bio = ?, imageKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, name, input.nameAlt || null, thaiSortKey(name), input.artistType || null, input.status || 'unknown', input.province || null, input.formedYear == null ? null : toCeYear(input.formedYear), input.themes || null, input.yearsActive || null, input.bio || '', input.imageKey || null, userId, now, input.id),
+    db.prepare('UPDATE artist SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, artistType = ?, status = ?, province = ?, formedYear = ?, themes = ?, yearsActive = ?, bio = ?, imageKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, name, input.nameAlt || null, thaiSortKey(name), input.artistType || null, input.status || 'unknown', input.province || null, input.formedYear == null ? null : toCeYear(input.formedYear), input.themes || null, input.yearsActive || null, input.bio || '', assertEntityImageKey('artists', input.id, input.imageKey), userId, now, input.id),
     db.prepare('DELETE FROM artist_member WHERE artistId = ?').bind(input.id),
     db.prepare(`INSERT INTO artist_member (id, artistId, personId, sourceId, name, role, years, isCurrent, position) SELECT json_extract(value,'$.id'), ?, json_extract(value,'$.personId'), json_extract(value,'$.sourceId'), json_extract(value,'$.name'), json_extract(value,'$.role'), json_extract(value,'$.years'), json_extract(value,'$.isCurrent'), json_extract(value,'$.position') FROM json_each(?)`).bind(input.id, jsonParam(members)),
     ...indexStatements(db, 'artist', input.id, name, [name, input.nameAlt, ...members.map(member => member.name)].filter(Boolean).join(' | '), old.publishedTapeCount > 0 || old.hasPublicSong === 1),
@@ -273,7 +274,7 @@ export async function saveLabel(db: D1Database, userId: string, input: {
   if (!old) throw new Error('ไม่พบค่ายนี้');
   const slug = input.slug ? await uniqueSlug(db, 'label', name, input.slug, input.id) : old.slug;
   await db.batch([
-    db.prepare('UPDATE label SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, description = ?, logoKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, name, input.nameAlt || null, thaiSortKey(name), input.description || '', input.logoKey || null, userId, Date.now(), input.id),
+    db.prepare('UPDATE label SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, description = ?, logoKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, name, input.nameAlt || null, thaiSortKey(name), input.description || '', assertEntityImageKey('labels', input.id, input.logoKey), userId, Date.now(), input.id),
     ...indexStatements(db, 'label', input.id, name, [name, input.nameAlt].filter(Boolean).join(' | '), old.publishedTapeCount > 0),
     ...redirectStatements(db, `/labels/${old.slug}`, `/labels/${slug}`),
   ]);
@@ -343,7 +344,7 @@ export async function saveCollection(db: D1Database, userId: string, input: {
   const slug = input.slug ? await uniqueSlug(db, 'collection', title, input.slug, input.id) : old.slug;
   const items = (input.items ?? []).slice(0, 100).map((item, position) => ({ tapeId: item.tapeId, note: item.note || null, position }));
   await db.batch([
-    db.prepare('UPDATE collection SET slug = ?, title = ?, description = ?, coverKey = ?, isFeatured = ?, status = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, title, input.description || '', input.coverKey || null, Number(!!input.isFeatured), input.status, userId, Date.now(), input.id),
+    db.prepare('UPDATE collection SET slug = ?, title = ?, description = ?, coverKey = ?, isFeatured = ?, status = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, title, input.description || '', assertEntityImageKey('collections', input.id, input.coverKey), Number(!!input.isFeatured), input.status, userId, Date.now(), input.id),
     db.prepare('DELETE FROM collection_item WHERE collectionId = ?').bind(input.id),
     db.prepare(`INSERT INTO collection_item (collectionId, tapeId, position, note) SELECT ?, json_extract(value,'$.tapeId'), json_extract(value,'$.position'), json_extract(value,'$.note') FROM json_each(?)`).bind(input.id, jsonParam(items)),
     ...indexStatements(db, 'collection', input.id, title, title, input.status === 'published'),

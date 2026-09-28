@@ -5,6 +5,7 @@ import {
   atomicJson, format, hash, identifier, literal, query, readManifest, root, sameSchema, tableSchemas,
   type BackupRow, type BackupTable, type DbOptions, type Manifest,
 } from './d1-common.ts';
+import { redactBackupValues } from './lib/backup-redaction.ts';
 
 const usage = `Usage: node --experimental-strip-types scripts/restore.ts --from /secure/backup --database seriesbumb-new --confirm-database seriesbumb-new --writes-paused
 
@@ -69,7 +70,8 @@ function loadRows(directory: string, step: Pick<Step, 'table' | 'file'>): Backup
   if (!chunk || hash(contents) !== chunk.sha256) throw new Error(`Backup checksum mismatch: ${step.file}`);
   const rows = JSON.parse(contents) as BackupRow[];
   if (!Array.isArray(rows) || rows.length !== chunk.count) throw new Error(`Invalid backup chunk: ${step.file}`);
-  return rows;
+  // Older backups may still carry provider tokens; they are never written back.
+  return rows.map(row => ({ ...row, values: redactBackupValues(step.table.name, row.values) }));
 }
 
 function validateBackup(directory: string, manifest: Manifest): void {
@@ -306,7 +308,7 @@ function main(): void {
     finish(db, manifest);
     state.complete = true;
     atomicJson(statePath, state);
-    console.log('Restore complete. In /admin, run “สร้างดัชนีใหม่ทั้งหมด” before reopening writes. Restore R2 images separately.');
+    console.log('Restore complete. In /admin, run “สร้างดัชนีใหม่ทั้งหมด” before reopening writes. Restore Supabase Storage files (images and audio) separately; members sign in again because sessions are not backed up.');
   } finally {
     closeSync(lock);
     unlinkSync(lockPath);

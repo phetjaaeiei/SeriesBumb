@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalUrl, imageUrl, safeNextPath, thumbKeyFromFull } from '../../src/lib/urls';
+import { canonicalUrl, imageUrl, safeInternalPath, safeNextPath, thumbKeyFromFull } from '../../src/lib/urls';
 
 const SITE = 'https://seriesbumb.example';
 
@@ -42,5 +42,26 @@ describe('asset and canonical URLs', () => {
   it('changes only the full-image filename into its thumbnail filename', () => {
     expect(thumbKeyFromFull('tapes/uuid-full.webp')).toBe('tapes/uuid-thumb.webp');
     expect(thumbKeyFromFull('dir-full.name/uuid-full.jpg')).toBe('dir-full.name/uuid-thumb.jpg');
+  });
+});
+
+describe('open redirect hardening', () => {
+  const site = 'https://seriesbumb.phetjaa.workers.dev';
+
+  it.each(['/.//evil.com', '/a/..//evil.com', `${site}//evil.com`, '/\\evil.com', '/%5Cevil.com', '/%0d%0aLocation:evil'])('rejects %s', (next) => {
+    expect(safeNextPath(next, site)).toBe('/');
+  });
+
+  it('keeps normal internal paths', () => {
+    expect(safeNextPath('/tapes/abc?x=1#top', site)).toBe('/tapes/abc?x=1#top');
+    expect(safeNextPath('/artists/%E0%B8%81', site)).toBe('/artists/%E0%B8%81');
+  });
+
+  it('safeInternalPath refuses protocol-relative, backslash and control-character targets', () => {
+    expect(safeInternalPath('//evil.example/x')).toBeNull();
+    expect(safeInternalPath('/\\evil')).toBeNull();
+    expect(safeInternalPath('/a\nb')).toBeNull();
+    expect(safeInternalPath('https://evil.example')).toBeNull();
+    expect(safeInternalPath('/tapes/new-slug')).toBe('/tapes/new-slug');
   });
 });

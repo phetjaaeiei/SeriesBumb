@@ -1,3 +1,11 @@
+// Browsers treat "//host" and "/\\host" as another origin; control characters enable header tricks.
+const UNSAFE_PATH = /^\/[/\\]|\\|[\u0000-\u001f\u007f]/u;
+
+/** Returns the path when it can only stay on this site, otherwise null. */
+export function safeInternalPath(path: string): string | null {
+  return path.startsWith('/') && !UNSAFE_PATH.test(path) ? path : null;
+}
+
 export function safeNextPath(next: string | null | undefined, siteUrl: string): string {
   if (!next) return '/';
   try {
@@ -6,7 +14,9 @@ export function safeNextPath(next: string | null | undefined, siteUrl: string): 
     if (candidate.origin !== base.origin
       || candidate.pathname.startsWith('/login')
       || candidate.pathname.startsWith('/api/auth/')) return '/';
-    return candidate.pathname + candidate.search + candidate.hash;
+    const path = candidate.pathname + candidate.search + candidate.hash;
+    // Check the decoded path too: "/%5Cevil.com" decodes to a backslash path.
+    return safeInternalPath(path) && safeInternalPath(decodeURIComponent(candidate.pathname)) ? path : '/';
   } catch {
     return '/';
   }

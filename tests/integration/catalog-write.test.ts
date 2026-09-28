@@ -108,4 +108,18 @@ describe('catalog save and publish', () => {
     expect(await getTapeBySlug(db, saved.slug)).toBeNull();
     expect((await db.prepare('SELECT publishedTapeCount FROM artist WHERE id = ?').bind(artist.id).first<{ publishedTapeCount: number }>())?.publishedTapeCount).toBe(0);
   });
+
+  it('refuses image keys that belong to another record', async () => {
+    const owner = crypto.randomUUID();
+    const now = Date.now();
+    await env.DB.prepare('INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)').bind(owner, 'แอดมิน', `${owner}@example.com`, now, now).run();
+    const artist = await createArtist(db, owner, `ศิลปินรูป ${owner.slice(0, 8)}`);
+    const other = await createTapeDraft(db, owner, 'เทปของคนอื่น');
+    const foreign = `tapes/${other.id}/${crypto.randomUUID()}-full.jpg`;
+    await expect(saveArtist(db, owner, { id: artist.id, name: 'ศิลปินรูป', imageKey: foreign })).rejects.toThrow('รูปนี้ไม่ใช่ของรายการนี้');
+    const own = `artists/${artist.id}/${crypto.randomUUID()}-full.webp`;
+    await saveArtist(db, owner, { id: artist.id, name: 'ศิลปินรูป', imageKey: own });
+    expect((await db.prepare('SELECT imageKey FROM artist WHERE id = ?').bind(artist.id).first<{ imageKey: string }>())?.imageKey).toBe(own);
+  });
 });
+
