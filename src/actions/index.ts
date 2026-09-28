@@ -3,17 +3,18 @@ import { ActionError, defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { defineAdminAction, defineMemberAction, defineMemberWriteAction, runAdminAction } from './define';
 import { requireFreshSession } from '../auth/permissions';
+import { toActionError } from '../errors/to-action-error';
 import { artistSaveSchema, collectionSaveSchema, labelSaveSchema, songSaveSchema, tapeSaveSchema, uploadSchema } from './schemas';
 import { createArtist, createCollection, createGenre, createLabel, createSong, createTapeDraft, saveArtist, saveCollection, saveGenre, saveLabel, saveSong, saveTape } from '../services/catalog';
 import { deleteTapeImage, uploadImage } from '../services/images';
 import { setEngagement } from '../services/engagement';
-import { CommentError, createComment, deleteOwnComment, listComments } from '../services/comments';
+import { createComment, deleteOwnComment, listComments } from '../services/comments';
 import { moderateComment, setCommentBan, setUserRole } from '../services/admin-community';
 import { continueReindex, enqueueFullReindex } from '../services/search-admin';
-import { CatalogError, deleteCatalogEntity } from '../services/catalog-delete';
+import { deleteCatalogEntity } from '../services/catalog-delete';
 import { normalizeThai } from '../domain/thai';
 import { addCatalogSource, deleteCatalogSource } from '../services/catalog-sources';
-import { ReviewError, moderateCorrection, moderateReview, submitCorrection, submitReview } from '../services/reviews';
+import { moderateCorrection, moderateReview, submitCorrection, submitReview } from '../services/reviews';
 import { createPerson, linkArtistMember } from '../services/people';
 import { addArtistRelation, addTapeEdition, deleteArtistRelation, deleteTapeEdition } from '../services/catalog-relations';
 import { addPersonCredit, deletePersonCredit } from '../services/person-credits';
@@ -22,31 +23,19 @@ const turnstileToken = z.string().max(2048).optional();
 
 async function runCatalog<T>(action: () => Promise<T>): Promise<T> {
   try { return await action(); }
-  catch (error) {
-    if (error instanceof CatalogError) throw new ActionError({ code: 'BAD_REQUEST', message: error.message });
-    console.error('Catalog action failed', error instanceof Error ? error.message : 'unknown');
-    throw new ActionError({ code: 'BAD_REQUEST', message: 'บันทึกไม่สำเร็จ ตรวจข้อมูลแล้วลองอีกครั้ง' });
-  }
+  catch (error) { throw toActionError(error, { code: 'BAD_REQUEST', message: 'บันทึกไม่สำเร็จ ตรวจข้อมูลแล้วลองอีกครั้ง', log: 'Catalog action failed' }); }
 }
 
 const commentTargetSchema = z.object({ tapeId: z.uuid().optional(), songId: z.uuid().optional() });
 const oneCommentTarget = (input: { tapeId?: string; songId?: string }) => Number(!!input.tapeId) + Number(!!input.songId) === 1;
 async function runComment<T>(action: () => Promise<T>): Promise<T> {
   try { return await action(); }
-  catch (error) {
-    if (error instanceof CommentError) throw new ActionError({ code: error.code, message: error.message });
-    console.error('Comment action failed', error instanceof Error ? error.message : 'unknown');
-    throw new ActionError({ code: 'INTERNAL_SERVER_ERROR', message: 'บันทึกไม่สำเร็จ ลองอีกครั้ง' });
-  }
+  catch (error) { throw toActionError(error, { message: 'บันทึกไม่สำเร็จ ลองอีกครั้ง', log: 'Comment action failed' }); }
 }
 
 async function runReview<T>(action: () => Promise<T>): Promise<T> {
   try { return await action(); }
-  catch (error) {
-    if (error instanceof ReviewError) throw new ActionError({ code: error.code, message: error.message });
-    console.error('Review action failed', error instanceof Error ? error.message : 'unknown');
-    throw new ActionError({ code: 'INTERNAL_SERVER_ERROR', message: 'บันทึกไม่สำเร็จ ลองอีกครั้ง' });
-  }
+  catch (error) { throw toActionError(error, { message: 'บันทึกไม่สำเร็จ ลองอีกครั้ง', log: 'Review action failed' }); }
 }
 
 export const server = {

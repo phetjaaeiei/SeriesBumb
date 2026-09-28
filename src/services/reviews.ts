@@ -1,8 +1,9 @@
+import { AppError } from '../errors/app-error';
 import { normalizeComment } from './comments';
 import { validateSourceUrl } from './catalog-sources';
 
-export class ReviewError extends Error {
-  constructor(message: string, public code: 'BAD_REQUEST' | 'NOT_FOUND' | 'FORBIDDEN' = 'BAD_REQUEST') { super(message); }
+export class ReviewError extends AppError {
+  constructor(message: string, code: 'BAD_REQUEST' | 'NOT_FOUND' | 'FORBIDDEN' = 'BAD_REQUEST') { super(message, code); }
 }
 
 const normalizeBody = (raw: string, min: number, max: number) => {

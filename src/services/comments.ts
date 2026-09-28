@@ -1,3 +1,4 @@
+import { AppError } from '../errors/app-error';
 import { decodeCursor, encodeCursor } from '../domain/cursor';
 
 export interface CommentDto {
@@ -9,8 +10,8 @@ export interface CommentDto {
 }
 export type CommentTarget = { tapeId: string; songId?: never } | { songId: string; tapeId?: never };
 
-export class CommentError extends Error {
-  constructor(message: string, public code: 'BAD_REQUEST' | 'NOT_FOUND' | 'FORBIDDEN' = 'BAD_REQUEST') { super(message); }
+export class CommentError extends AppError {
+  constructor(message: string, code: 'BAD_REQUEST' | 'NOT_FOUND' | 'FORBIDDEN' = 'BAD_REQUEST') { super(message, code); }
 }
 
 export function normalizeComment(input: string): string {

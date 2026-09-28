@@ -1,3 +1,4 @@
+import { AppError, appErrorCodeForStatus } from '../errors/app-error';
 /** Private audio files never participate in the public catalog/search index. */
 export type AudioProvider = 'supabase' | 'firebase' | 'drive';
 export type AudioStatus = 'pending' | 'uploading' | 'ready' | 'failed' | 'deleting';
@@ -30,6 +31,6 @@ export interface AudioUsage {
   reason?: string;
 }
 
-export class AudioArchiveError extends Error {
-  constructor(public readonly status: number, message: string) { super(message); }
+export class AudioArchiveError extends AppError {
+  constructor(status: number, message: string) { super(message, appErrorCodeForStatus(status), { status }); }
 }

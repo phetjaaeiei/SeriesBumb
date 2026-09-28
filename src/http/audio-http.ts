@@ -1,4 +1,5 @@
 import type { APIContext } from 'astro';
+import { toJsonError } from '../errors/to-response';
 import { AudioArchiveError } from '../services/audio-types';
 
 export function audioJson(body: unknown, status = 200): Response {
@@ -19,9 +20,8 @@ export async function adminAudioRoute(context: Pick<APIContext, 'locals' | 'requ
     response.headers.set('Referrer-Policy', 'no-referrer');
     return response;
   } catch (error) {
-    if (error instanceof AudioArchiveError) return audioJson({ error: error.message }, error.status);
     // Provider errors/credentials and private filenames must never be reflected or logged.
-    return audioJson({ error: 'จัดการคลังเพลงไม่สำเร็จ กรุณาลองใหม่' }, 500);
+    return toJsonError(error, 'จัดการคลังเพลงไม่สำเร็จ กรุณาลองใหม่', audioJson);
   }
 }
 

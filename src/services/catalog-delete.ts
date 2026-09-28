@@ -1,8 +1,9 @@
+import { AppError } from '../errors/app-error';
 import { jsonParam } from '../db/client';
 import type { ImageStore } from '../storage/image-store';
 
 type Kind = 'tapes' | 'songs' | 'artists' | 'labels' | 'genres' | 'collections';
-export class CatalogError extends Error {}
+export class CatalogError extends AppError {}
 
 function removeIndex(db: D1Database, kind: string, id: string, path: string): D1PreparedStatement[] {
   return [
