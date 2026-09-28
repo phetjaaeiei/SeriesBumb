@@ -1,8 +1,10 @@
 import { ActionError, defineAction, type ActionAPIContext } from 'astro:actions';
 import { z } from 'astro/zod';
 import { env } from 'cloudflare:workers';
+import { getConfig, isProduction } from '../config/config';
 import { RATE_LIMITED_MESSAGE, rateLimiter } from './rate-limit';
 import { UNAUDITED_ACTIONS, adminActionNameFrom, auditTargetFromInput, withAudit } from './services/audit';
+import { TURNSTILE_FAILED_MESSAGE, verifyTurnstile } from './turnstile';
 import type { SessionUser } from './types';
 import { requireAdmin, requireUser } from './permissions';
 
@@ -45,9 +47,13 @@ export function defineMemberAction<T extends Input, R>(options: {
   });
 }
 
-/** Member action that writes to D1: same auth as defineMemberAction plus a per-user rate limit. */
+/**
+ * Member action that writes to D1: same auth as defineMemberAction plus a per-user rate limit.
+ * With `turnstile: true` it also requires a valid `turnstileToken` once Turnstile is configured.
+ */
 export function defineMemberWriteAction<T extends Input, R>(options: {
   input: T;
+  turnstile?: boolean;
   handler: (input: z.infer<T>, context: AuthedContext) => Promise<R> | R;
 }) {
   return defineAction<R, 'json', T>({
@@ -57,6 +63,17 @@ export function defineMemberWriteAction<T extends Input, R>(options: {
       const user = requireUser(context.locals);
       if (!await rateLimiter(env.WRITE_RATE_LIMITER).allow(`write:${user.id}`)) {
         throw new ActionError({ code: 'TOO_MANY_REQUESTS', message: RATE_LIMITED_MESSAGE });
+      }
+      const config = getConfig(env);
+      if (options.turnstile && config.turnstile) {
+        const passed = await verifyTurnstile({
+          secret: config.turnstile.secretKey,
+          token: (input as { turnstileToken?: string }).turnstileToken,
+          ip: context.request.headers.get('cf-connecting-ip'),
+          hostname: new URL(config.siteUrl).hostname,
+          allowTestKeys: !isProduction(config),
+        });
+        if (!passed) throw new ActionError({ code: 'FORBIDDEN', message: TURNSTILE_FAILED_MESSAGE });
       }
       return options.handler(input as z.infer<T>, { ...context, user });
     }) as Parameters<typeof defineAction<R, 'json', T>>[0]['handler'],

@@ -28,6 +28,9 @@ const supabaseOrigin = (() => {
   return url.origin;
 })();
 
+// Turnstile's widget script and iframe are only allowed once a site key is configured.
+const turnstileOrigin = workerVars.TURNSTILE_SITE_KEY ? 'https://challenges.cloudflare.com' : '';
+
 export default defineConfig({
   output: 'server',
   adapter: cloudflare({ imageService: 'passthrough' }),
@@ -46,9 +49,10 @@ export default defineConfig({
         "base-uri 'self'",
         "form-action 'self'",
         "frame-ancestors 'none'",
+        ...(turnstileOrigin ? [`frame-src ${turnstileOrigin}`] : []),
       ],
       scriptDirective: {
-        resources: ["'self'", 'https://static.cloudflareinsights.com'],
+        resources: ["'self'", 'https://static.cloudflareinsights.com', ...(turnstileOrigin ? [turnstileOrigin] : [])],
       },
     },
   },

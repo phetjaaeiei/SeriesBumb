@@ -5,15 +5,21 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Groups carry only minor/patch updates. Majors arrive one PR per package so a breaking
+    # peer range (e.g. TypeScript 7 vs @astrojs/check) cannot block every other update.
     groups:
       astro:
         patterns: ['astro', '@astrojs/*']
+        update-types: ['minor', 'patch']
       cloudflare:
         patterns: ['wrangler', '@cloudflare/*']
+        update-types: ['minor', 'patch']
       auth-db:
         patterns: ['better-auth', '@better-auth/*', 'drizzle-*']
+        update-types: ['minor', 'patch']
       dev-tools:
         dependency-type: development
+        update-types: ['minor', 'patch']
   - package-ecosystem: github-actions
     directory: /
     schedule:

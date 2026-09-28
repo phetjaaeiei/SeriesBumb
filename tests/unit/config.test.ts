@@ -55,4 +55,23 @@ describe('getConfig', () => {
     const env = { ...base };
     expect(getConfig(env)).toBe(getConfig(env));
   });
+
+  it('keeps Access and Turnstile off until both of their values are set', () => {
+    const off = getConfig({ ...base, ACCESS_TEAM_DOMAIN: 'https://team.cloudflareaccess.com', TURNSTILE_SITE_KEY: '0x4AAA' });
+    expect(off.access).toBeNull();
+    expect(off.turnstile).toBeNull();
+    const on = getConfig({ ...base, ACCESS_TEAM_DOMAIN: 'https://team.cloudflareaccess.com/', ACCESS_AUD: 'aud', TURNSTILE_SITE_KEY: '0x4AAA', TURNSTILE_SECRET_KEY: '0x4BBB' });
+    expect(on.access).toEqual({ teamDomain: 'https://team.cloudflareaccess.com', audience: 'aud' });
+    expect(on.turnstile).toEqual({ siteKey: '0x4AAA', secretKey: '0x4BBB' });
+  });
+
+  it('only accepts a Cloudflare Access team domain', () => {
+    expect(() => getConfig({ ...base, ACCESS_TEAM_DOMAIN: 'https://evil.example', ACCESS_AUD: 'aud' })).toThrow(ConfigError);
+  });
+
+  it('treats blank optional URLs as not configured instead of failing the whole site', () => {
+    const config = getConfig({ ...base, ACCESS_TEAM_DOMAIN: ' ', ACCESS_AUD: 'aud', IMAGE_BASE_URL: '', SUPABASE_URL: '' });
+    expect(config.access).toBeNull();
+    expect(config.images.baseUrl).toBeNull();
+  });
 });
