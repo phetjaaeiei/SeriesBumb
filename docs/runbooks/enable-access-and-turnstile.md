@@ -17,8 +17,8 @@
 8. ถ้าอีเมลที่ผ่าน Access ไม่ตรงกับบัญชีที่ login ในเว็บ แอปจะตอบ 403 เพื่อกันการใช้ cookie ของคนอื่น
 
 ย้อนกลับ (ทำตามลำดับนี้เท่านั้น):
-1. ลบ `ACCESS_TEAM_DOMAIN` ออกจาก vars (commit + merge) แล้ว deploy ใหม่ และตรวจว่าเปิด `/admin` ได้โดยไม่ผ่าน Access
-2. หลังจากนั้นจึงปิดหรือลบ Access application
+1. ลบ `ACCESS_TEAM_DOMAIN` ออกจาก vars (commit + merge) แล้ว deploy ใหม่ ตรวจว่า Cloudflare dashboard → Workers & Pages → `seriesbumb` → Settings → Variables ไม่มี `ACCESS_TEAM_DOMAIN` แล้ว และ `/admin` ยังเปิดได้ตามปกติหลังผ่านหน้า Access (ช่วงนี้ Access ที่ edge ยังเปิดอยู่ จึงยังเจอหน้า Access ตามปกติ)
+2. จากนั้นจึงปิดหรือลบ Access application แล้วตรวจในหน้าต่างส่วนตัวว่าเปิด `/admin` แล้วไปหน้า login ของเว็บเลยโดยไม่ผ่าน Access
 
 > **ห้ามปิด Access application ก่อน** ถ้า Worker ยังมี `ACCESS_TEAM_DOMAIN` อยู่ request จะไม่มี JWT และแอปจะตอบ 403 ทุกหน้าแอดมิน ซึ่งทำให้เจ้าของเข้าแอดมินไม่ได้
 
