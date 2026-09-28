@@ -1,0 +1,30 @@
+---
+import { env } from 'cloudflare:workers';
+import AdminLayout from '../../components/layout/AdminLayout.astro';
+import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
+import { listAudit } from '../../lib/services/audit';
+
+const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
+const { rows, next } = await listAudit(env.DB, cursor ? { createdAt: Number(cursor.key), id: cursor.id } : null);
+const nextCursor = next ? encodeCursor('new', next.createdAt, next.id) : null;
+const time = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Asia/Bangkok' });
+---
+<AdminLayout title="บันทึกการทำงานของแอดมิน">
+  <h1>บันทึกการทำงานของแอดมิน</h1>
+  <p class="page-lede">ทุกการแก้ไข ลบ และเปลี่ยนสิทธิ์โดยแอดมินถูกบันทึกไว้ที่นี่ แก้ไขหรือลบรายการไม่ได้</p>
+  <section class="section">
+    {rows.length ? (
+      <div class="table-wrap"><table class="data-table">
+        <thead><tr><th scope="col">เวลา</th><th scope="col">แอดมิน</th><th scope="col">การทำงาน</th><th scope="col">รายการ</th><th scope="col">ผล</th></tr></thead>
+        <tbody>{rows.map(row => <tr>
+          <td data-label="เวลา"><time datetime={new Date(row.createdAt).toISOString()}>{time.format(row.createdAt)}</time></td>
+          <td data-label="แอดมิน">{row.actorEmail}</td>
+          <td data-label="การทำงาน"><code>{row.action}</code></td>
+          <td data-label="รายการ">{row.targetId ? <code>{row.targetId}</code> : '—'}</td>
+          <td data-label="ผล">{row.status < 400 ? 'สำเร็จ' : `ไม่สำเร็จ (${row.status})`}</td>
+        </tr>)}</tbody>
+      </table></div>
+    ) : <p class="empty-state">ยังไม่มีบันทึก</p>}
+    {nextCursor && <p class="pagination"><a class="button" href={`/admin/audit?cursor=${encodeURIComponent(nextCursor)}`}>หน้าถัดไป</a></p>}
+  </section>
+</AdminLayout>

@@ -85,6 +85,13 @@
       "when": 1790570276931,
       "tag": "0011_clear_oauth_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790580273027,
+      "tag": "0012_rapid_cyclops",
+      "breakpoints": true
     }
   ]
 }
