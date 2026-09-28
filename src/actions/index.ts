@@ -117,7 +117,7 @@ export const server = {
       restore: defineAdminAction({ input: z.object({ id: z.uuid() }), handler: ({ id }, context) => runComment(() => moderateComment(env.DB, context.user.id, id, true)) }),
     },
     users: {
-      setRole: defineAdminAction({ input: z.object({ id: z.string().min(1), role: z.enum(['member', 'admin']) }), handler: ({ id, role }, context) => runComment(() => setUserRole(env.DB, context.user.id, id, role, env.ADMIN_EMAILS || '')) }),
+      setRole: defineAdminAction({ input: z.object({ id: z.string().min(1), role: z.enum(['member', 'admin']) }), handler: ({ id, role }, context) => runComment(() => setUserRole(env.DB, { id: context.user.id, email: context.user.email }, id, role, env.ADMIN_EMAILS || '')) }),
       setCommentBan: defineAdminAction({ input: z.object({ id: z.string().min(1), banned: z.boolean() }), handler: ({ id, banned }) => runComment(() => setCommentBan(env.DB, id, banned)) }),
     },
     search: {

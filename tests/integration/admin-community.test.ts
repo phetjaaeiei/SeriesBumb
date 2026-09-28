@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { moderateComment, setCommentBan, setUserRole } from '../../src/lib/services/admin-community';
+import { canManageRoles, moderateComment, setCommentBan, setUserRole } from '../../src/lib/services/admin-community';
 import { createTapeDraft, saveTape } from '../../src/lib/services/catalog';
 import { createComment, deleteOwnComment } from '../../src/lib/services/comments';
 
@@ -11,10 +11,11 @@ describe('admin community controls', () => {
     const now = Date.now();
     await env.DB.prepare("INSERT INTO user (id, name, email, emailVerified, role, createdAt, updatedAt) VALUES (?, 'Admin', ?, 1, 'admin', ?, ?)").bind(adminId, 'bootstrap@example.com', now, now).run();
     await env.DB.prepare("INSERT INTO user (id, name, email, emailVerified, role, createdAt, updatedAt) VALUES (?, 'Member', ?, 1, 'member', ?, ?)").bind(memberId, `${memberId}@example.com`, now, now).run();
-    await expect(setUserRole(env.DB, adminId, adminId, 'member', 'bootstrap@example.com')).rejects.toThrow('ตัวเอง');
+    const owner = { id: adminId, email: 'bootstrap@example.com' };
+    await expect(setUserRole(env.DB, owner, adminId, 'member', 'bootstrap@example.com')).rejects.toThrow('ตัวเอง');
     await expect(setCommentBan(env.DB, adminId, true)).rejects.toThrow('แอดมิน');
-    expect(await setUserRole(env.DB, adminId, memberId, 'admin', 'bootstrap@example.com')).toEqual({ id: memberId, role: 'admin' });
-    expect(await setUserRole(env.DB, adminId, memberId, 'member', 'bootstrap@example.com')).toEqual({ id: memberId, role: 'member' });
+    expect(await setUserRole(env.DB, owner, memberId, 'admin', 'bootstrap@example.com')).toEqual({ id: memberId, role: 'admin' });
+    expect(await setUserRole(env.DB, owner, memberId, 'member', 'bootstrap@example.com')).toEqual({ id: memberId, role: 'member' });
     expect(await setCommentBan(env.DB, memberId, true)).toEqual({ id: memberId, banned: true });
     await setCommentBan(env.DB, memberId, false);
 
@@ -29,12 +30,29 @@ describe('admin community controls', () => {
 
     const own = await createComment(env.DB, memberId, 'member', { tapeId: draft.id }, 'ลบเอง');
     await deleteOwnComment(env.DB, memberId, own.id);
-    await setUserRole(env.DB, adminId, memberId, 'admin', 'bootstrap@example.com');
+    await setUserRole(env.DB, owner, memberId, 'admin', 'bootstrap@example.com');
     await expect(moderateComment(env.DB, adminId, own.id, true)).rejects.toThrow('เฉพาะคอมเมนต์ที่แอดมินลบ');
 
     const adminComment = await createComment(env.DB, adminId, 'admin', { tapeId: draft.id }, 'คอมเมนต์จากแอดมิน');
     await moderateComment(env.DB, memberId, adminComment.id, false);
-    await setUserRole(env.DB, adminId, memberId, 'member', 'bootstrap@example.com');
+    await setUserRole(env.DB, owner, memberId, 'member', 'bootstrap@example.com');
     expect(await moderateComment(env.DB, adminId, adminComment.id, true)).toEqual({ id: adminComment.id, deleted: false });
   });
+
+  it('lets only bootstrap owners grant or remove admin', async () => {
+    const now = Date.now();
+    const ownerId = crypto.randomUUID();
+    const deputyId = crypto.randomUUID();
+    const memberId = crypto.randomUUID();
+    for (const [id, email, role] of [[ownerId, 'owner@example.com', 'admin'], [deputyId, `${deputyId}@example.com`, 'admin'], [memberId, `${memberId}@example.com`, 'member']]) {
+      await env.DB.prepare('INSERT INTO user (id, name, email, emailVerified, role, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?, ?)').bind(id, 'ผู้ใช้', email, role, now, now).run();
+    }
+    const deputy = { id: deputyId, email: `${deputyId}@example.com` };
+    await expect(setUserRole(env.DB, deputy, memberId, 'admin', 'owner@example.com')).rejects.toThrow('เฉพาะแอดมินตั้งต้นเท่านั้นที่เปลี่ยนสิทธิ์แอดมินได้');
+    await expect(setUserRole(env.DB, deputy, ownerId, 'member', 'owner@example.com')).rejects.toThrow('เฉพาะแอดมินตั้งต้นเท่านั้นที่เปลี่ยนสิทธิ์แอดมินได้');
+    expect(await setUserRole(env.DB, { id: ownerId, email: 'OWNER@example.com' }, memberId, 'admin', 'owner@example.com')).toEqual({ id: memberId, role: 'admin' });
+    expect(canManageRoles('Owner@Example.com', 'owner@example.com, other@example.com')).toBe(true);
+    expect(canManageRoles(deputy.email, 'owner@example.com')).toBe(false);
+  });
 });
+
