@@ -1,5 +1,6 @@
 # Copy this file to .dev.vars for local development.
 # Replace these example values; never commit .dev.vars.
+APP_ENV="development"
 SITE_URL="http://localhost:4321"
 BETTER_AUTH_SECRET="replace-with-a-long-random-secret-at-least-32-characters"
 GOOGLE_CLIENT_ID="replace-with-google-oauth-client-id"

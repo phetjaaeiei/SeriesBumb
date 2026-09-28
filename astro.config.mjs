@@ -5,7 +5,9 @@ import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 
 // CSP origins follow the Worker vars in wrangler.jsonc unless the build environment overrides them.
-const workerVars = JSON.parse(readFileSync(new URL('./wrangler.jsonc', import.meta.url), 'utf8').replace(/^\s*\/\/.*$/gmu, '')).vars ?? {};
+const wranglerConfig = JSON.parse(readFileSync(new URL('./wrangler.jsonc', import.meta.url), 'utf8').replace(/^\s*\/\/.*$/gmu, ''));
+const selectedEnv = process.env.CLOUDFLARE_ENV;
+const workerVars = { ...(wranglerConfig.vars ?? {}), ...(selectedEnv ? wranglerConfig.env?.[selectedEnv]?.vars ?? {} : {}) };
 
 const imageOrigin = (() => {
   try {

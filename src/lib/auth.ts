@@ -2,6 +2,7 @@ import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { env } from 'cloudflare:workers';
 import { betterAuth } from 'better-auth';
 import { sql } from 'drizzle-orm';
+import { getConfig } from '../config/config';
 import { getDb, jsonParam, type Db } from '../db/client';
 import * as schema from '../db/schema';
 import { parseAdminEmails } from './admin-emails';
@@ -81,6 +82,15 @@ export type Auth = ReturnType<typeof createAuth>;
 let cachedAuth: Auth | undefined;
 
 export function getAuth(): Auth {
-  cachedAuth ??= createAuth(env.DB, env);
+  if (!cachedAuth) {
+    const config = getConfig(env);
+    cachedAuth = createAuth(env.DB, {
+      SITE_URL: config.siteUrl,
+      BETTER_AUTH_SECRET: config.auth.secret,
+      GOOGLE_CLIENT_ID: config.auth.googleClientId,
+      GOOGLE_CLIENT_SECRET: config.auth.googleClientSecret,
+      ADMIN_EMAILS: [...config.auth.adminEmails].join(','),
+    });
+  }
   return cachedAuth;
 }

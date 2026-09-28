@@ -1,4 +1,6 @@
 import type { MiddlewareHandler } from 'astro';
+import { env } from 'cloudflare:workers';
+import { getConfig, isProduction } from '../../config/config';
 import { isD1QuotaError } from '../errors';
 
 export const securityHeaders: MiddlewareHandler = async (context, next) => {
@@ -17,5 +19,7 @@ export const securityHeaders: MiddlewareHandler = async (context, next) => {
     headers.set('Cache-Control', 'private, no-store');
     headers.set('X-Robots-Tag', 'noindex, nofollow');
   }
+  // Staging and local builds must never be indexed or compete with production URLs.
+  if (!isProduction(getConfig(env))) headers.set('X-Robots-Tag', 'noindex, nofollow');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 };

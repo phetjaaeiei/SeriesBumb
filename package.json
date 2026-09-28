@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "deploy": "npm run build && wrangler deploy --config dist/server/wrangler.json",
+    "deploy": "npm run deploy:prod",
     "preview": "astro preview",
     "check": "astro check",
     "lint": "eslint .",
@@ -18,7 +18,10 @@
     "test:e2e": "playwright test",
     "types": "wrangler types --env-file .dev.vars.example --strict-vars=false",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply seriesbumb --local"
+    "db:migrate:local": "wrangler d1 migrations apply seriesbumb --local",
+    "check:migrations": "node --experimental-strip-types scripts/check-migrations.ts",
+    "deploy:prod": "node --experimental-strip-types scripts/deploy.ts production",
+    "deploy:staging": "node --experimental-strip-types scripts/deploy.ts staging"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.3",

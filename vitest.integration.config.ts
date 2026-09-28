@@ -12,6 +12,7 @@ export default defineConfig({
         compatibilityFlags: ['nodejs_compat'],
         d1Databases: ['DB'],
         bindings: {
+          APP_ENV: 'development',
           SITE_URL: 'http://localhost:4321',
           IMAGE_BASE_URL: 'https://images.example.test',
           FIREBASE_STORAGE_BUCKET: 'seriesbumb-test.firebasestorage.app',

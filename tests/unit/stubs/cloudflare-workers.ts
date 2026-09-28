@@ -1,4 +1,5 @@
 export const env: Record<string, unknown> = {
+  APP_ENV: 'development',
   SITE_URL: 'http://localhost:4321',
   IMAGE_BASE_URL: 'https://images.example.test',
   CF_BEACON_TOKEN: '',

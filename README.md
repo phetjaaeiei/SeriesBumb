@@ -1,6 +1,8 @@
 # SeriesBumb
 
-เว็บสารานุกรมเทปเพลงไทย ใช้ Astro บน Cloudflare Workers พร้อม D1, Firebase Storage สำหรับรูป และระบบเข้าสู่ระบบด้วย Google
+เว็บสารานุกรมเทปเพลงไทย ใช้ Astro บน Cloudflare Workers พร้อม D1, Supabase Storage สำหรับรูปสาธารณะและคลังเสียงส่วนตัว และระบบเข้าสู่ระบบด้วย Google
+
+เว็บ staging: https://seriesbumb-staging.phetjaa.workers.dev (D1 แยก ปิดการอัปโหลด และไม่ให้ search engine เก็บ)
 
 เว็บ production: https://seriesbumb.phetjaa.workers.dev
 
@@ -22,7 +24,7 @@ Supabase Free ต้องคง Free plan และ Spend Cap; โปรเจ�
 ต้องใช้ Node.js 22.12 ขึ้นไป และ npm
 
 1. ติดตั้งแพ็กเกจด้วย `npm install`
-2. คัดลอก `.dev.vars.example` เป็น `.dev.vars` แล้วใส่ค่า Google OAuth และ Firebase service account JSON สำหรับเครื่องที่ใช้พัฒนา (เก็บไฟล์นี้นอก Git)
+2. คัดลอก `.dev.vars.example` เป็น `.dev.vars` แล้วใส่ค่า Google OAuth และ Supabase secret key สำหรับเครื่องที่ใช้พัฒนา (เก็บไฟล์นี้นอก Git) ค่าทุกตัวถูกตรวจด้วย `src/config/env.schema.ts` ถ้าขาดหรือผิดรูปแบบเว็บจะหยุดพร้อมชื่อคีย์ที่ผิด
 3. สร้างชนิดข้อมูล binding ใหม่ด้วย `npm run types`
 4. เตรียม D1 ในเครื่องด้วย `npm run db:migrate:local`
 5. เปิดเว็บด้วย `npm run dev` ที่ `http://localhost:4321`
@@ -35,11 +37,16 @@ Supabase Free ต้องคง Free plan และ Spend Cap; โปรเจ�
 
 ## Deploy
 
+Deploy จาก worktree ที่ commit ครบแล้วเท่านั้น (สคริปต์จะหยุดถ้ามีไฟล์ค้าง) และขึ้น staging ก่อน production เสมอ
+
 1. ลงชื่อเข้า Cloudflare ด้วย `npx wrangler login`
-2. ตั้ง Worker secrets: `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAILS`, `FIREBASE_SERVICE_ACCOUNT_JSON`, `SUPABASE_SECRET_KEY` ผ่าน `npx wrangler secret put ชื่อคีย์`
-3. ตั้ง Google OAuth redirect URI เป็น `https://seriesbumb.phetjaa.workers.dev/api/auth/callback/google`
-4. เมื่อมี migration ใหม่ รัน `npx wrangler d1 migrations apply seriesbumb --remote`
-5. รัน `npm run check`, `npm run lint`, `npm test`, `npm run test:int` แล้ว `npm run deploy`
+2. ตั้ง Worker secrets ครั้งแรก: `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAILS`, `SUPABASE_SECRET_KEY` ผ่าน `npx wrangler secret put ชื่อคีย์` (staging เพิ่ม `--env staging` และไม่ต้องมี `SUPABASE_SECRET_KEY`)
+3. ตั้ง Google OAuth redirect URI เป็น `https://seriesbumb.phetjaa.workers.dev/api/auth/callback/google` และ `https://seriesbumb-staging.phetjaa.workers.dev/api/auth/callback/google`
+4. รัน `npm run check`, `npm run lint`, `npm test`, `npm run test:int`
+5. `npm run deploy:staging` แล้ว `E2E_BASE_URL=https://seriesbumb-staging.phetjaa.workers.dev npm run test:e2e`
+6. `npm run deploy:prod` แล้ว `E2E_BASE_URL=https://seriesbumb.phetjaa.workers.dev npm run test:e2e`
+
+สคริปต์ deploy จะตรวจ migration กับ journal, build ตาม environment, จด D1 Time Travel bookmark, apply migration, deploy แล้วเช็กหน้าแรก ถ้าไม่ผ่านจะพิมพ์คำสั่ง rollback ทั้งโค้ดและข้อมูล และบันทึกผลไว้ใน `.deploys/`
 
 การ deploy ครั้งถัดไปจะเก็บ Worker secrets เดิมไว้ CSP `img-src` อนุญาต origin ของ `IMAGE_BASE_URL` (อ่านจาก environment ตอน build หรือ `vars` ใน `wrangler.jsonc`) ส่วน `connect-src` อนุญาต origin ของ `SUPABASE_URL` (อ่านจาก environment ตอน build หรือ `vars` ใน `wrangler.jsonc`) เพื่อให้หน้าแอดมินส่งไฟล์เพลงตรงเข้า Supabase ได้ หากย้ายโปรเจกต์ Supabase ต้อง build และ deploy ใหม่
 
@@ -49,13 +56,15 @@ Supabase Free ต้องคง Free plan และ Spend Cap; โปรเจ�
 | --- | --- |
 | `npm run dev` | เปิดเว็บในเครื่อง |
 | `npm run build` | สร้าง Worker และ static assets |
-| `npm run deploy` | Build และ deploy ไป Cloudflare Workers |
+| `npm run deploy:staging` | Deploy ไป staging (D1 แยก) |
+| `npm run deploy:prod` | Deploy ไป production (`npm run deploy` ก็เรียกตัวนี้) |
+| `npm run check:migrations` | ตรวจว่าไฟล์ migration ตรงกับ Drizzle journal |
 | `npm run preview` | ดูผล build ในเครื่อง |
 | `npm run check` | ตรวจชนิดข้อมูล Astro และ TypeScript |
 | `npm run lint` | ตรวจ ESLint |
 | `npm test` | รัน unit tests ใน Node.js |
 | `npm run test:int` | รัน integration tests ใน workerd พร้อม D1 และ image store จำลอง |
-| `npm run test:e2e` | รัน Playwright บนเว็บในเครื่อง |
+| `npm run test:e2e` | รัน Playwright smoke tests (ตั้ง `E2E_BASE_URL` เพื่อทดสอบ staging/production) |
 | `npm run db:generate` | สร้าง SQL migration จาก Drizzle schema |
 
 การทดสอบ E2E ต้องติดตั้ง Chromium ของ Playwright ด้วย `npx playwright install chromium` ก่อนใช้ครั้งแรก
@@ -66,7 +75,7 @@ Supabase Free ต้องคง Free plan และ Spend Cap; โปรเจ�
 
 ใช้ D1 Time Travel สำหรับการย้อนข้อมูลภายใน 7 วัน (`npx wrangler d1 time-travel restore seriesbumb --timestamp ...`) และสำรองออกนอกระบบอย่างน้อยสัปดาห์ละครั้ง คำสั่งสำรองด้านล่างอ่านตารางปกติทั้งหมดผ่าน `wrangler d1 execute --remote --json` แล้วสร้าง `manifest.json` กับไฟล์ JSON แยกชุด ไม่รวมตาราง FTS5 ที่สร้างใหม่ได้
 
-ก่อนสำรองหรือกู้คืน ให้หยุดการเขียนข้อมูลจากเว็บไซต์/แอดมินจนเสร็จ และกำหนด D1 `database_id` จริงใน `wrangler.jsonc` สคริปต์สำรองจะหยุดถ้าพบ foreign key ที่เสีย เก็บโฟลเดอร์สำรองไว้นอก Git ในที่ปลอดภัย เพราะมีข้อมูลบัญชีและ OAuth token; สำรองไฟล์รูปใน Firebase Storage แยกต่างหาก
+ก่อนสำรองหรือกู้คืน ให้หยุดการเขียนข้อมูลจากเว็บไซต์/แอดมินจนเสร็จ และกำหนด D1 `database_id` จริงใน `wrangler.jsonc` สคริปต์สำรองจะหยุดถ้าพบ foreign key ที่เสีย เก็บโฟลเดอร์สำรองไว้นอก Git ในที่ปลอดภัย เพราะมีข้อมูลบัญชีและ OAuth token; สำรองไฟล์รูปและเสียงใน Supabase Storage แยกต่างหาก
 
 ```sh
 node --experimental-strip-types scripts/backup.ts --database seriesbumb --out "$HOME/seriesbumb-backups/$(date -u +%F)" --writes-paused
