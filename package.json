@@ -20,6 +20,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply seriesbumb --local",
     "check:migrations": "node --experimental-strip-types scripts/check-migrations.ts",
+    "backup:export": "node --experimental-strip-types scripts/backup-export.ts",
+    "backup:storage": "node --experimental-strip-types scripts/backup-storage.ts",
+    "restore:export": "node --experimental-strip-types scripts/restore-export.ts",
     "deploy:prod": "node --experimental-strip-types scripts/deploy.ts production",
     "deploy:staging": "node --experimental-strip-types scripts/deploy.ts staging"
   },

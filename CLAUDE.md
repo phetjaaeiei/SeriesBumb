@@ -48,6 +48,8 @@ Workers Free 100k requests/day and 10 ms CPU; D1 Free 5M rows read/day, 100k row
 | `npm run test:e2e` | Playwright smoke; set `E2E_BASE_URL` for staging/production |
 | `npm run check:migrations` | Migration files vs Drizzle journal |
 | `npm run deploy:staging` / `npm run deploy:prod` | Bookmark → migrate → deploy → smoke check |
+| `npm run backup:export` / `npm run restore:export` | Data-only D1 export (no sessions/tokens/search tables) and guarded restore into a fresh migrated DB; see `docs/runbooks/backup-restore.md` |
+| `npm run backup:storage` | Incremental, checksummed copy of Supabase buckets to a local folder (owner machine only) |
 
 ## Plans and specs
 
