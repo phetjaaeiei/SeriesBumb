@@ -10,3 +10,10 @@ describe('platform runtime', () => {
     expect(audioEnvironment()).toBe(env);
   });
 });
+
+describe('siteUrlOr with valid config', () => {
+  it('returns the configured origin', async () => {
+    const { siteUrlOr } = await import('../../src/platform/runtime');
+    expect(siteUrlOr('https://fallback.example')).toBe('http://localhost:4321');
+  });
+});

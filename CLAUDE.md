@@ -10,12 +10,12 @@ Thai cassette-tape encyclopedia. All UI copy is Thai. Production: https://series
 - Public images: Supabase Storage bucket `SeriesBumbImages`. Private admin audio: Supabase bucket `SeriesBumb` via signed upload URLs. Firebase Storage is legacy and disabled — never re-enable uploads there (Blaze has no spend cap)
 - Config: every env value goes through `src/config/env.schema.ts` → `config()` from `src/platform/runtime.ts`; add new keys to the schema, never read `env.X` outside `src/platform/`
 
-## Layers (enforced by `eslint.config.mjs`)
+## Layers (enforced by `eslint.config.mjs`, guarded by `tests/unit/lint-boundaries.test.ts`)
 
 | Directory | Holds | May not import |
 | --- | --- | --- |
-| `src/platform/` | `runtime.ts`: the only code that touches `cloudflare:workers` (`db()`, `config()`, `imageStore()`, `background()`…) | — |
-| `src/domain/` | Pure rules and types (Thai text, slugs, cursors, URLs, enums, admin session policy) | anything outside `domain/` except `errors/app-error` |
+| `src/platform/` | `runtime.ts`: the only code that touches `cloudflare:workers` (`db()`, `config()`, `imageStore()`, `background()`…); `siteUrlOr()` for page shells that must render even with invalid config | — |
+| `src/domain/` | Pure rules and types (Thai text, slugs, cursors, URLs, enums, admin session policy) | packages, or anything outside `domain/` except `errors/app-error` |
 | `src/errors/` | `AppError` taxonomy; `toActionError` / `toJsonError` mappers | — |
 | `src/repositories/` | SQL reads (moving here in Phase 3b) | `astro:*`, `cloudflare:*` |
 | `src/services/` | Write use cases and invariants | `astro:*`, `cloudflare:*` |

@@ -7,6 +7,14 @@ import { supabaseImageStore, type SupabaseImageStore } from '../storage/supabase
 
 export const db = (): D1Database => env.DB;
 export const config = (): AppConfig => getConfig(env);
+/** Site origin for page shells. Falls back when config is invalid, so the branded error pages still render. */
+export function siteUrlOr(fallback: string): string {
+  try {
+    return config().siteUrl;
+  } catch {
+    return fallback;
+  }
+}
 /** Public image origin, or '' when images are not configured. */
 export const imageBaseUrl = (): string => config().images.baseUrl ?? '';
 export const imageStore = (): SupabaseImageStore => supabaseImageStore(env);
