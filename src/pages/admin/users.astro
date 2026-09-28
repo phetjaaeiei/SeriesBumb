@@ -3,6 +3,7 @@ import { env } from 'cloudflare:workers';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import { AdminUsersTable, type AdminUserRow } from '../../components/admin/CommunityTables';
 import { parseAdminEmails } from '../../lib/admin-emails';
+import { canManageRoles } from '../../lib/services/admin-community';
 import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
 
 const query = (Astro.url.searchParams.get('q') || '').trim().slice(0, 100);
@@ -13,11 +14,12 @@ const bind = [ ...(query ? [`%${query}%`, `%${query}%`] : []), ...(cursor ? [cur
 const all = (await env.DB.prepare(`SELECT id, name, email, role, commentBanned, createdAt FROM user WHERE 1 = 1 ${where} ${page} ORDER BY createdAt DESC, id DESC LIMIT 51`).bind(...bind).all<Omit<AdminUserRow, 'protectedAdmin' | 'self'>>()).results;
 const bootstrap = parseAdminEmails(env.ADMIN_EMAILS || '');
 const rows: AdminUserRow[] = all.slice(0, 50).map(row => ({ ...row, protectedAdmin: bootstrap.has(row.email.toLowerCase()), self: row.id === Astro.locals.user?.id }));
+const manageRoles = canManageRoles(Astro.locals.user?.email ?? '', env.ADMIN_EMAILS || '');
 const last = rows.at(-1);
 const next = all.length > 50 && last ? encodeCursor('new', last.createdAt, last.id) : null;
 ---
 <AdminLayout title="จัดการผู้ใช้">
   <h1>จัดการผู้ใช้</h1><p class="page-lede">แต่งตั้งแอดมินและจัดการสิทธิ์คอมเมนต์</p>
   <form class="search-page-form section" method="get" action="/admin/users"><label class="sr-only" for="user-search">ค้นหาชื่อหรืออีเมล</label><input id="user-search" class="field" type="search" name="q" value={query} placeholder="ค้นหาชื่อหรืออีเมล" /><button class="button" type="submit">ค้นหา</button></form>
-  <section class="section"><h2>รายชื่อสมาชิก</h2>{rows.length ? <AdminUsersTable initialRows={rows} client:only="react" /> : <p class="empty-state">ไม่พบสมาชิก</p>}{next && <p class="pagination"><a class="button" href={`/admin/users?q=${encodeURIComponent(query)}&cursor=${encodeURIComponent(next)}`}>หน้าถัดไป</a></p>}</section>
+  <section class="section"><h2>รายชื่อสมาชิก</h2>{rows.length ? <AdminUsersTable initialRows={rows} canManageRoles={manageRoles} client:only="react" /> : <p class="empty-state">ไม่พบสมาชิก</p>}{next && <p class="pagination"><a class="button" href={`/admin/users?q=${encodeURIComponent(query)}&cursor=${encodeURIComponent(next)}`}>หน้าถัดไป</a></p>}</section>
 </AdminLayout>

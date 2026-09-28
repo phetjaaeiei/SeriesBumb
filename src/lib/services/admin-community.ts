@@ -1,10 +1,16 @@
 import { parseAdminEmails } from '../admin-emails';
 import { CommentError } from './comments';
 
-export async function setUserRole(db: D1Database, adminId: string, targetId: string, role: 'member' | 'admin', bootstrapEmails: string) {
+/** Only bootstrap owners (ADMIN_EMAILS) may grant or remove admin, so a compromised deputy cannot mint admins. */
+export function canManageRoles(actorEmail: string, bootstrapEmails: string): boolean {
+  return parseAdminEmails(bootstrapEmails).has(actorEmail.trim().toLowerCase());
+}
+
+export async function setUserRole(db: D1Database, actor: { id: string; email: string }, targetId: string, role: 'member' | 'admin', bootstrapEmails: string) {
   const target = await db.prepare('SELECT id, email, role FROM user WHERE id = ?').bind(targetId).first<{ id: string; email: string; role: 'member' | 'admin' }>();
   if (!target) throw new CommentError('ไม่พบผู้ใช้นี้', 'NOT_FOUND');
-  if (role === 'member' && targetId === adminId) throw new CommentError('ถอดสิทธิ์แอดมินของตัวเองไม่ได้');
+  if (role === 'member' && targetId === actor.id) throw new CommentError('ถอดสิทธิ์แอดมินของตัวเองไม่ได้');
+  if (!canManageRoles(actor.email, bootstrapEmails)) throw new CommentError('เฉพาะแอดมินตั้งต้นเท่านั้นที่เปลี่ยนสิทธิ์แอดมินได้', 'FORBIDDEN');
   if (role === 'member' && parseAdminEmails(bootstrapEmails).has(target.email.toLowerCase())) throw new CommentError('ถอดสิทธิ์แอดมินตั้งต้นไม่ได้');
   await db.prepare('UPDATE user SET role = ?, commentBanned = CASE WHEN ? = ? THEN 0 ELSE commentBanned END, updatedAt = ? WHERE id = ?').bind(role, role, 'admin', Date.now(), targetId).run();
   return { id: targetId, role };

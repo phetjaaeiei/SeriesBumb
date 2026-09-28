@@ -1,12 +1,13 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
 import React, { useState } from 'react';
+import { offerReauth } from '../../lib/client/reauth';
 
 export interface AdminUserRow { id: string; name: string; email: string; role: 'member' | 'admin'; commentBanned: number; createdAt: number; protectedAdmin: boolean; self: boolean }
 export interface AdminCommentRow { id: string; body: string; createdAt: number; deletedAt: number | null; canRestore: boolean; authorName: string; authorEmail: string; targetTitle: string | null; targetUrl: string | null }
 const dateFormat = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeZone: 'Asia/Bangkok' });
 
-export function AdminUsersTable({ initialRows }: { initialRows: AdminUserRow[] }) {
+export function AdminUsersTable({ initialRows, canManageRoles = false }: { initialRows: AdminUserRow[]; canManageRoles?: boolean }) {
   const [rows, setRows] = useState(initialRows);
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
@@ -19,7 +20,7 @@ export function AdminUsersTable({ initialRows }: { initialRows: AdminUserRow[] }
       const response = await actions.admin.users.setRole({ id: row.id, role: next });
       if (response.error) throw new Error(response.error.message);
       setRows(previous => previous.map(item => item.id === row.id ? { ...item, role: next, commentBanned: next === 'admin' ? 0 : item.commentBanned } : item));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'เปลี่ยนสิทธิ์ไม่สำเร็จ'); }
+    } catch (cause) { const text = cause instanceof Error ? cause.message : 'เปลี่ยนสิทธิ์ไม่สำเร็จ'; if (!offerReauth(text)) setError(text); }
     finally { setBusyId(''); }
   }
 
@@ -31,11 +32,11 @@ export function AdminUsersTable({ initialRows }: { initialRows: AdminUserRow[] }
       const response = await actions.admin.users.setCommentBan({ id: row.id, banned: next });
       if (response.error) throw new Error(response.error.message);
       setRows(previous => previous.map(item => item.id === row.id ? { ...item, commentBanned: Number(next) } : item));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'เปลี่ยนสถานะไม่สำเร็จ'); }
+    } catch (cause) { const text = cause instanceof Error ? cause.message : 'เปลี่ยนสถานะไม่สำเร็จ'; if (!offerReauth(text)) setError(text); }
     finally { setBusyId(''); }
   }
 
-  return <div className="table-wrap">{error && <p className="error-text" role="alert">{error}</p>}<table className="data-table"><thead><tr><th>ชื่อ</th><th>อีเมล</th><th>สิทธิ์</th><th>คอมเมนต์</th><th>สมัครเมื่อ</th><th>จัดการ</th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.role === 'admin' ? 'แอดมิน' : 'สมาชิก'}</td><td>{row.commentBanned ? 'ถูกระงับ' : 'ปกติ'}</td><td>{dateFormat.format(row.createdAt)}</td><td className="admin-row-actions"><button className="button" type="button" disabled={busyId === row.id || row.self || (row.role === 'admin' && row.protectedAdmin)} onClick={() => void role(row)}>{row.role === 'admin' ? 'ถอดสิทธิ์' : 'ตั้งเป็นแอดมิน'}</button><button className="button" type="button" disabled={busyId === row.id || row.role === 'admin'} onClick={() => void ban(row)}>{row.commentBanned ? 'ปลดแบน' : 'แบนคอมเมนต์'}</button></td></tr>)}</tbody></table></div>;
+  return <div className="table-wrap">{error && <p className="error-text" role="alert">{error}</p>}<table className="data-table"><thead><tr><th>ชื่อ</th><th>อีเมล</th><th>สิทธิ์</th><th>คอมเมนต์</th><th>สมัครเมื่อ</th><th>จัดการ</th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.role === 'admin' ? 'แอดมิน' : 'สมาชิก'}</td><td>{row.commentBanned ? 'ถูกระงับ' : 'ปกติ'}</td><td>{dateFormat.format(row.createdAt)}</td><td className="admin-row-actions"><button className="button" type="button" disabled={!canManageRoles || busyId === row.id || row.self || (row.role === 'admin' && row.protectedAdmin)} title={canManageRoles ? undefined : 'เฉพาะแอดมินตั้งต้นเท่านั้นที่เปลี่ยนสิทธิ์แอดมินได้'} onClick={() => void role(row)}>{row.role === 'admin' ? 'ถอดสิทธิ์' : 'ตั้งเป็นแอดมิน'}</button><button className="button" type="button" disabled={busyId === row.id || row.role === 'admin'} onClick={() => void ban(row)}>{row.commentBanned ? 'ปลดแบน' : 'แบนคอมเมนต์'}</button></td></tr>)}</tbody></table></div>;
 }
 
 export function AdminCommentsTable({ initialRows }: { initialRows: AdminCommentRow[] }) {

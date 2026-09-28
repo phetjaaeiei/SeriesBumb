@@ -332,6 +332,20 @@ export const comment = sqliteTable('comment', {
   index('comment_created_id_idx').on(table.createdAt, table.id),
 ]);
 
+// Admin accountability: one row per admin write. No request bodies, IPs or user agents.
+export const auditLog = sqliteTable('audit_log', {
+  id: text('id').primaryKey(),
+  actorUserId: text('actorUserId').references(() => user.id, { onDelete: 'set null' }),
+  actorEmail: text('actorEmail').notNull(),
+  action: text('action').notNull(),
+  targetId: text('targetId'),
+  status: integer('status').notNull(),
+  createdAt: integer('createdAt').notNull(),
+}, (table) => [
+  index('audit_log_created_idx').on(table.createdAt, table.id),
+  index('audit_log_actor_created_idx').on(table.actorUserId, table.createdAt),
+]);
+
 export const catalogSource = sqliteTable('catalog_source', {
   id: text('id').primaryKey(),
   entityKind: text('entityKind', { enum: ['artist', 'tape', 'song'] }).notNull(),

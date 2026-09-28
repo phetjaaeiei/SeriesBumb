@@ -2,6 +2,7 @@
 import { actions } from 'astro:actions';
 import React, { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import { validAudioSignature } from '../../lib/services/audio-validation';
+import { offerReauth } from '../../lib/client/reauth';
 import './AudioArchive.css';
 
 type Provider = 'supabase' | 'firebase' | 'drive';
@@ -430,7 +431,7 @@ export default function AudioArchive() {
       await request<unknown>(`${endpoint}/${encodeURIComponent(row.id)}`, { method: 'DELETE' });
       setMessage(row.provider === 'drive' ? 'ลบลิงก์ออกจากคลังแล้ว ไฟล์ใน Google Drive ยังคงอยู่' : 'ลบไฟล์เพลงแล้ว');
       await load(currentSearch.current);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'ลบไฟล์ไม่สำเร็จ'); }
+    } catch (cause) { const text = cause instanceof Error ? cause.message : 'ลบไฟล์ไม่สำเร็จ'; if (!offerReauth(text)) setError(text); }
     finally { setDeleting(null); }
   }
 
