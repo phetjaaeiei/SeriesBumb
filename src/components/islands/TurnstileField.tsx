@@ -10,7 +10,7 @@ export function TurnstileField({ siteKey, onToken, resetKey = 0 }: { siteKey: st
     let cleanup: (() => void) | undefined;
     let cancelled = false;
     onToken(null);
-    renderTurnstile(ref.current, siteKey, onToken).then((remove) => { if (cancelled) remove(); else cleanup = remove; }).catch(() => onToken(null));
+    renderTurnstile(ref.current, siteKey, onToken).then((widget) => { if (cancelled) widget.remove(); else cleanup = widget.remove; }).catch(() => onToken(null));
     return () => { cancelled = true; cleanup?.(); };
     // onToken is a stable state setter at every call site, so it is not a dependency.
   }, [siteKey, resetKey]);

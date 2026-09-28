@@ -21,8 +21,10 @@ export function loadTurnstile(): Promise<TurnstileApi> {
   return loading;
 }
 
-/** Renders a widget into `element` and reports tokens (null when expired or failed). */
-export async function renderTurnstile(element: HTMLElement, siteKey: string, onToken: (token: string | null) => void): Promise<() => void> {
+export interface TurnstileWidget { reset(): void; remove(): void }
+
+/** Renders a widget into `element` and reports tokens (null when expired, failed or reset). */
+export async function renderTurnstile(element: HTMLElement, siteKey: string, onToken: (token: string | null) => void): Promise<TurnstileWidget> {
   const api = await loadTurnstile();
   const id = api.render(element, {
     sitekey: siteKey,
@@ -31,5 +33,8 @@ export async function renderTurnstile(element: HTMLElement, siteKey: string, onT
     'expired-callback': () => onToken(null),
     'error-callback': () => onToken(null),
   });
-  return () => api.remove(id);
+  return {
+    reset: () => { onToken(null); api.reset(id); },
+    remove: () => api.remove(id),
+  };
 }
