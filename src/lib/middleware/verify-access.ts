@@ -14,7 +14,7 @@ export const verifyAccess: MiddlewareHandler = async (context, next) => {
   const verified = await verifyAccessJwt(context.request.headers.get('Cf-Access-Jwt-Assertion'), {
     teamDomain: access.teamDomain,
     audience: access.audience,
-    jwks: () => fetchAccessJwks(access.teamDomain),
+    jwks: (options) => fetchAccessJwks(access.teamDomain, options),
   });
   if (verified && verified.email === context.locals.user.email.toLowerCase()) return next();
   return Response.json({ error: 'ต้องผ่าน Cloudflare Access ด้วยบัญชีเดียวกับที่เข้าสู่ระบบ' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });

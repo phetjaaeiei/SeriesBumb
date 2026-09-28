@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, it } from 'vitest';
-import { verifyAccessJwt, type Jwks } from '../../src/lib/access-jwt';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { fetchAccessJwks, resetAccessJwksCache, verifyAccessJwt, type Jwks } from '../../src/lib/access-jwt';
 
 const TEAM = 'https://seriesbumb.cloudflareaccess.com';
 const AUD = 'aud-tag-123';
@@ -52,5 +52,46 @@ describe('verifyAccessJwt', () => {
     expect(await verifyAccessJwt(`${h}.${b64url(JSON.stringify({ ...valid, email: 'attacker@example.com' }))}.${s}`, options())).toBeNull();
     expect(await verifyAccessJwt('not-a-jwt', options())).toBeNull();
     expect(await verifyAccessJwt(null, options())).toBeNull();
+  });
+});
+
+describe('JWKS refresh on key rotation', () => {
+  it('refetches once, bypassing the cache, when the token kid is unknown', async () => {
+    const calls: boolean[] = [];
+    const rotated = { keys: [{ ...jwks.keys[0], kid: 'k2' }] };
+    const token = await sign(valid, 'k2');
+    const result = await verifyAccessJwt(token, {
+      teamDomain: TEAM, audience: AUD, now,
+      jwks: async (options) => { calls.push(Boolean(options?.force)); return options?.force ? rotated : jwks; },
+    });
+    expect(result).toEqual({ email: 'owner@example.com' });
+    expect(calls).toEqual([false, true]);
+  });
+
+  it('still rejects when the refreshed set lacks the kid', async () => {
+    const token = await sign(valid, 'forged');
+    const calls: boolean[] = [];
+    expect(await verifyAccessJwt(token, { teamDomain: TEAM, audience: AUD, now, jwks: async (options) => { calls.push(Boolean(options?.force)); return jwks; } })).toBeNull();
+    expect(calls).toEqual([false, true]);
+  });
+});
+
+describe('fetchAccessJwks', () => {
+  afterEach(() => { vi.unstubAllGlobals(); resetAccessJwksCache(); });
+
+  it('caches for 10 minutes, and a forced refresh refetches at most once per 30 seconds', async () => {
+    const fetchMock = vi.fn(async () => Response.json(jwks));
+    vi.stubGlobal('fetch', fetchMock);
+    await fetchAccessJwks(TEAM, { now: 0 });
+    await fetchAccessJwks(TEAM, { now: 60_000 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await fetchAccessJwks(TEAM, { now: 70_000, force: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await fetchAccessJwks(TEAM, { now: 80_000, force: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await fetchAccessJwks(TEAM, { now: 101_000, force: true });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await fetchAccessJwks(TEAM, { now: 101_000 + 11 * 60_000 });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });
