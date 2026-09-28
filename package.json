@@ -43,17 +43,17 @@
     "@astrojs/check": "^0.9.10",
     "@cloudflare/vitest-plugin": "^1.2.7",
     "@playwright/test": "^1.63.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.6.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "drizzle-kit": "^0.31.11",
-    "eslint": "^9.39.5",
-    "eslint-plugin-astro": "^1.7.0",
+    "eslint": "^10.11.0",
+    "eslint-plugin-astro": "^3.2.1",
     "eslint-plugin-react": "^7.37.5",
     "happy-dom": "^20.14.5",
-    "typescript": "~5.9.3",
+    "typescript": "~7.0.2",
     "typescript-eslint": "^8.61.0",
-    "vitest": "~4.1.11",
+    "vitest": "~5.0.1",
     "wrangler": "^4.125.0"
   }
 }
