@@ -13,6 +13,8 @@ export interface AppConfig {
   images: { baseUrl: string | null; uploadsEnabled: boolean; supabase: SupabaseTarget | null };
   audio: { supabase: SupabaseTarget | null; firebaseEnabled: boolean };
   analytics: { beaconToken: string | null };
+  access: { teamDomain: string; audience: string } | null;
+  turnstile: { siteKey: string; secretKey: string } | null;
 }
 
 /** Lists invalid keys only; values may be secrets and must never reach logs. */
@@ -58,6 +60,8 @@ export function getConfig(env: object): AppConfig {
       firebaseEnabled: e.AUDIO_FIREBASE_ENABLED,
     },
     analytics: { beaconToken: e.CF_BEACON_TOKEN ?? null },
+    access: e.ACCESS_TEAM_DOMAIN && e.ACCESS_AUD ? { teamDomain: new URL(e.ACCESS_TEAM_DOMAIN).origin, audience: e.ACCESS_AUD } : null,
+    turnstile: e.TURNSTILE_SITE_KEY && e.TURNSTILE_SECRET_KEY ? { siteKey: e.TURNSTILE_SITE_KEY, secretKey: e.TURNSTILE_SECRET_KEY } : null,
   };
   cache.set(env, config);
   return config;

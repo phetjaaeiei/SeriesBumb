@@ -28,6 +28,12 @@ export const envSchema = z.object({
   SUPABASE_IMAGE_UPLOADS_ENABLED: flag,
   AUDIO_FIREBASE_ENABLED: flag,
   CF_BEACON_TOKEN: optionalText,
+  // Cloudflare Access in front of /admin (Zero Trust Free). Both values or neither.
+  ACCESS_TEAM_DOMAIN: z.url({ protocol: /^https$/, hostname: /^[a-z0-9-]+\.cloudflareaccess\.com$/ }).optional(),
+  ACCESS_AUD: optionalText,
+  // Turnstile on sign-in and member submissions. Site key is public (vars), secret is a Worker secret.
+  TURNSTILE_SITE_KEY: optionalText,
+  TURNSTILE_SECRET_KEY: optionalText,
 });
 
 export type ParsedEnv = z.output<typeof envSchema>;
