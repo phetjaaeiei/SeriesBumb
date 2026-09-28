@@ -17,6 +17,7 @@
     }
   ],
   "vars": {
+    "APP_ENV": "production",
     "SITE_URL": "https://seriesbumb.phetjaa.workers.dev",
     "FIREBASE_STORAGE_BUCKET": "seriesbumb-32f9e.firebasestorage.app",
     "SUPABASE_URL": "https://lgtdhbeocizxxvptofdb.supabase.co",
