@@ -1,4 +1,4 @@
-export type SourceKind = 'artist' | 'tape';
+export type SourceKind = 'artist' | 'tape' | 'song';
 export interface CatalogSource { id: string; entityKind: SourceKind; entityId: string; title: string; url: string; claim: string; accessedAt: number }
 
 export function validateSourceUrl(raw: string): string {
@@ -13,7 +13,7 @@ export async function listCatalogSources(db: D1Database, entityKind: SourceKind,
 }
 
 export async function addCatalogSource(db: D1Database, adminId: string, input: Omit<CatalogSource, 'id'>): Promise<CatalogSource> {
-  const table = input.entityKind === 'artist' ? 'artist' : 'tape';
+  const table = input.entityKind === 'artist' ? 'artist' : input.entityKind === 'tape' ? 'tape' : 'song';
   const exists = await db.prepare(`SELECT id FROM ${table} WHERE id = ?`).bind(input.entityId).first();
   if (!exists) throw new Error('ไม่พบรายการที่อ้างอิง');
   const url = validateSourceUrl(input.url);

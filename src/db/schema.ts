@@ -334,7 +334,7 @@ export const comment = sqliteTable('comment', {
 
 export const catalogSource = sqliteTable('catalog_source', {
   id: text('id').primaryKey(),
-  entityKind: text('entityKind', { enum: ['artist', 'tape'] }).notNull(),
+  entityKind: text('entityKind', { enum: ['artist', 'tape', 'song'] }).notNull(),
   entityId: text('entityId').notNull(),
   title: text('title').notNull(),
   url: text('url').notNull(),
@@ -403,6 +403,20 @@ export const tapeEdition = sqliteTable('tape_edition', {
 }, (table) => [
   uniqueIndex('tape_edition_unique').on(table.tapeId, table.relatedTapeId),
   index('tape_edition_related_idx').on(table.relatedTapeId),
+]);
+
+export const personCredit = sqliteTable('person_credit', {
+  id: text('id').primaryKey(),
+  personId: text('personId').notNull().references(() => person.id, { onDelete: 'cascade' }),
+  targetKind: text('targetKind', { enum: ['tape', 'song'] }).notNull(),
+  targetId: text('targetId').notNull(),
+  creditedAs: text('creditedAs').notNull(),
+  role: text('role').notNull(),
+  sourceId: text('sourceId').notNull().references(() => catalogSource.id, { onDelete: 'cascade' }),
+  createdAt: integer('createdAt').notNull(),
+}, (table) => [
+  index('person_credit_target_idx').on(table.targetKind, table.targetId),
+  index('person_credit_person_idx').on(table.personId),
 ]);
 
 export const searchDoc = sqliteTable('search_doc', {

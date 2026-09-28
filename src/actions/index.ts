@@ -17,6 +17,7 @@ import { addCatalogSource, deleteCatalogSource } from '../lib/services/catalog-s
 import { ReviewError, moderateCorrection, moderateReview, submitCorrection, submitReview } from '../lib/services/reviews';
 import { createPerson, linkArtistMember } from '../lib/services/people';
 import { addArtistRelation, addTapeEdition, deleteArtistRelation, deleteTapeEdition } from '../lib/services/catalog-relations';
+import { addPersonCredit, deletePersonCredit } from '../lib/services/person-credits';
 
 async function runCatalog<T>(action: () => Promise<T>): Promise<T> {
   try { return await action(); }
@@ -72,6 +73,10 @@ export const server = {
     setTapeOwned: defineMemberAction({ input: z.object({ tapeId: z.uuid(), owned: z.boolean() }), handler: (input, context) => setEngagement(env.DB, context.user.id, 'tapeOwned', input.tapeId, input.owned) }),
   },
   admin: {
+    credits: {
+      add: defineAdminAction({ input: z.object({ personId: z.uuid(), targetKind: z.enum(['tape', 'song']), targetId: z.uuid(), creditedAs: z.string().trim().min(1).max(100), role: z.string().trim().min(1).max(100), sourceId: z.uuid() }), handler: input => runCatalog(() => addPersonCredit(env.DB, input)) }),
+      delete: defineAdminAction({ input: z.object({ id: z.uuid() }), handler: ({ id }) => runCatalog(() => deletePersonCredit(env.DB, id)) }),
+    },
     relations: {
       addArtist: defineAdminAction({ input: z.object({ artistId: z.uuid(), relatedArtistId: z.uuid(), relationType: z.enum(['former_name', 'collaboration', 'related']), sourceId: z.uuid() }), handler: input => runCatalog(() => addArtistRelation(env.DB, input.artistId, input.relatedArtistId, input.relationType, input.sourceId)) }),
       deleteArtist: defineAdminAction({ input: z.object({ id: z.uuid() }), handler: ({ id }) => runCatalog(() => deleteArtistRelation(env.DB, id)) }),
@@ -87,7 +92,7 @@ export const server = {
       moderateCorrection: defineAdminAction({ input: z.object({ id: z.uuid(), status: z.enum(['accepted', 'rejected']) }), handler: (input, context) => runReview(() => moderateCorrection(env.DB, context.user.id, input.id, input.status)) }),
     },
     sources: {
-      add: defineAdminAction({ input: z.object({ entityKind: z.enum(['artist', 'tape']), entityId: z.uuid(), title: z.string().trim().min(1).max(200), url: z.url().max(2000), claim: z.string().trim().min(1).max(500), accessedAt: z.number().int().min(946684800000).max(4102444800000) }), handler: (input, context) => runCatalog(() => addCatalogSource(env.DB, context.user.id, input)) }),
+      add: defineAdminAction({ input: z.object({ entityKind: z.enum(['artist', 'tape', 'song']), entityId: z.uuid(), title: z.string().trim().min(1).max(200), url: z.url().max(2000), claim: z.string().trim().min(1).max(500), accessedAt: z.number().int().min(946684800000).max(4102444800000) }), handler: (input, context) => runCatalog(() => addCatalogSource(env.DB, context.user.id, input)) }),
       delete: defineAdminAction({ input: z.object({ id: z.uuid() }), handler: ({ id }) => runCatalog(() => deleteCatalogSource(env.DB, id)) }),
     },
     health: defineAdminAction({

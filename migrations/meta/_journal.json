@@ -71,6 +71,13 @@
       "when": 1790553434390,
       "tag": "0009_purple_may_parker",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790553677246,
+      "tag": "0010_tidy_arachne",
+      "breakpoints": true
     }
   ]
 }

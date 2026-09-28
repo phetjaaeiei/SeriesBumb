@@ -6,15 +6,15 @@ import { listCatalogSources, type SourceKind } from '../../lib/services/catalog-
 
 const kind = Astro.url.searchParams.get('kind');
 const id = Astro.url.searchParams.get('id') ?? '';
-if ((kind !== 'artist' && kind !== 'tape') || !/^[0-9a-f-]{36}$/iu.test(id)) return Astro.rewrite('/404');
-const table = kind === 'artist' ? 'artist' : 'tape';
+if ((kind !== 'artist' && kind !== 'tape' && kind !== 'song') || !/^[0-9a-f-]{36}$/iu.test(id)) return Astro.rewrite('/404');
+const table = kind === 'artist' ? 'artist' : kind === 'tape' ? 'tape' : 'song';
 const column = kind === 'artist' ? 'name' : 'title';
 const record = await env.DB.prepare(`SELECT ${column} AS title FROM ${table} WHERE id = ?`).bind(id).first<{ title: string }>();
 if (!record) return Astro.rewrite('/404');
 const sources = await listCatalogSources(env.DB, kind as SourceKind, id);
 ---
 <AdminLayout title={`แหล่งอ้างอิง ${record.title}`}>
-  <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><a href={`/admin/${kind === 'artist' ? 'artists' : 'tapes'}/${id}`}>{record.title}</a><span>/</span><span>แหล่งอ้างอิง</span></nav>
+  <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><a href={`/admin/${kind === 'artist' ? 'artists' : kind === 'tape' ? 'tapes' : 'songs'}/${id}`}>{record.title}</a><span>/</span><span>แหล่งอ้างอิง</span></nav>
   <h1>แหล่งอ้างอิง · {record.title}</h1>
   <p class="page-lede">ระบุข้อความที่ตรวจสอบได้จากแต่ละแหล่ง แยกจากบันทึกไฟล์ต้นฉบับส่วนตัว</p>
   <CatalogSources entityKind={kind as SourceKind} entityId={id} initial={sources} client:load />

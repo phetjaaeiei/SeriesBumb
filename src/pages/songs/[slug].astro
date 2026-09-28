@@ -11,11 +11,14 @@ import { presentSongNotes } from '../../lib/song-notes';
 import EngagementButton from '../../components/islands/EngagementButton';
 import Comments from '../../components/islands/Comments';
 import { listComments } from '../../lib/services/comments';
+import { listCatalogSources } from '../../lib/services/catalog-sources';
+import { creditsForTarget } from '../../lib/services/person-credits';
 
 const slug = Astro.params.slug ?? '';
 const admin = Astro.locals.user?.role === 'admin';
 const song = await env.DB.prepare(`SELECT s.*, creator.name AS createdByName, editor.name AS updatedByName FROM song s LEFT JOIN user creator ON creator.id = s.createdBy LEFT JOIN user editor ON editor.id = s.updatedBy WHERE s.slug = ? ${admin ? '' : 'AND (s.isPublic = 1 OR s.publishedTapeCount > 0)'}`).bind(slug).first<{ id: string; title: string; titleAlt: string | null; lyricist: string | null; composer: string | null; arranger: string | null; lyrics: string | null; notes: string | null; likeCount: number; commentCount: number; publishedTapeCount: number; isPublic: number; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
 if (!song) return Astro.rewrite('/404');
+const [catalogSources, credits] = await Promise.all([listCatalogSources(env.DB, 'song', song.id), creditsForTarget(env.DB, 'song', song.id)]);
 const publicSong = song.isPublic === 1 || song.publishedTapeCount > 0;
 const [artists, tapes] = await Promise.all([
   env.DB.prepare('SELECT a.name, a.slug FROM song_artist sa JOIN artist a ON a.id = sa.artistId WHERE sa.songId = ? ORDER BY sa.position').bind(song.id).all<{ name: string; slug: string }>(),
@@ -35,10 +38,13 @@ const firstComments = publicSong ? await listComments(env.DB, { songId: song.id 
 <BaseLayout title={song.title} description={`ข้อมูลเพลง ${song.title} โดย ${singerNames} | ซีรี่ย์บั้ม คลังเทปเพลงไทย`} canonicalPath={`/songs/${slug}`} ogImage={ogImage} noindex={!publicSong}>
   {!publicSong && <p class="draft-banner">เพลงฉบับร่าง · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
   <h1>{song.title}</h1>{song.titleAlt && <p class="subheading">{song.titleAlt}</p>}
+  {admin && <p><a href={`/admin/sources?kind=song&id=${song.id}`}>จัดการแหล่งอ้างอิง</a> · <a href={`/admin/credits?kind=song&id=${song.id}`}>จัดการเครดิต</a></p>}
   <InfoBox items={[{ label: 'ผู้ร้อง', value: singerNames }, { label: 'ความยาว', value: songNotes.duration }, { label: 'คำร้อง', value: song.lyricist }, { label: 'ทำนอง', value: song.composer }, { label: 'เรียบเรียง', value: song.arranger }]} />
   {publicSong && <p class="engagement-counts"><EngagementButton kind="songLike" targetId={song.id} initialValue={liked} initialCount={song.likeCount} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /></p>}
   {songNotes.publicNotes.length > 0 && <section class="section song-note" aria-labelledby="song-note-title"><h2 id="song-note-title">หมายเหตุข้อมูล</h2>{songNotes.publicNotes.map(note => <p>{note}</p>)}</section>}
   {admin && songNotes.sourceNotes && <details class="source-notes section"><summary>ข้อมูลต้นทางสำหรับแอดมิน</summary><p class="long-text">{songNotes.sourceNotes}</p></details>}
+  {credits.length > 0 && <section class="section"><h2>เครดิตบุคคล</h2><ul class="plain-list">{credits.map(row => <li><a href={`/people/${encodeURIComponent(row.personSlug)}`}>{row.creditedAs}</a> · {row.role} · <a href={row.sourceUrl} target="_blank" rel="noopener noreferrer">{row.sourceTitle} ↗</a></li>)}</ul></section>}
+  {catalogSources.length > 0 && <section class="section"><h2>แหล่งอ้างอิง</h2><ul class="plain-list">{catalogSources.map(row => <li><a href={row.url} target="_blank" rel="noopener noreferrer">{row.title} ↗</a><p class="soft">{row.claim}</p></li>)}</ul></section>}
   <Tabs tabs={tabs}>
     <section id="tapes" class="tab-panel" data-tab-panel><h2>อยู่ในเทป</h2>
       {tapes.results.length ? <table class="data-table"><thead><tr><th scope="col">เทป</th><th scope="col">ปี</th><th scope="col">ตำแหน่ง</th></tr></thead><tbody>{tapes.results.map(row => <tr><td><a href={`/tapes/${encodeURIComponent(row.slug)}#songs`}>{row.title}</a></td><td class="mono">{formatYear(row.year)}</td><td class="mono">หน้า {row.side} #{row.position}</td></tr>)}</tbody></table> : <p class="empty-state">ข้อมูลเทปของเพลงนี้ยังอยู่ระหว่างตรวจสอบ</p>}
