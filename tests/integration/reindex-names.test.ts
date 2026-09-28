@@ -1,8 +1,8 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { createArtist, createLabel, createSong, createTapeDraft, saveArtist, saveLabel, saveTape } from '../../src/lib/services/catalog';
-import { searchPublic } from '../../src/lib/search';
-import { enqueueFullReindex } from '../../src/lib/services/search-admin';
+import { createArtist, createLabel, createSong, createTapeDraft, saveArtist, saveLabel, saveTape } from '../../src/services/catalog';
+import { searchPublic } from '../../src/domain/search';
+import { enqueueFullReindex } from '../../src/services/search-admin';
 
 describe('dependent search indexing', () => {
   it('finds a published tape and song by renamed artist, and a tape by renamed label', async () => {

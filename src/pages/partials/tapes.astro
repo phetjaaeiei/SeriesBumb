@@ -1,10 +1,10 @@
 ---
 import { env } from 'cloudflare:workers';
 import TapeList from '../../components/ui/TapeList.astro';
-import { RELEASE_TYPES, type ReleaseType } from '../../db/enums';
-import { getTapePage } from '../../lib/queries/tapes';
-import type { CatalogSort } from '../../lib/queries/cursor';
-import { CATALOG_LETTERS } from '../../lib/thai';
+import { RELEASE_TYPES, type ReleaseType } from '../../domain/enums';
+import { getTapePage } from '../../repositories/tapes.repo';
+import type { CatalogSort } from '../../domain/cursor';
+import { CATALOG_LETTERS } from '../../domain/thai';
 
 export const partial = true;
 Astro.response.headers.set('X-Robots-Tag', 'noindex');

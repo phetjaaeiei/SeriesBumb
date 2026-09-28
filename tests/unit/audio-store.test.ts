@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SupabaseAudioStore } from '../../src/lib/services/audio-store';
-import { firebaseImageStore, FirebaseImageStore } from '../../src/lib/services/firebase-image-store';
-import { audioFormat, canonicalDriveUrl, validAudioSignature, validatedAudioStream } from '../../src/lib/services/audio-validation';
+import { SupabaseAudioStore } from '../../src/storage/audio-store';
+import { firebaseImageStore, FirebaseImageStore } from '../../src/storage/firebase-image-store';
+import { audioFormat, canonicalDriveUrl, validAudioSignature, validatedAudioStream } from '../../src/services/audio-validation';
 
 const mp3 = new Uint8Array([73, 68, 51, 4, 0, 0, 0, 0, 0, 0, 1, 2]);
 

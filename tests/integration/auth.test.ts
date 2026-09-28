@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { getDb } from '../../src/db/client';
-import { bumpUserCount, clearProviderTokens, createAuth, promoteAdmins } from '../../src/lib/auth';
+import { bumpUserCount, clearProviderTokens, createAuth, promoteAdmins } from '../../src/auth/auth';
 
 const db = getDb(env.DB);
 const now = Date.now();

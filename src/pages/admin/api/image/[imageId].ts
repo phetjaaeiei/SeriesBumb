@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import type { APIRoute } from 'astro';
-import { supabaseImageStore } from '../../../../lib/services/supabase-image-store';
+import { supabaseImageStore } from '../../../../storage/supabase-image-store';
 
 export const GET: APIRoute = async ({ params, locals }) => {
   if (locals.user?.role !== 'admin') return new Response(null, { status: 403 });

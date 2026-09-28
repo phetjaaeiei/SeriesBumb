@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { createArtist, createTapeDraft, saveTape } from '../../src/lib/services/catalog';
-import { uploadImage } from '../../src/lib/services/images';
+import { createArtist, createTapeDraft, saveTape } from '../../src/services/catalog';
+import { uploadImage } from '../../src/services/images';
 import { MemoryImageStore } from './helpers/image-store';
 
 const webpBytes = new TextEncoder().encode('RIFF1234WEBPVP8 ');

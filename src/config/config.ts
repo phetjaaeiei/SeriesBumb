@@ -1,4 +1,4 @@
-import { parseAdminEmails } from '../lib/admin-emails';
+import { parseAdminEmails } from '../domain/admin-emails';
 import { envSchema, type ParsedEnv } from './env.schema';
 
 export type AppEnv = ParsedEnv['APP_ENV'];

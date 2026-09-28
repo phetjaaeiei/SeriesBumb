@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { getTapeReadiness } from '../../src/lib/queries/tape-readiness';
+import { getTapeReadiness } from '../../src/repositories/tape-readiness.repo';
 
 describe('admin tape readiness', () => {
   it('shows missing structure without treating uncertain source notes as verified', async () => {

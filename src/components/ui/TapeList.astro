@@ -1,8 +1,8 @@
 ---
 import { env } from 'cloudflare:workers';
-import type { TapeListItem } from '../../lib/queries/tapes';
-import { imageUrl } from '../../lib/urls';
-import { formatYear, releaseTypeLabel } from '../../lib/format';
+import type { TapeListItem } from '../../repositories/tapes.repo';
+import { imageUrl } from '../../domain/urls';
+import { formatYear, releaseTypeLabel } from '../../domain/format';
 import Placeholder from './Placeholder.astro';
 interface Props { items: TapeListItem[]; view?: 'table' | 'grid'; showLabel?: boolean }
 const { items, view = 'table', showLabel = true } = Astro.props;

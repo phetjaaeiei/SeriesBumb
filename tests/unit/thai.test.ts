@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeThai, stripThaiMarks, thaiSortKey } from '../../src/lib/thai';
+import { normalizeThai, stripThaiMarks, thaiSortKey } from '../../src/domain/thai';
 
 describe('normalizeThai', () => {
   it('normalizes Unicode, zero-width characters, sara am, case and Thai digits', () => {

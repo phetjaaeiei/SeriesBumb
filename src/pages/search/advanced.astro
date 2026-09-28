@@ -1,8 +1,8 @@
 ---
 import { env } from 'cloudflare:workers';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
-import { advancedSearch, parseAdvancedSearch } from '../../lib/queries/advanced-search';
-import { RELEASE_TYPES } from '../../db/enums';
+import { advancedSearch, parseAdvancedSearch } from '../../repositories/advanced-search.repo';
+import { RELEASE_TYPES } from '../../domain/enums';
 
 const params = Astro.url.searchParams;
 const filters = parseAdvancedSearch(params);

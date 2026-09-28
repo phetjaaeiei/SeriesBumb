@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { adminActionNameFrom, auditApiActionFor, auditTargetFromInput, auditTargetFromPath, withAudit } from '../../src/lib/services/audit';
+import { adminActionNameFrom, auditApiActionFor, auditTargetFromInput, auditTargetFromPath, withAudit } from '../../src/services/audit';
 
 describe('adminActionNameFrom', () => {
   it.each([

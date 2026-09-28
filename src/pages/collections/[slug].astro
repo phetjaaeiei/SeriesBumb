@@ -4,7 +4,7 @@ import BaseLayout from '../../components/layout/BaseLayout.astro';
 import ExpandableText from '../../components/ui/ExpandableText.astro';
 import CreditLine from '../../components/layout/CreditLine.astro';
 import Placeholder from '../../components/ui/Placeholder.astro';
-import { imageUrl } from '../../lib/urls';
+import { imageUrl } from '../../domain/urls';
 const slug = Astro.params.slug ?? '';
 const admin = Astro.locals.user?.role === 'admin';
 const collection = await env.DB.prepare(`SELECT c.*, creator.name AS createdByName, editor.name AS updatedByName FROM collection c LEFT JOIN user creator ON creator.id = c.createdBy LEFT JOIN user editor ON editor.id = c.updatedBy WHERE c.slug = ? ${admin ? '' : "AND c.status = 'published'"}`).bind(slug).first<{ id: string; title: string; description: string; coverKey: string | null; status: 'draft' | 'published'; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();

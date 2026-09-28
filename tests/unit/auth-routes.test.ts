@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAllowedAuthPath } from '../../src/lib/auth-routes';
+import { isAllowedAuthPath } from '../../src/auth/auth-routes';
 
 describe('isAllowedAuthPath', () => {
   it.each([

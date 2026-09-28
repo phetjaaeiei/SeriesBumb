@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSearchQuery, normalizeSearchField, searchDocument } from '../../src/lib/search';
+import { buildSearchQuery, normalizeSearchField, searchDocument } from '../../src/domain/search';
 
 describe('public search parser', () => {
   it('quotes each useful word and removes FTS operators and Thai tone differences', () => {

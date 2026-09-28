@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FirebaseImageStore } from '../../src/lib/services/firebase-image-store';
+import { FirebaseImageStore } from '../../src/storage/firebase-image-store';
 
 function fromBase64Url(value: string): Uint8Array {
   const base64 = value.replace(/-/gu, '+').replace(/_/gu, '/');

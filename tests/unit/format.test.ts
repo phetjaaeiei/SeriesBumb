@@ -10,7 +10,7 @@ import {
   releaseTypeLabel,
   toCeYear,
   yearSortOf,
-} from '../../src/lib/format';
+} from '../../src/domain/format';
 
 describe('year and date formatting', () => {
   it('converts Buddhist years for storage and formats a stored CE year', () => {

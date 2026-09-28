@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalUrl, imageUrl, safeInternalPath, safeNextPath, thumbKeyFromFull } from '../../src/lib/urls';
+import { canonicalUrl, imageUrl, safeInternalPath, safeNextPath, thumbKeyFromFull } from '../../src/domain/urls';
 
 const SITE = 'https://seriesbumb.example';
 

@@ -1,7 +1,7 @@
 ---
 import { env } from 'cloudflare:workers';
 import BaseLayout from '../components/layout/BaseLayout.astro';
-import { decodeCursor, encodeCursor } from '../lib/queries/cursor';
+import { decodeCursor, encodeCursor } from '../domain/cursor';
 const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
 const rows = (await env.DB.prepare(`SELECT r.id, r.body, r.rating, r.createdAt, t.slug, t.title, u.name AS authorName FROM review r JOIN tape t ON t.id = r.tapeId JOIN user u ON u.id = r.userId WHERE r.status = 'published' AND t.status = 'published' ${cursor ? 'AND (r.createdAt, r.id) < (?, ?)' : ''} ORDER BY r.createdAt DESC, r.id DESC LIMIT 21`).bind(...(cursor ? [cursor.key, cursor.id] : [])).all<{ id: string; body: string; rating: number; createdAt: number; slug: string; title: string; authorName: string }>()).results;
 const items = rows.slice(0, 20);

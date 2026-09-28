@@ -1,8 +1,8 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { canManageRoles, moderateComment, setCommentBan, setUserRole } from '../../src/lib/services/admin-community';
-import { createTapeDraft, saveTape } from '../../src/lib/services/catalog';
-import { createComment, deleteOwnComment } from '../../src/lib/services/comments';
+import { canManageRoles, moderateComment, setCommentBan, setUserRole } from '../../src/services/admin-community';
+import { createTapeDraft, saveTape } from '../../src/services/catalog';
+import { createComment, deleteOwnComment } from '../../src/services/comments';
 
 describe('admin community controls', () => {
   it('protects bootstrap and self roles, bans members, and moderates comments', async () => {

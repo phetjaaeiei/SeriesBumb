@@ -6,7 +6,7 @@ import {
   SLUG_RE,
   slugCandidates,
   slugify,
-} from '../../src/lib/slug';
+} from '../../src/domain/slug';
 
 describe('slugify', () => {
   it('keeps Thai tone marks and converts mixed Thai and Latin text to a slug', () => {

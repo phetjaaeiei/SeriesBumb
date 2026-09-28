@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sniffImage } from '../../src/lib/services/images';
+import { sniffImage } from '../../src/services/images';
 
 describe('image magic bytes', () => {
   it('accepts JPEG and WebP signatures', () => {

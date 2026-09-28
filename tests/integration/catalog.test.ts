@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { getTapeBySlug, getTapePage } from '../../src/lib/queries/tapes';
-import { thaiSortKey } from '../../src/lib/thai';
+import { getTapeBySlug, getTapePage } from '../../src/repositories/tapes.repo';
+import { thaiSortKey } from '../../src/domain/thai';
 
 const db = env.DB;
 const now = Date.now();

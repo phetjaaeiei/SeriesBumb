@@ -2,7 +2,7 @@
 import { env } from 'cloudflare:workers';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import PersonCredits from '../../components/admin/PersonCredits';
-import { creditsForTarget } from '../../lib/services/person-credits';
+import { creditsForTarget } from '../../services/person-credits';
 const kind = Astro.url.searchParams.get('kind');
 const id = Astro.url.searchParams.get('id') ?? '';
 if ((kind !== 'tape' && kind !== 'song') || !/^[0-9a-f-]{36}$/iu.test(id)) return Astro.rewrite('/404');

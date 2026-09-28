@@ -1,11 +1,11 @@
 ---
 import { env } from 'cloudflare:workers';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
-import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
-import { isProvince } from '../../lib/provinces';
-import { artistStatusLabel, artistTypeLabel } from '../../lib/format';
-import { CATALOG_LETTERS } from '../../lib/thai';
-import type { ArtistStatus, ArtistType } from '../../db/enums';
+import { decodeCursor, encodeCursor } from '../../domain/cursor';
+import { isProvince } from '../../domain/provinces';
+import { artistStatusLabel, artistTypeLabel } from '../../domain/format';
+import { CATALOG_LETTERS } from '../../domain/thai';
+import type { ArtistStatus, ArtistType } from '../../domain/enums';
 
 const params = Astro.url.searchParams;
 const rawProvince = params.get('province');

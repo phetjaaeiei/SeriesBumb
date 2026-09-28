@@ -1,6 +1,6 @@
 ---
-import { RELEASE_TYPES } from '../../db/enums';
-import { releaseTypeLabel } from '../../lib/format';
+import { RELEASE_TYPES } from '../../domain/enums';
+import { releaseTypeLabel } from '../../domain/format';
 interface Props { action?: string; params: URLSearchParams; genres?: { slug: string; name: string }[]; showDecade?: boolean; showGenre?: boolean; showType?: boolean; sorts?: ('new' | 'year' | 'title')[] }
 const { action = Astro.url.pathname, params, genres = [], showDecade = true, showGenre = true, showType = true, sorts = ['new', 'year', 'title'] } = Astro.props;
 const selected = (key: string) => params.get(key) ?? '';

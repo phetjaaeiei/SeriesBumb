@@ -2,7 +2,7 @@
 import { env } from 'cloudflare:workers';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import { AdminCommentsTable, type AdminCommentRow } from '../../components/admin/CommunityTables';
-import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
+import { decodeCursor, encodeCursor } from '../../domain/cursor';
 
 const kind = Astro.url.searchParams.get('kind') === 'tape' ? 'tape' : Astro.url.searchParams.get('kind') === 'song' ? 'song' : 'all';
 const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));

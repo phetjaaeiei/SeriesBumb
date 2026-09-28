@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasSessionCookie, securityHeaderSet } from '../../src/lib/http-headers';
+import { hasSessionCookie, securityHeaderSet } from '../../src/http/headers';
 
 describe('securityHeaderSet', () => {
   it('sets the baseline headers on public pages', () => {

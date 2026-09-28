@@ -1,8 +1,8 @@
 import { env } from 'cloudflare:workers';
 import type { APIContext } from 'astro';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AUDIO_LIMITS, audioUsage, deleteAudio, downloadAudio, finalizeAudio, listAudio, reserveAudio, reserveDownload, signAudio, uploadAudio, type AudioEnvironment } from '../../src/lib/services/audio-archive';
-import { SupabaseAudioStore, type AudioStore, type DirectAudioStore } from '../../src/lib/services/audio-store';
+import { AUDIO_LIMITS, audioUsage, deleteAudio, downloadAudio, finalizeAudio, listAudio, reserveAudio, reserveDownload, signAudio, uploadAudio, type AudioEnvironment } from '../../src/services/audio-archive';
+import { SupabaseAudioStore, type AudioStore, type DirectAudioStore } from '../../src/storage/audio-store';
 import { GET as listRoute, POST as reserveRoute } from '../../src/pages/admin/api/audio/index';
 import { GET as downloadRoute, DELETE as deleteRoute } from '../../src/pages/admin/api/audio/[id]/index';
 import { PUT as uploadRoute } from '../../src/pages/admin/api/audio/[id]/upload';

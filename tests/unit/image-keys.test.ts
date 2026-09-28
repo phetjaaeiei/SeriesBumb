@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertEntityImageKey } from '../../src/lib/services/image-keys';
+import { assertEntityImageKey } from '../../src/services/image-keys';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const uuid = '22222222-2222-4222-8222-222222222222';

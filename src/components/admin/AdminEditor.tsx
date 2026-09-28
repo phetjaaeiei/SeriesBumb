@@ -3,12 +3,12 @@ import { actions } from 'astro:actions';
 import React, { useEffect, useRef, useState } from 'react';
 import { Reorder, useDragControls, useReducedMotion } from 'motion/react';
 import ImageUpload from './ImageUpload';
-import { imageUrl } from '../../lib/urls';
-import { PROVINCES, PROVINCE_NAMES, REGIONS } from '../../lib/provinces';
-import { createOgImage } from '../../lib/client/og-image';
-import { formatDuration, parseDuration } from '../../lib/format';
-import { TRACK_SIDES, appendTrack, changeTrackSide, moveTrack, numberTracks, reorderSide, type TrackSide } from '../../lib/client/track-order';
-import { offerReauth } from '../../lib/client/reauth';
+import { imageUrl } from '../../domain/urls';
+import { PROVINCES, PROVINCE_NAMES, REGIONS } from '../../domain/provinces';
+import { createOgImage } from '../../client/og-image';
+import { formatDuration, parseDuration } from '../../domain/format';
+import { TRACK_SIDES, appendTrack, changeTrackSide, moveTrack, numberTracks, reorderSide, type TrackSide } from '../../client/track-order';
+import { offerReauth } from '../../client/reauth';
 
 type Kind = 'tapes' | 'songs' | 'artists' | 'labels' | 'genres' | 'collections';
 type LookupKind = 'artists' | 'labels' | 'genres' | 'songs' | 'tapes';

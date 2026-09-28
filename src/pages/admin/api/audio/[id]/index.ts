@@ -1,8 +1,8 @@
 import { env } from 'cloudflare:workers';
 import type { APIRoute } from 'astro';
-import { deleteAudio, downloadAudio } from '../../../../../lib/services/audio-archive';
-import { REAUTH_MESSAGE, isFreshSession } from '../../../../../lib/admin-session';
-import { adminAudioRoute, audioJson } from '../../../../../lib/services/audio-http';
+import { deleteAudio, downloadAudio } from '../../../../../services/audio-archive';
+import { REAUTH_MESSAGE, isFreshSession } from '../../../../../domain/admin-session';
+import { adminAudioRoute, audioJson } from '../../../../../http/audio-http';
 
 export const GET: APIRoute = context => adminAudioRoute(context, env.SITE_URL, false, async () => {
   return downloadAudio(env, context.params.id ?? '');

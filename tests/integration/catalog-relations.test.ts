@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { addArtistRelation, addTapeEdition, publicArtistRelations, publicTapeEditions } from '../../src/lib/services/catalog-relations';
-import { addCatalogSource } from '../../src/lib/services/catalog-sources';
+import { addArtistRelation, addTapeEdition, publicArtistRelations, publicTapeEditions } from '../../src/services/catalog-relations';
+import { addCatalogSource } from '../../src/services/catalog-sources';
 
 describe('sourced catalog relations', () => {
   it('hides a draft edition and an artist without public catalog content', async () => {

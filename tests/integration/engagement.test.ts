@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { createSong, createTapeDraft, saveTape } from '../../src/lib/services/catalog';
-import { setEngagement } from '../../src/lib/services/engagement';
+import { createSong, createTapeDraft, saveTape } from '../../src/services/catalog';
+import { setEngagement } from '../../src/services/engagement';
 
 describe('engagement', () => {
   it('is idempotent and only accepts public records', async () => {

@@ -2,7 +2,7 @@
 import { env } from 'cloudflare:workers';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
 import Placeholder from '../../components/ui/Placeholder.astro';
-import { imageUrl } from '../../lib/urls';
+import { imageUrl } from '../../domain/urls';
 const collections = (await env.DB.prepare(`SELECT c.id, c.slug, c.title, c.description,
   COALESCE(c.coverKey, (SELECT firstTape.coverThumbKey FROM collection_item firstItem
     JOIN tape firstTape ON firstTape.id = firstItem.tapeId AND firstTape.status = 'published'

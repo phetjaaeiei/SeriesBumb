@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { canComment, isAdmin, parseAdminEmails, requireAdmin, requireUser, requireFreshSession } from '../../src/lib/permissions';
-import type { SessionUser } from '../../src/lib/types';
+import { canComment, isAdmin, parseAdminEmails, requireAdmin, requireUser, requireFreshSession } from '../../src/auth/permissions';
+import type { SessionUser } from '../../src/domain/types';
 
 const member: SessionUser = {
   id: 'member-1', name: 'สมาชิก', email: 'member@example.com', image: null,

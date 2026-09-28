@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import type { APIRoute } from 'astro';
-import { listAudio, reserveAudio } from '../../../../lib/services/audio-archive';
-import { adminAudioRoute, audioJson, readAudioJson } from '../../../../lib/services/audio-http';
+import { listAudio, reserveAudio } from '../../../../services/audio-archive';
+import { adminAudioRoute, audioJson, readAudioJson } from '../../../../http/audio-http';
 
 export const GET: APIRoute = context => adminAudioRoute(context, env.SITE_URL, false, async () => {
   const url = new URL(context.request.url);

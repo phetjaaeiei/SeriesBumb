@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { fetchAccessJwks, resetAccessJwksCache, verifyAccessJwt, type Jwks } from '../../src/lib/access-jwt';
+import { fetchAccessJwks, resetAccessJwksCache, verifyAccessJwt, type Jwks } from '../../src/auth/access-jwt';
 
 const TEAM = 'https://seriesbumb.cloudflareaccess.com';
 const AUD = 'aud-tag-123';

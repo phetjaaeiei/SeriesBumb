@@ -1,10 +1,10 @@
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
-import { getAuth } from '../../../lib/auth';
-import { isAllowedAuthPath } from '../../../lib/auth-routes';
+import { getAuth } from '../../../auth/auth';
+import { isAllowedAuthPath } from '../../../auth/auth-routes';
 import { getConfig, isProduction } from '../../../config/config';
-import { RATE_LIMITED_MESSAGE, rateLimiter } from '../../../lib/rate-limit';
-import { TURNSTILE_FAILED_MESSAGE, verifyTurnstile } from '../../../lib/turnstile';
+import { RATE_LIMITED_MESSAGE, rateLimiter } from '../../../http/rate-limit';
+import { TURNSTILE_FAILED_MESSAGE, verifyTurnstile } from '../../../http/turnstile';
 
 export const prerender = false;
 

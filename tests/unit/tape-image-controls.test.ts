@@ -12,7 +12,7 @@ const actionMocks = vi.hoisted(() => ({
 vi.mock('astro:actions', () => ({
   actions: { admin: { tapes: { save: actionMocks.saveTape }, images: { upload: actionMocks.uploadImage } } },
 }));
-vi.mock('../../src/lib/client/og-image', () => ({
+vi.mock('../../src/client/og-image', () => ({
   createOgImage: vi.fn(async () => new File(['og'], 'og.jpg', { type: 'image/jpeg' })),
 }));
 

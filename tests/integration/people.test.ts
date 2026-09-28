@@ -1,8 +1,8 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { createArtist, saveArtist } from '../../src/lib/services/catalog';
-import { addCatalogSource } from '../../src/lib/services/catalog-sources';
-import { createPerson, linkArtistMember } from '../../src/lib/services/people';
+import { createArtist, saveArtist } from '../../src/services/catalog';
+import { addCatalogSource } from '../../src/services/catalog-sources';
+import { createPerson, linkArtistMember } from '../../src/services/people';
 
 describe('verified person identity', () => {
   it('requires a source from the same artist and preserves links across profile edits', async () => {

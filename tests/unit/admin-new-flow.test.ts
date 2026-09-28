@@ -14,7 +14,7 @@ vi.mock('astro:actions', () => ({
     images: { upload: calls.uploadImage },
   } },
 }));
-vi.mock('../../src/lib/client/image-resize', () => ({
+vi.mock('../../src/client/image-resize', () => ({
   resizeImage: vi.fn(async (file: File) => ({ file, width: 100, height: 100 })),
 }));
 

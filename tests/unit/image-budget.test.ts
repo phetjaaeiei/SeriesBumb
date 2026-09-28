@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertImageBudget } from '../../src/lib/services/images';
+import { assertImageBudget } from '../../src/services/images';
 
 describe('image storage budget', () => {
   it('accepts the 50 MB ceiling and rejects the first byte over it', () => {

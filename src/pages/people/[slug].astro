@@ -1,7 +1,7 @@
 ---
 import { env } from 'cloudflare:workers';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
-import { publicCreditsForPerson } from '../../lib/services/person-credits';
+import { publicCreditsForPerson } from '../../services/person-credits';
 const slug = Astro.params.slug ?? '';
 const person = await env.DB.prepare('SELECT id, name, bio FROM person WHERE slug = ?').bind(slug).first<{ id: string; name: string; bio: string }>();
 if (!person) return Astro.rewrite('/404');

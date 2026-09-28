@@ -2,7 +2,7 @@
 import { env } from 'cloudflare:workers';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import CatalogSources from '../../components/admin/CatalogSources';
-import { listCatalogSources, type SourceKind } from '../../lib/services/catalog-sources';
+import { listCatalogSources, type SourceKind } from '../../services/catalog-sources';
 
 const kind = Astro.url.searchParams.get('kind');
 const id = Astro.url.searchParams.get('id') ?? '';

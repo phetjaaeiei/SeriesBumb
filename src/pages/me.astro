@@ -3,9 +3,9 @@ import { env } from 'cloudflare:workers';
 import BaseLayout from '../components/layout/BaseLayout.astro';
 import Tabs from '../components/ui/Tabs.astro';
 import Placeholder from '../components/ui/Placeholder.astro';
-import { decodeCursor, encodeCursor } from '../lib/queries/cursor';
-import { formatYear } from '../lib/format';
-import { imageUrl } from '../lib/urls';
+import { decodeCursor, encodeCursor } from '../domain/cursor';
+import { formatYear } from '../domain/format';
+import { imageUrl } from '../domain/urls';
 
 const user = Astro.locals.user;
 if (!user) return Astro.redirect('/login?next=%2Fme', 302);

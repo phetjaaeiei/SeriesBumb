@@ -1,8 +1,8 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
 import React, { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react';
-import { validAudioSignature } from '../../lib/services/audio-validation';
-import { offerReauth } from '../../lib/client/reauth';
+import { validAudioSignature } from '../../services/audio-validation';
+import { offerReauth } from '../../client/reauth';
 import './AudioArchive.css';
 
 type Provider = 'supabase' | 'firebase' | 'drive';

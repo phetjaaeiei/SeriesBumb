@@ -2,9 +2,9 @@
 import { env } from 'cloudflare:workers';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import { AdminUsersTable, type AdminUserRow } from '../../components/admin/CommunityTables';
-import { parseAdminEmails } from '../../lib/admin-emails';
-import { canManageRoles } from '../../lib/services/admin-community';
-import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
+import { parseAdminEmails } from '../../domain/admin-emails';
+import { canManageRoles } from '../../services/admin-community';
+import { decodeCursor, encodeCursor } from '../../domain/cursor';
 
 const query = (Astro.url.searchParams.get('q') || '').trim().slice(0, 100);
 const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));

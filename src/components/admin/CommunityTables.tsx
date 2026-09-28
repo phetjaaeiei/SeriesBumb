@@ -1,7 +1,7 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
 import React, { useState } from 'react';
-import { offerReauth } from '../../lib/client/reauth';
+import { offerReauth } from '../../client/reauth';
 
 export interface AdminUserRow { id: string; name: string; email: string; role: 'member' | 'admin'; commentBanned: number; createdAt: number; protectedAdmin: boolean; self: boolean }
 export interface AdminCommentRow { id: string; body: string; createdAt: number; deletedAt: number | null; canRestore: boolean; authorName: string; authorEmail: string; targetTitle: string | null; targetUrl: string | null }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { rateLimiter } from '../../src/lib/rate-limit';
+import { rateLimiter } from '../../src/http/rate-limit';
 
 describe('rateLimiter', () => {
   it('allows everything when the binding is missing (local dev and tests)', async () => {

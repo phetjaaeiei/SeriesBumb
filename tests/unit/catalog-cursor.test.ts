@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeCursor, encodeCursor } from '../../src/lib/queries/cursor';
+import { decodeCursor, encodeCursor } from '../../src/domain/cursor';
 
 describe('catalog cursors', () => {
   it('round trips a Unicode title sort key with a stable tie-break id', () => {

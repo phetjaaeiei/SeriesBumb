@@ -1,8 +1,8 @@
 ---
 import { env } from 'cloudflare:workers';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
-import { decodeCursor, encodeCursor } from '../../lib/queries/cursor';
-import { listAudit } from '../../lib/services/audit';
+import { decodeCursor, encodeCursor } from '../../domain/cursor';
+import { listAudit } from '../../services/audit';
 
 const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
 const { rows, next } = await listAudit(env.DB, cursor ? { createdAt: Number(cursor.key), id: cursor.id } : null);

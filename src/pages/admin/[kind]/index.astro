@@ -1,7 +1,7 @@
 ---
 import { env } from 'cloudflare:workers';
 import AdminLayout from '../../../components/layout/AdminLayout.astro';
-import { getAdminCatalogPage, type AdminCatalogKind } from '../../../lib/queries/admin-catalog';
+import { getAdminCatalogPage, type AdminCatalogKind } from '../../../repositories/admin-catalog.repo';
 
 const labelMap = { tapes: 'เทป', songs: 'เพลง', artists: 'ศิลปิน', labels: 'ค่ายเพลง', genres: 'แนวเพลง', collections: 'Collection' } as const;
 const kind = Astro.params.kind as AdminCatalogKind;

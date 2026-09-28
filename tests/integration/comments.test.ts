@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { createTapeDraft, saveTape } from '../../src/lib/services/catalog';
-import { createComment, deleteOwnComment, listComments } from '../../src/lib/services/comments';
+import { createTapeDraft, saveTape } from '../../src/services/catalog';
+import { createComment, deleteOwnComment, listComments } from '../../src/services/comments';
 
 describe('comments', () => {
   it('normalizes content, counts visible comments, enforces ownership and rate limits', async () => {
