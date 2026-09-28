@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { ActionError, defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
-import { defineAdminAction, defineMemberAction } from '../lib/actions';
+import { defineAdminAction, defineMemberAction, defineMemberWriteAction } from '../lib/actions';
 import { requireAdmin } from '../lib/permissions';
 import { artistSaveSchema, collectionSaveSchema, labelSaveSchema, songSaveSchema, tapeSaveSchema, uploadSchema } from '../lib/schemas';
 import { createArtist, createCollection, createGenre, createLabel, createSong, createTapeDraft, saveArtist, saveCollection, saveGenre, saveLabel, saveSong, saveTape } from '../lib/services/catalog';
@@ -50,15 +50,15 @@ async function runReview<T>(action: () => Promise<T>): Promise<T> {
 
 export const server = {
   reviews: {
-    submit: defineMemberAction({ input: z.object({ tapeId: z.uuid(), rating: z.number().int().min(1).max(5), body: z.string().max(5000) }), handler: (input, context) => runReview(() => submitReview(env.DB, context.user.id, input.tapeId, input.rating, input.body)) }),
-    correct: defineMemberAction({ input: z.object({ targetKind: z.enum(['artist', 'tape', 'song']), targetId: z.uuid(), proposedChange: z.string().max(2500), sourceUrl: z.string().max(2000).optional() }), handler: (input, context) => runReview(() => submitCorrection(env.DB, context.user.id, input.targetKind, input.targetId, input.proposedChange, input.sourceUrl)) }),
+    submit: defineMemberWriteAction({ input: z.object({ tapeId: z.uuid(), rating: z.number().int().min(1).max(5), body: z.string().max(5000) }), handler: (input, context) => runReview(() => submitReview(env.DB, context.user.id, input.tapeId, input.rating, input.body)) }),
+    correct: defineMemberWriteAction({ input: z.object({ targetKind: z.enum(['artist', 'tape', 'song']), targetId: z.uuid(), proposedChange: z.string().max(2500), sourceUrl: z.string().max(2000).optional() }), handler: (input, context) => runReview(() => submitCorrection(env.DB, context.user.id, input.targetKind, input.targetId, input.proposedChange, input.sourceUrl)) }),
   },
   comments: {
     list: defineAction({
       input: commentTargetSchema.extend({ cursor: z.string().max(512).nullable().optional() }).refine(oneCommentTarget, 'กรุณาระบุเทปหรือเพลงหนึ่งรายการ'),
       handler: (input, context) => runComment(() => listComments(env.DB, input.tapeId ? { tapeId: input.tapeId } : { songId: input.songId! }, input.cursor, context.locals.user?.id)),
     }),
-    create: defineMemberAction({
+    create: defineMemberWriteAction({
       input: commentTargetSchema.extend({ body: z.string().max(3000) }).refine(oneCommentTarget, 'กรุณาระบุเทปหรือเพลงหนึ่งรายการ'),
       handler: (input, context) => runComment(() => createComment(env.DB, context.user.id, context.user.role, input.tapeId ? { tapeId: input.tapeId } : { songId: input.songId! }, input.body)),
     }),
@@ -68,9 +68,9 @@ export const server = {
     }),
   },
   engagement: {
-    setTapeLike: defineMemberAction({ input: z.object({ tapeId: z.uuid(), liked: z.boolean() }), handler: (input, context) => setEngagement(env.DB, context.user.id, 'tapeLike', input.tapeId, input.liked) }),
-    setSongLike: defineMemberAction({ input: z.object({ songId: z.uuid(), liked: z.boolean() }), handler: (input, context) => setEngagement(env.DB, context.user.id, 'songLike', input.songId, input.liked) }),
-    setTapeOwned: defineMemberAction({ input: z.object({ tapeId: z.uuid(), owned: z.boolean() }), handler: (input, context) => setEngagement(env.DB, context.user.id, 'tapeOwned', input.tapeId, input.owned) }),
+    setTapeLike: defineMemberWriteAction({ input: z.object({ tapeId: z.uuid(), liked: z.boolean() }), handler: (input, context) => setEngagement(env.DB, context.user.id, 'tapeLike', input.tapeId, input.liked) }),
+    setSongLike: defineMemberWriteAction({ input: z.object({ songId: z.uuid(), liked: z.boolean() }), handler: (input, context) => setEngagement(env.DB, context.user.id, 'songLike', input.songId, input.liked) }),
+    setTapeOwned: defineMemberWriteAction({ input: z.object({ tapeId: z.uuid(), owned: z.boolean() }), handler: (input, context) => setEngagement(env.DB, context.user.id, 'tapeOwned', input.tapeId, input.owned) }),
   },
   admin: {
     credits: {
