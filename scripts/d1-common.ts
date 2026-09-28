@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BACKUP_EXCLUDED_TABLES } from './lib/backup-redaction.ts';
+import { BACKUP_EXCLUDED_TABLES, restorableTables } from './lib/backup-redaction.ts';
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const format = 'seriesbumb-d1-json-v1';
@@ -90,7 +90,7 @@ export function readManifest(directory: string): Manifest {
   if (manifest.format !== format || !Array.isArray(manifest.tables) || !manifest.tables.length) {
     throw new Error('Invalid or incomplete SeriesBumb backup manifest.');
   }
-  return manifest;
+  return { ...manifest, tables: restorableTables(manifest.tables) };
 }
 
 export function sameSchema(a: TableSchema[], b: TableSchema[]): boolean {

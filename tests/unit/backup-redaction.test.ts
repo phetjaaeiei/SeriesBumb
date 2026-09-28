@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BACKUP_EXCLUDED_TABLES, redactBackupValues } from '../../scripts/lib/backup-redaction';
+import { BACKUP_EXCLUDED_TABLES, redactBackupValues, restorableTables } from '../../scripts/lib/backup-redaction';
 
 describe('backup redaction', () => {
   it('leaves short-lived auth tables out of every backup', () => {
@@ -19,5 +19,10 @@ describe('backup redaction', () => {
   it('returns other tables unchanged', () => {
     const row = { id: 'x', title: 'เทป' };
     expect(redactBackupValues('tape', row)).toBe(row);
+  });
+
+  it('ignores session and verification tables found in older backups', () => {
+    const tables = [{ name: 'session' }, { name: 'user' }, { name: 'verification' }, { name: 'account' }];
+    expect(restorableTables(tables).map((table) => table.name)).toEqual(['user', 'account']);
   });
 });
