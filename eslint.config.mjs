@@ -9,6 +9,7 @@ import tseslint from 'typescript-eslint';
 const cloudflare = { group: ['cloudflare:*'], message: 'Only src/platform/ touches Cloudflare bindings: use db(), config() and friends from platform/runtime.' };
 const astroModules = { group: ['astro:*'], message: 'domain/, services/ and repositories/ stay framework-free: map errors in actions/ or http/.' };
 const database = { regex: String.raw`(^|/)db/`, message: 'Pages, components and actions reach the database through services and loaders, never db/.' };
+const upperLayers = { regex: String.raw`(^|/)(services|loaders|actions|pages|components|http|auth)/`, message: 'repositories/ is the bottom layer: SQL only, no imports from services, loaders or the web layer.' };
 const outsideDomain = { regex: String.raw`^(?!\./)(?!\.\./errors/app-error$)`, message: 'domain/ holds pure rules: import only other domain modules (and ../errors/app-error), no packages.' };
 const dynamic = (prefix, message) => [
   { selector: `ImportExpression[source.value=/^${prefix}:/]`, message },
@@ -28,7 +29,8 @@ export default [
   ...astro.configs['flat/recommended'],
   { files: [`src/**/*.${SOURCE}`], ignores: ['src/platform/**'], rules: restrict(cloudflare) },
   { files: [`src/{pages,components,actions}/**/*.${SOURCE}`], rules: restrict(cloudflare, database) },
-  { files: [`src/{services,repositories}/**/*.${SOURCE}`], rules: restrict(cloudflare, astroModules) },
+  { files: [`src/{services,loaders}/**/*.${SOURCE}`], rules: restrict(cloudflare, astroModules) },
+  { files: [`src/repositories/**/*.${SOURCE}`], rules: restrict(cloudflare, astroModules, upperLayers) },
   { files: [`src/domain/**/*.${SOURCE}`], rules: restrict(cloudflare, astroModules, outsideDomain) },
   {
     files: ['**/*.astro'],

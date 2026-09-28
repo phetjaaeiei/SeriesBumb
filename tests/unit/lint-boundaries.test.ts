@@ -20,6 +20,8 @@ describe('layer boundary lint rules', () => {
     ['src/repositories/x.ts', "export async function f() { return import('astro:actions'); }"],
     ['src/domain/x.ts', "import { sql } from 'drizzle-orm'; export { sql };"],
     ['src/domain/x.ts', "import { db } from '../platform/runtime'; export { db };"],
+    ['src/loaders/x.ts', "import { ActionError } from 'astro:actions'; export { ActionError };"],
+    ['src/repositories/x.repo.ts', "import { saveTape } from '../services/catalog'; export { saveTape };"],
   ])('rejects %s: %s', async (file, code) => {
     expect(await restricted(file, code)).toBeGreaterThan(0);
   });
@@ -29,6 +31,7 @@ describe('layer boundary lint rules', () => {
     ['src/http/x.ts', "import { ActionError } from 'astro:actions'; export { ActionError };"],
     ['src/domain/x.ts', "import { AppError } from '../errors/app-error'; import { normalizeThai } from './thai'; export { AppError, normalizeThai };"],
     ['src/pages/x.ts', "import { db } from '../platform/runtime'; export { db };"],
+    ['src/loaders/x.ts', "import { getTapePage } from '../repositories/tapes.repo'; import type { SqlClient } from '../db/sql-client'; export { getTapePage }; export type { SqlClient };"],
   ])('allows %s: %s', async (file, code) => {
     expect(await restricted(file, code)).toBe(0);
   });

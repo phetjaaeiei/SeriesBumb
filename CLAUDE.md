@@ -17,8 +17,9 @@ Thai cassette-tape encyclopedia. All UI copy is Thai. Production: https://series
 | `src/platform/` | `runtime.ts`: the only code that touches `cloudflare:workers` (`db()`, `config()`, `imageStore()`, `background()`…); `siteUrlOr()` for page shells that must render even with invalid config | — |
 | `src/domain/` | Pure rules and types (Thai text, slugs, cursors, URLs, enums, admin session policy) | packages, or anything outside `domain/` except `errors/app-error` |
 | `src/errors/` | `AppError` taxonomy; `toActionError` / `toJsonError` mappers | — |
-| `src/repositories/` | SQL reads (moving here in Phase 3b) | `astro:*`, `cloudflare:*` |
-| `src/services/` | Write use cases and invariants | `astro:*`, `cloudflare:*` |
+| `src/repositories/` | All SQL, one `<aggregate>.repo.ts` per aggregate; functions take `SqlClient` first | `astro:*`, `cloudflare:*`, services/loaders/web layer |
+| `src/services/` | Write use cases and invariants; SQL through repositories | `astro:*`, `cloudflare:*` |
+| `src/loaders/` | One read model per page: `load<Page>(sql, params, viewer?)` returns plain data or `null` for not found | `astro:*`, `cloudflare:*` |
 | `src/storage/` | Image/audio store adapters (Supabase, legacy Firebase) | — |
 | `src/auth/`, `src/http/` | better-auth, permissions, Access JWT; middleware, headers, Turnstile, rate limits | — |
 | `src/actions/` | `define.ts` wrappers, zod schemas, one file per domain, `index.ts` composes names | `cloudflare:*`, `db/*` |
