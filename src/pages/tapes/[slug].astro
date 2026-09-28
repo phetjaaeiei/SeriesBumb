@@ -1,5 +1,6 @@
 ---
 import { env } from 'cloudflare:workers';
+import { getConfig } from '../../config/config';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
 import CreditLine from '../../components/layout/CreditLine.astro';
 import InfoBox from '../../components/ui/InfoBox.astro';
@@ -54,6 +55,7 @@ const viewerId = Astro.locals.user?.id;
 const engagement = !unpublished && viewerId ? await env.DB.prepare('SELECT EXISTS(SELECT 1 FROM tape_like WHERE userId = ? AND tapeId = ?) AS liked, EXISTS(SELECT 1 FROM tape_owner WHERE userId = ? AND tapeId = ?) AS owned').bind(viewerId, tape.id, viewerId, tape.id).first<{ liked: number; owned: number }>() : null;
 const firstComments = !unpublished ? await listComments(env.DB, { tapeId: tape.id }, null, viewerId) : null;
 const publicReviews = !unpublished ? (await env.DB.prepare("SELECT r.id, r.body, r.rating, r.createdAt, u.name AS authorName FROM review r JOIN user u ON u.id = r.userId WHERE r.tapeId = ? AND r.status = 'published' ORDER BY r.createdAt DESC, r.id DESC LIMIT 20").bind(tape.id).all<{ id: string; body: string; rating: number; createdAt: number; authorName: string }>()).results : [];
+const turnstileSiteKey = getConfig(env).turnstile?.siteKey ?? null;
 ---
 <BaseLayout title={tape.title} description={description} canonicalPath={`/tapes/${slug}`} ogImage={ogImage} ogImageAlt={`ภาพแชร์เทป ${tape.title}`} ogType="music.album" noindex={unpublished}>
   {unpublished && <p class="draft-banner">ยังไม่เผยแพร่ · หน้านี้เห็นได้เฉพาะแอดมิน</p>}
@@ -114,7 +116,7 @@ const publicReviews = !unpublished ? (await env.DB.prepare("SELECT r.id, r.body,
       {catalogSources.length > 0 && <div class="section"><h3>แหล่งอ้างอิง</h3><ul class="plain-list">{catalogSources.map(source => <li><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title} ↗</a><p class="soft">{source.claim}</p></li>)}</ul></div>}
       {credits.length > 0 && <div class="section"><h3>เครดิตบุคคล</h3><ul class="plain-list">{credits.map(row => <li><a href={`/people/${encodeURIComponent(row.personSlug)}`}>{row.creditedAs}</a> · {row.role} · <a href={row.sourceUrl} target="_blank" rel="noopener noreferrer">{row.sourceTitle} ↗</a></li>)}</ul></div>}
       {editions.length > 0 && <div class="section"><h3>ฉบับอื่น</h3><ul class="plain-list">{editions.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`}>{item.title}</a> · {item.format}{item.editionYear ? ` · ${item.editionYear}` : ''}{item.note && ` · ${item.note}`} · <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer">{item.sourceTitle} ↗</a></li>)}</ul></div>}
-      {!unpublished && <div class="section"><h3>เสนอแก้ข้อมูล</h3><CorrectionForm targetKind="tape" targetId={tape.id} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /></div>}
+      {!unpublished && <div class="section"><h3>เสนอแก้ข้อมูล</h3><CorrectionForm turnstileSiteKey={turnstileSiteKey} targetKind="tape" targetId={tape.id} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /></div>}
     </section>
     <section id="collections" class="tab-panel" data-tab-panel>
       <h2>Collection</h2>
@@ -122,11 +124,11 @@ const publicReviews = !unpublished ? (await env.DB.prepare("SELECT r.id, r.body,
     </section>
     <section id="reviews" class="tab-panel" data-tab-panel><h2>รีวิวจากสมาชิก</h2>
       {publicReviews.length ? <ul class="plain-list">{publicReviews.map(review => <li class="section"><strong>{review.rating}/5 ดาว · {review.authorName}</strong><p>{review.body}</p></li>)}</ul> : <p class="empty-state">ยังไม่มีรีวิวที่ผ่านการตรวจ</p>}
-      {!unpublished && <div class="section"><h3>เขียนรีวิว</h3><ReviewForm tapeId={tape.id} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /></div>}
+      {!unpublished && <div class="section"><h3>เขียนรีวิว</h3><ReviewForm turnstileSiteKey={turnstileSiteKey} tapeId={tape.id} authenticated={Boolean(viewerId)} loginNext={Astro.url.pathname} client:visible /></div>}
     </section>
     <section id="comments" class="tab-panel" data-tab-panel>
       <h2>คอมเมนต์</h2>
-      {unpublished ? <p class="empty-state">เผยแพร่เทปก่อนจึงเปิดคอมเมนต์ได้</p> : <Comments tapeId={tape.id} initialItems={firstComments!.items} initialCursor={firstComments!.nextCursor} initialCount={tape.commentCount} authenticated={Boolean(viewerId)} banned={Boolean(Astro.locals.user?.commentBanned)} loginNext={Astro.url.pathname} client:visible />}
+      {unpublished ? <p class="empty-state">เผยแพร่เทปก่อนจึงเปิดคอมเมนต์ได้</p> : <Comments turnstileSiteKey={turnstileSiteKey} tapeId={tape.id} initialItems={firstComments!.items} initialCursor={firstComments!.nextCursor} initialCount={tape.commentCount} authenticated={Boolean(viewerId)} banned={Boolean(Astro.locals.user?.commentBanned)} loginNext={Astro.url.pathname} client:visible />}
     </section>
   </Tabs>
   {related.results.length > 0 && <section class="section" aria-labelledby="related-tapes-title"><h2 id="related-tapes-title">{tape.artists[0] ? `เทปอื่นของ ${tape.artists[0].name}` : 'เทปอื่นจากค่ายเดียวกัน'}</h2><ul class="plain-list">{related.results.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`}>{item.title}</a> <span class="mono muted">{item.year ?? '—'}</span></li>)}</ul></section>}

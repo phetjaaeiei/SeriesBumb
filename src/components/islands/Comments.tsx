@@ -2,6 +2,7 @@
 import { actions } from 'astro:actions';
 import React, { useEffect, useState, type SyntheticEvent } from 'react';
 import type { CommentDto } from '../../lib/services/comments';
+import { TurnstileField } from './TurnstileField';
 
 interface Props {
   tapeId?: string;
@@ -12,10 +13,13 @@ interface Props {
   authenticated: boolean;
   banned: boolean;
   loginNext: string;
+  turnstileSiteKey?: string | null;
 }
 const dateFormat = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Bangkok' });
 
-export default function Comments({ tapeId, songId, initialItems, initialCursor, initialCount, authenticated, banned, loginNext }: Props) {
+export default function Comments({ tapeId, songId, initialItems, initialCursor, initialCount, authenticated, banned, loginNext, turnstileSiteKey = null }: Props) {
+  const [token, setToken] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
   const [count, setCount] = useState(initialCount);
@@ -30,13 +34,13 @@ export default function Comments({ tapeId, songId, initialItems, initialCursor, 
     if (!body.trim() || busy) return;
     setBusy(true); setError('');
     try {
-      const response = await actions.comments.create({ tapeId, songId, body });
+      const response = await actions.comments.create({ tapeId, songId, body, turnstileToken: token ?? undefined });
       if (response.error || !response.data) throw new Error(response.error?.message || 'ส่งคอมเมนต์ไม่สำเร็จ');
       setItems(previous => [response.data!, ...previous]);
       setCount(previous => previous + 1);
       setBody('');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'ส่งคอมเมนต์ไม่สำเร็จ'); }
-    finally { setBusy(false); }
+    finally { setAttempt(value => value + 1); setBusy(false); }
   }
 
   async function remove(id: string) {
@@ -71,7 +75,7 @@ export default function Comments({ tapeId, songId, initialItems, initialCursor, 
     {cursor && <button className="button" type="button" disabled={busy} onClick={() => void loadMore()}>{busy ? 'กำลังโหลด…' : 'ดูคอมเมนต์เพิ่ม'}</button>}
     {!authenticated ? <p className="comment-login"><a href={`/login?next=${encodeURIComponent(loginNext)}`}>เข้าสู่ระบบเพื่อคอมเมนต์</a></p>
       : banned ? <p className="error-text">บัญชีนี้ถูกระงับการคอมเมนต์</p>
-        : <form className="comment-form" onSubmit={event => void submit(event)}><label htmlFor="comment-body">เขียนคอมเมนต์</label><p className="help-text">ชื่อและรูปโปรไฟล์ Google ของคุณจะแสดงต่อสาธารณะพร้อมคอมเมนต์</p><textarea className="field" id="comment-body" value={body} onChange={event => setBody(event.target.value)} maxLength={1000} rows={4} required disabled={!ready} /><button className="button button-primary" type="submit" disabled={!ready || busy || !body.trim()}>{busy ? 'กำลังส่ง…' : 'ส่งคอมเมนต์'}</button></form>}
+        : <form className="comment-form" onSubmit={event => void submit(event)}><label htmlFor="comment-body">เขียนคอมเมนต์</label><p className="help-text">ชื่อและรูปโปรไฟล์ Google ของคุณจะแสดงต่อสาธารณะพร้อมคอมเมนต์</p><textarea className="field" id="comment-body" value={body} onChange={event => setBody(event.target.value)} maxLength={1000} rows={4} required disabled={!ready} /><TurnstileField siteKey={turnstileSiteKey} onToken={setToken} resetKey={attempt} /><button className="button button-primary" type="submit" disabled={!ready || busy || !body.trim() || Boolean(turnstileSiteKey && !token)}>{busy ? 'กำลังส่ง…' : 'ส่งคอมเมนต์'}</button></form>}
     {error && <p className="error-text" role="alert">{error}</p>}
   </div>;
 }

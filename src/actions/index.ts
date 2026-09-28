@@ -19,6 +19,8 @@ import { createPerson, linkArtistMember } from '../lib/services/people';
 import { addArtistRelation, addTapeEdition, deleteArtistRelation, deleteTapeEdition } from '../lib/services/catalog-relations';
 import { addPersonCredit, deletePersonCredit } from '../lib/services/person-credits';
 
+const turnstileToken = z.string().max(2048).optional();
+
 async function runCatalog<T>(action: () => Promise<T>): Promise<T> {
   try { return await action(); }
   catch (error) {
@@ -50,8 +52,8 @@ async function runReview<T>(action: () => Promise<T>): Promise<T> {
 
 export const server = {
   reviews: {
-    submit: defineMemberWriteAction({ input: z.object({ tapeId: z.uuid(), rating: z.number().int().min(1).max(5), body: z.string().max(3000) }), handler: (input, context) => runReview(() => submitReview(env.DB, context.user.id, input.tapeId, input.rating, input.body)) }),
-    correct: defineMemberWriteAction({ input: z.object({ targetKind: z.enum(['artist', 'tape', 'song']), targetId: z.uuid(), proposedChange: z.string().max(2000), sourceUrl: z.string().max(2000).optional() }), handler: (input, context) => runReview(() => submitCorrection(env.DB, context.user.id, input.targetKind, input.targetId, input.proposedChange, input.sourceUrl)) }),
+    submit: defineMemberWriteAction({ turnstile: true, input: z.object({ tapeId: z.uuid(), rating: z.number().int().min(1).max(5), body: z.string().max(3000), turnstileToken }), handler: (input, context) => runReview(() => submitReview(env.DB, context.user.id, input.tapeId, input.rating, input.body)) }),
+    correct: defineMemberWriteAction({ turnstile: true, input: z.object({ targetKind: z.enum(['artist', 'tape', 'song']), targetId: z.uuid(), proposedChange: z.string().max(2000), sourceUrl: z.string().max(2000).optional(), turnstileToken }), handler: (input, context) => runReview(() => submitCorrection(env.DB, context.user.id, input.targetKind, input.targetId, input.proposedChange, input.sourceUrl)) }),
   },
   comments: {
     list: defineAction({
@@ -59,7 +61,8 @@ export const server = {
       handler: (input, context) => runComment(() => listComments(env.DB, input.tapeId ? { tapeId: input.tapeId } : { songId: input.songId! }, input.cursor, context.locals.user?.id)),
     }),
     create: defineMemberWriteAction({
-      input: commentTargetSchema.extend({ body: z.string().max(1000) }).refine(oneCommentTarget, 'กรุณาระบุเทปหรือเพลงหนึ่งรายการ'),
+      turnstile: true,
+      input: commentTargetSchema.extend({ body: z.string().max(1000), turnstileToken }).refine(oneCommentTarget, 'กรุณาระบุเทปหรือเพลงหนึ่งรายการ'),
       handler: (input, context) => runComment(() => createComment(env.DB, context.user.id, context.user.role, input.tapeId ? { tapeId: input.tapeId } : { songId: input.songId! }, input.body)),
     }),
     delete: defineMemberAction({
