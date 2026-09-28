@@ -6,3 +6,8 @@ export class ActionError extends Error {
     this.code = options.code;
   }
 }
+
+/** Unit-test stand-in: returns the definition so tests can inspect the action tree. */
+export function defineAction<T>(options: T): T {
+  return options;
+}
