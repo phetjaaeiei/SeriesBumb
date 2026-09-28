@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { getDb } from '../../src/db/client';
-import { bumpUserCount, createAuth, promoteAdmins } from '../../src/lib/auth';
+import { bumpUserCount, clearProviderTokens, createAuth, promoteAdmins } from '../../src/lib/auth';
 
 const db = getDb(env.DB);
 const now = Date.now();
@@ -71,6 +71,12 @@ describe('Google account storage', () => {
     GOOGLE_CLIENT_SECRET: 'integration-test-client-secret',
   };
 
+  // Runs first in this block, before any test inserts accounts.
+  it('has no stored Google tokens after migrations (0011 clears legacy rows)', async () => {
+    const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM account WHERE accessToken IS NOT NULL OR refreshToken IS NOT NULL OR idToken IS NOT NULL').first<{ n: number }>();
+    expect(left?.n).toBe(0);
+  });
+
   it('keeps OAuth state in a cookie and never stores Google tokens', async () => {
     const auth = createAuth(env.DB, authEnv);
     expect(auth.options.account?.storeStateStrategy).toBe('cookie');
@@ -106,8 +112,23 @@ describe('Google account storage', () => {
     expect(after?.n).toBe(before?.n);
   });
 
-  it('has no stored Google tokens after migrations', async () => {
-    const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM account WHERE accessToken IS NOT NULL OR refreshToken IS NOT NULL OR idToken IS NOT NULL').first<{ n: number }>();
+  it('sends a failed Google callback back to the site login page', async () => {
+    const auth = createAuth(env.DB, authEnv);
+    // No oauth_state cookie: better-auth cannot read the embedded error URL and falls back to onAPIError.
+    const response = await auth.handler(new Request('http://localhost:4321/api/auth/callback/google?code=x&state=y'));
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers.get('location') ?? '', 'http://localhost:4321');
+    expect(location.pathname).toBe('/login');
+    expect(location.searchParams.get('error')).not.toBeNull();
+  });
+
+  it('clears tokens an older Worker version may have written', async () => {
+    const userId = crypto.randomUUID();
+    await env.DB.prepare('INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)').bind(userId, 'ทดสอบ', `${userId}@example.test`, now, now).run();
+    await env.DB.prepare("INSERT INTO account (id, accountId, providerId, userId, accessToken, refreshToken, idToken, createdAt, updatedAt) VALUES (?, ?, 'google', ?, 'a', 'r', 'i', ?, ?)").bind(crypto.randomUUID(), `g-${userId}`, userId, now, now).run();
+    await clearProviderTokens(db, userId);
+    const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM account WHERE userId = ? AND (accessToken IS NOT NULL OR refreshToken IS NOT NULL OR idToken IS NOT NULL)').bind(userId).first<{ n: number }>();
     expect(left?.n).toBe(0);
   });
+
 });

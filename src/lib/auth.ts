@@ -26,6 +26,16 @@ export async function promoteAdmins(db: Db, userId: string, adminEmails: Set<str
   `);
 }
 
+/** Self-heals rows written by an older Worker version during a deploy window; no-op once clean. */
+export async function clearProviderTokens(db: Db, userId: string): Promise<void> {
+  await db.run(sql`
+    UPDATE account
+    SET accessToken = NULL, refreshToken = NULL, idToken = NULL, accessTokenExpiresAt = NULL, refreshTokenExpiresAt = NULL
+    WHERE userId = ${userId}
+      AND (accessToken IS NOT NULL OR refreshToken IS NOT NULL OR idToken IS NOT NULL)
+  `);
+}
+
 export async function bumpUserCount(db: Db): Promise<void> {
   await db.run(sql`
     UPDATE site_stats
@@ -63,6 +73,8 @@ export function createAuth(d1: D1Database, authEnv: AuthEnv) {
     // OAuth state lives in an encrypted cookie so an anonymous sign-in attempt writes nothing to D1.
     account: { storeStateStrategy: 'cookie', updateAccountOnSignIn: false },
     advanced: { ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] } },
+    // /api/auth/error is not exposed (see auth-routes.ts); failed callbacks land on our login page.
+    onAPIError: { errorURL: `${authEnv.SITE_URL}/login?error=1` },
     databaseHooks: {
       // The site only uses Google for identity, so provider tokens are never kept.
       account: {
@@ -73,6 +85,7 @@ export function createAuth(d1: D1Database, authEnv: AuthEnv) {
         create: {
           after: async (session) => {
             await promoteAdmins(db, session.userId, adminEmails);
+            await clearProviderTokens(db, session.userId);
           },
         },
       },
