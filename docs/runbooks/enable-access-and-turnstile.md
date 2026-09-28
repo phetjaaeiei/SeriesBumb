@@ -12,16 +12,22 @@
    - Session duration 12 ชั่วโมง
 4. คัดลอก **Application Audience (AUD) Tag**
 5. ใส่ค่าใน `wrangler.jsonc` → `vars`: `"ACCESS_TEAM_DOMAIN": "https://<team>.cloudflareaccess.com"` แล้วตั้ง secret `npx wrangler secret put ACCESS_AUD` (ใส่ AUD tag)
-6. `npm run deploy:prod` แล้วลองเปิด `/admin` ในหน้าต่างส่วนตัว: ต้องเจอหน้า Access ก่อน แล้วจึงถึงหน้า login ของเว็บ
-7. ถ้าอีเมลที่ผ่าน Access ไม่ตรงกับบัญชีที่ login ในเว็บ แอปจะตอบ 403 เพื่อกันการใช้ cookie ของคนอื่น
+6. commit การแก้ `wrangler.jsonc` ผ่าน branch + PR แล้ว merge เข้า `main` เพราะ `scripts/deploy.ts` ไม่ยอม deploy ถ้ามีไฟล์ที่ยังไม่ commit
+7. `npm run deploy:prod` จาก worktree ของ `main` ที่สะอาด แล้วลองเปิด `/admin` ในหน้าต่างส่วนตัว: ต้องเจอหน้า Access ก่อน แล้วจึงถึงหน้า login ของเว็บ
+8. ถ้าอีเมลที่ผ่าน Access ไม่ตรงกับบัญชีที่ login ในเว็บ แอปจะตอบ 403 เพื่อกันการใช้ cookie ของคนอื่น
 
-ย้อนกลับ: ลบ `ACCESS_TEAM_DOMAIN` ออกจาก vars แล้ว deploy ใหม่ (หรือปิด Access application)
+ย้อนกลับ (ทำตามลำดับนี้เท่านั้น):
+1. ลบ `ACCESS_TEAM_DOMAIN` ออกจาก vars (commit + merge) แล้ว deploy ใหม่ และตรวจว่าเปิด `/admin` ได้โดยไม่ผ่าน Access
+2. หลังจากนั้นจึงปิดหรือลบ Access application
+
+> **ห้ามปิด Access application ก่อน** ถ้า Worker ยังมี `ACCESS_TEAM_DOMAIN` อยู่ request จะไม่มี JWT และแอปจะตอบ 403 ทุกหน้าแอดมิน ซึ่งทำให้เจ้าของเข้าแอดมินไม่ได้
 
 ## Turnstile (login, คอมเมนต์, รีวิว, ข้อเสนอแก้ข้อมูล)
 
 1. Cloudflare dashboard → Turnstile → Add widget: hostname `seriesbumb.phetjaa.workers.dev` (และ staging ถ้าต้องการ), mode **Managed**
 2. ใส่ site key ใน `wrangler.jsonc` → `vars`: `"TURNSTILE_SITE_KEY": "<site key>"` (เป็นค่าสาธารณะ) และ secret: `npx wrangler secret put TURNSTILE_SECRET_KEY`
-3. `npm run deploy:prod` — build จะเพิ่ม `https://challenges.cloudflare.com` ใน CSP ให้เองเมื่อมี site key
-4. ตรวจ: หน้า `/login` มีกล่องยืนยัน, ปุ่มกดได้หลังผ่าน, และคอมเมนต์ส่งได้ตามปกติ
+3. commit การแก้ `wrangler.jsonc` ผ่าน branch + PR แล้ว merge เข้า `main`
+4. `npm run deploy:prod` จาก worktree ของ `main` ที่สะอาด — build จะเพิ่ม `https://challenges.cloudflare.com` ใน CSP ให้เองเมื่อมี site key
+5. ตรวจ: หน้า `/login` มีกล่องยืนยัน, ปุ่มกดได้หลังผ่าน, และคอมเมนต์ส่งได้ตามปกติ
 
 ย้อนกลับ: ลบ `TURNSTILE_SITE_KEY` จาก vars แล้ว deploy ใหม่
