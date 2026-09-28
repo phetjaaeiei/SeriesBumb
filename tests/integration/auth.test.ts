@@ -62,3 +62,52 @@ describe('Better Auth bootstrap', () => {
     expect(response.status).toBe(404);
   });
 });
+
+describe('Google account storage', () => {
+  const authEnv = {
+    SITE_URL: 'http://localhost:4321',
+    BETTER_AUTH_SECRET: 'integration-test-secret-only',
+    GOOGLE_CLIENT_ID: 'integration-test-client-id',
+    GOOGLE_CLIENT_SECRET: 'integration-test-client-secret',
+  };
+
+  it('keeps OAuth state in a cookie and never stores Google tokens', async () => {
+    const auth = createAuth(env.DB, authEnv);
+    expect(auth.options.account?.storeStateStrategy).toBe('cookie');
+    const context = await auth.$context;
+    const userId = crypto.randomUUID();
+    await env.DB.prepare('INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)')
+      .bind(userId, 'ทดสอบ', `${userId}@example.test`, now, now).run();
+    const account = await context.internalAdapter.createAccount({
+      userId,
+      providerId: 'google',
+      accountId: `google-${userId}`,
+      accessToken: 'access-secret',
+      refreshToken: 'refresh-secret',
+      idToken: 'id-secret',
+    });
+    await context.internalAdapter.updateAccount(account.id, { accessToken: 'rotated-secret' });
+    const row = await env.DB.prepare('SELECT accessToken, refreshToken, idToken FROM account WHERE id = ?').bind(account.id).first();
+    expect(row).toEqual({ accessToken: null, refreshToken: null, idToken: null });
+  });
+
+  it('starts Google sign-in without writing a verification row', async () => {
+    const auth = createAuth(env.DB, authEnv);
+    const before = await env.DB.prepare('SELECT COUNT(*) AS n FROM verification').first<{ n: number }>();
+    const response = await auth.handler(new Request('http://localhost:4321/api/auth/sign-in/social', {
+      method: 'POST',
+      headers: { origin: 'http://localhost:4321', 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'google', callbackURL: '/' }),
+    }));
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { url: string }).url).toContain('accounts.google.com');
+    expect(response.headers.get('set-cookie')).toMatch(/state/iu);
+    const after = await env.DB.prepare('SELECT COUNT(*) AS n FROM verification').first<{ n: number }>();
+    expect(after?.n).toBe(before?.n);
+  });
+
+  it('has no stored Google tokens after migrations', async () => {
+    const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM account WHERE accessToken IS NOT NULL OR refreshToken IS NOT NULL OR idToken IS NOT NULL').first<{ n: number }>();
+    expect(left?.n).toBe(0);
+  });
+});

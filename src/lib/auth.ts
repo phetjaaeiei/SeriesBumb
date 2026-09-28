@@ -34,6 +34,8 @@ export async function bumpUserCount(db: Db): Promise<void> {
   `);
 }
 
+const NO_PROVIDER_TOKENS = { accessToken: null, refreshToken: null, idToken: null, accessTokenExpiresAt: null, refreshTokenExpiresAt: null };
+
 export function createAuth(d1: D1Database, authEnv: AuthEnv) {
   const db = getDb(d1);
   const adminEmails = parseAdminEmails(authEnv.ADMIN_EMAILS);
@@ -58,7 +60,15 @@ export function createAuth(d1: D1Database, authEnv: AuthEnv) {
       },
     },
     disabledPaths: ['/update-user'],
+    // OAuth state lives in an encrypted cookie so an anonymous sign-in attempt writes nothing to D1.
+    account: { storeStateStrategy: 'cookie', updateAccountOnSignIn: false },
+    advanced: { ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] } },
     databaseHooks: {
+      // The site only uses Google for identity, so provider tokens are never kept.
+      account: {
+        create: { before: async (account) => ({ data: { ...account, ...NO_PROVIDER_TOKENS } }) },
+        update: { before: async (account) => ({ data: { ...account, accessToken: null, refreshToken: null, idToken: null } }) },
+      },
       session: {
         create: {
           after: async (session) => {
