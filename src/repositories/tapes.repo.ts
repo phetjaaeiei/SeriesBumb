@@ -1,5 +1,6 @@
 import { decodeCursor, encodeCursor, type CatalogSort } from '../domain/cursor';
 import type { ReleaseType } from '../domain/enums';
+import type { SqlClient } from '../db/sql-client';
 
 export interface TapeListItem {
   id: string;
@@ -54,7 +55,7 @@ export interface TapePageOptions {
 
 type TapeRow = Omit<TapeListItem, 'artists'>;
 
-async function attachArtists(db: D1Database, rows: TapeRow[]): Promise<TapeListItem[]> {
+async function attachArtists(db: SqlClient, rows: TapeRow[]): Promise<TapeListItem[]> {
   if (!rows.length) return [];
   const placeholders = rows.map(() => '?').join(',');
   const related = await db.prepare(`SELECT ta.tapeId, a.name, a.slug FROM tape_artist ta JOIN artist a ON a.id = ta.artistId WHERE ta.tapeId IN (${placeholders}) ORDER BY ta.tapeId, ta.position`).bind(...rows.map(row => row.id)).all<{ tapeId: string; name: string; slug: string }>();
@@ -67,14 +68,14 @@ async function attachArtists(db: D1Database, rows: TapeRow[]): Promise<TapeListI
   return rows.map(row => ({ ...row, artists: byTape.get(row.id) ?? [] }));
 }
 
-export async function getTapeHighlights(db: D1Database, kind: 'updated' | 'owned', limit = 10): Promise<TapeListItem[]> {
+export async function getTapeHighlights(db: SqlClient, kind: 'updated' | 'owned', limit = 10): Promise<TapeListItem[]> {
   const order = kind === 'updated' ? 't.updatedAt DESC, t.id DESC' : 't.ownerCount DESC, t.publishedAt DESC, t.id DESC';
   const constraint = kind === 'owned' ? 'AND t.ownerCount > 0' : '';
   const result = await db.prepare(`SELECT t.id, t.slug, t.title, t.titleAlt, t.year, t.yearSort, t.releaseType, t.coverThumbKey, t.publishedAt, t.updatedAt, t.titleSort, t.ownerCount, l.name AS labelName, l.slug AS labelSlug FROM tape t LEFT JOIN label l ON l.id = t.labelId WHERE t.status = 'published' ${constraint} ORDER BY ${order} LIMIT ?`).bind(Math.min(Math.max(limit, 1), 50)).all<TapeRow>();
   return attachArtists(db, result.results);
 }
 
-export async function getTapePage(db: D1Database, options: TapePageOptions = {}): Promise<{ items: TapeListItem[]; nextCursor: string | null }> {
+export async function getTapePage(db: SqlClient, options: TapePageOptions = {}): Promise<{ items: TapeListItem[]; nextCursor: string | null }> {
   const sort = options.sort ?? 'new';
   const size = Math.min(Math.max(Math.floor(options.pageSize ?? 24), 1), 50);
   const order = sort === 'year' ? 't.yearSort ASC, t.id ASC' : sort === 'title' ? 't.titleSort ASC, t.id ASC' : 't.publishedAt DESC, t.id DESC';
@@ -112,7 +113,7 @@ export async function getTapePage(db: D1Database, options: TapePageOptions = {})
   return { items, nextCursor: hasMore && last && key != null ? encodeCursor(sort, key, last.id) : null };
 }
 
-export async function getTapeBySlug(db: D1Database, slug: string, admin = false): Promise<TapeDetail | null> {
+export async function getTapeBySlug(db: SqlClient, slug: string, admin = false): Promise<TapeDetail | null> {
   const row = await db.prepare(`
     SELECT t.*, l.name AS labelName, l.slug AS labelSlug,
       creator.name AS createdByName, editor.name AS updatedByName
@@ -133,4 +134,23 @@ export async function getTapeBySlug(db: D1Database, slug: string, admin = false)
     db.prepare('SELECT g.name, g.slug FROM tape_genre tg JOIN genre g ON g.id = tg.genreId WHERE tg.tapeId = ? ORDER BY g.position').bind(row.id).all<TapeDetail['genres'][number]>(),
   ]);
   return { ...row, artists: artists.results, images: images.results, tracks: tracks.results, genres: genres.results };
+}
+
+export interface RelatedTape { slug: string; title: string; year: number | null }
+
+/** Other published tapes by the artist with this slug, oldest first. */
+export async function listRelatedTapesByArtist(sql: SqlClient, artistSlug: string, excludeTapeId: string): Promise<RelatedTape[]> {
+  return (await sql.prepare(`SELECT t.slug, t.title, t.year FROM tape_artist ta JOIN artist a ON a.id = ta.artistId JOIN tape t ON t.id = ta.tapeId WHERE a.slug = ? AND t.status = 'published' AND t.id != ? ORDER BY t.yearSort, t.id LIMIT 8`).bind(artistSlug, excludeTapeId).all<RelatedTape>()).results;
+}
+
+/** Other published tapes on this label, oldest first. */
+export async function listRelatedTapesByLabel(sql: SqlClient, labelId: string, excludeTapeId: string): Promise<RelatedTape[]> {
+  return (await sql.prepare("SELECT slug, title, year FROM tape WHERE labelId = ? AND status = 'published' AND id != ? ORDER BY yearSort, id LIMIT 8").bind(labelId, excludeTapeId).all<RelatedTape>()).results;
+}
+
+export interface TapeViewerEngagement { liked: number; owned: number }
+
+/** Whether this user liked and owns the tape (0/1 flags), or null when the query returns no row. */
+export async function getTapeViewerEngagement(sql: SqlClient, userId: string, tapeId: string): Promise<TapeViewerEngagement | null> {
+  return sql.prepare('SELECT EXISTS(SELECT 1 FROM tape_like WHERE userId = ? AND tapeId = ?) AS liked, EXISTS(SELECT 1 FROM tape_owner WHERE userId = ? AND tapeId = ?) AS owned').bind(userId, tapeId, userId, tapeId).first<TapeViewerEngagement>();
 }

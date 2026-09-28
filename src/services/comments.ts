@@ -1,3 +1,4 @@
+import type { SqlClient } from '../db/sql-client';
 import { AppError } from '../errors/app-error';
 import { decodeCursor, encodeCursor } from '../domain/cursor';
 
@@ -28,7 +29,7 @@ function targetConfig(target: CommentTarget) {
     : { column: 'songId' as const, id: target.songId!, table: 'song' as const, visible: '(isPublic = 1 OR publishedTapeCount > 0)' };
 }
 
-async function assertVisible(db: D1Database, target: CommentTarget) {
+async function assertVisible(db: SqlClient, target: CommentTarget) {
   const config = targetConfig(target);
   const row = await db.prepare(`SELECT id FROM ${config.table} WHERE id = ? AND ${config.visible}`).bind(config.id).first();
   if (!row) throw new CommentError('ไม่พบรายการนี้', 'NOT_FOUND');
@@ -47,7 +48,7 @@ function dto(row: { id: string; body: string; createdAt: number; userId: string;
   return { id: row.id, body: row.body, createdAt: row.createdAt, author: { name: [...row.name].slice(0, 50).join(''), image: safeAvatar(row.image) }, isMine: row.userId === viewerId };
 }
 
-export async function listComments(db: D1Database, target: CommentTarget, cursor?: string | null, viewerId?: string | null) {
+export async function listComments(db: SqlClient, target: CommentTarget, cursor?: string | null, viewerId?: string | null) {
   const config = await assertVisible(db, target);
   const decoded = decodeCursor('new', cursor);
   const paging = decoded ? 'AND (c.createdAt, c.id) < (?, ?)' : '';

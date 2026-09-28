@@ -1,3 +1,5 @@
+import type { SqlClient } from '../db/sql-client';
+
 export type RelationType = 'former_name' | 'collaboration' | 'related';
 export type EditionFormat = 'cassette' | 'cd' | 'digital' | 'other';
 
@@ -38,7 +40,7 @@ export async function publicArtistRelations(db: D1Database, artistId: string) {
     ORDER BY a.nameSort LIMIT 50`).bind(artistId).all<{ relationType: RelationType; slug: string; name: string; sourceTitle: string; sourceUrl: string }>()).results;
 }
 
-export async function publicTapeEditions(db: D1Database, tapeId: string) {
+export async function publicTapeEditions(db: SqlClient, tapeId: string) {
   return (await db.prepare(`SELECT te.format, te.editionYear, te.note, t.slug, t.title, cs.title AS sourceTitle, cs.url AS sourceUrl FROM tape_edition te
     JOIN tape t ON t.id = te.relatedTapeId JOIN catalog_source cs ON cs.id = te.sourceId
     WHERE te.tapeId = ? AND t.status = 'published' ORDER BY te.editionYear, t.titleSort LIMIT 50`).bind(tapeId).all<{ format: EditionFormat; editionYear: number | null; note: string; slug: string; title: string; sourceTitle: string; sourceUrl: string }>()).results;

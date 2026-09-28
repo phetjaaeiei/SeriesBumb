@@ -3,17 +3,9 @@ import { db } from '../platform/runtime';
 import BaseLayout from '../components/layout/BaseLayout.astro';
 import Placeholder from '../components/ui/Placeholder.astro';
 import TapeList from '../components/ui/TapeList.astro';
-import { getTapeHighlights, getTapePage } from '../repositories/tapes.repo';
+import { loadHome } from '../loaders/home';
 
-let publishedTapeCount: number | null = null;
-let publicSongCount = 0;
-try {
-  const row = await db().prepare('SELECT publishedTapeCount FROM site_stats WHERE id = 1').first<{ publishedTapeCount: number }>();
-  publishedTapeCount = row?.publishedTapeCount ?? 0;
-  publicSongCount = (await db().prepare('SELECT COUNT(*) AS count FROM song WHERE isPublic = 1 OR publishedTapeCount > 0').first<{ count: number }>())?.count ?? 0;
-} catch {
-  // The shell also renders before a local database has been migrated.
-}
+const { publishedTapeCount, publicSongCount, recent, updated, owned, featured, recentSongs } = await loadHome(db());
 const browseLinks = [
   { href: '/tapes', label: 'เทปทั้งหมด' },
   { href: '/songs', label: 'เพลงทั้งหมด' },
@@ -23,15 +15,6 @@ const browseLinks = [
   { href: '/labels', label: 'ค่ายเพลง' },
   { href: '/collections', label: 'Collection' },
 ];
-const recent = publishedTapeCount ? await getTapePage(db(), { pageSize: 10 }) : null;
-const [updated, owned, featured] = publishedTapeCount ? await Promise.all([
-  getTapeHighlights(db(), 'updated', 10),
-  getTapeHighlights(db(), 'owned', 10),
-  db().prepare("SELECT slug, title FROM collection WHERE status = 'published' AND isFeatured = 1 ORDER BY position LIMIT 3").all<{ slug: string; title: string }>(),
-]) : [[], [], { results: [] as { slug: string; title: string }[] }];
-const recentSongs = publishedTapeCount === 0 && publicSongCount > 0
-  ? (await db().prepare(`SELECT slug, title FROM song WHERE isPublic = 1 OR publishedTapeCount > 0 ORDER BY updatedAt DESC, id DESC LIMIT 10`).all<{ slug: string; title: string }>()).results
-  : [];
 ---
 <BaseLayout title="ซีรี่ย์บั้ม · คลังเทปเพลง" canonicalPath="/">
   <div class="intro-grid">
@@ -66,7 +49,7 @@ const recentSongs = publishedTapeCount === 0 && publicSongCount > 0
         <div class="section-heading"><h2 id="updated-title">แก้ไขล่าสุด</h2><a href="/latest">ดูทั้งหมด</a></div>
         <TapeList items={updated} />
       </section>
-      {featured.results.length > 0 && <section class="section" aria-labelledby="featured-title"><div class="section-heading"><h2 id="featured-title">Collection เด่น</h2><a href="/collections">ดูทั้งหมด</a></div><ul class="browse-list">{featured.results.map(item => <li><a href={`/collections/${encodeURIComponent(item.slug)}`}>{item.title}</a></li>)}</ul></section>}
+      {featured.length > 0 && <section class="section" aria-labelledby="featured-title"><div class="section-heading"><h2 id="featured-title">Collection เด่น</h2><a href="/collections">ดูทั้งหมด</a></div><ul class="browse-list">{featured.map(item => <li><a href={`/collections/${encodeURIComponent(item.slug)}`}>{item.title}</a></li>)}</ul></section>}
       {owned.length > 0 && <section class="section" aria-labelledby="owned-title"><div class="section-heading"><h2 id="owned-title">เทปที่คนมีเยอะที่สุด</h2></div><TapeList items={owned} /></section>}
     </>
   )}

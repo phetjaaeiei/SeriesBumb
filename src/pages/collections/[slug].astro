@@ -5,12 +5,11 @@ import ExpandableText from '../../components/ui/ExpandableText.astro';
 import CreditLine from '../../components/layout/CreditLine.astro';
 import Placeholder from '../../components/ui/Placeholder.astro';
 import { imageUrl } from '../../domain/urls';
+import { loadCollectionDetail } from '../../loaders/collection-detail';
 const slug = Astro.params.slug ?? '';
-const admin = Astro.locals.user?.role === 'admin';
-const collection = await db().prepare(`SELECT c.*, creator.name AS createdByName, editor.name AS updatedByName FROM collection c LEFT JOIN user creator ON creator.id = c.createdBy LEFT JOIN user editor ON editor.id = c.updatedBy WHERE c.slug = ? ${admin ? '' : "AND c.status = 'published'"}`).bind(slug).first<{ id: string; title: string; description: string; coverKey: string | null; status: 'draft' | 'published'; createdAt: number; updatedAt: number; createdByName: string | null; updatedByName: string | null }>();
-if (!collection) return Astro.rewrite('/404');
-const items = (await db().prepare(`SELECT ci.position, ci.note, t.slug, t.title, t.year, t.coverThumbKey FROM collection_item ci JOIN tape t ON t.id = ci.tapeId WHERE ci.collectionId = ? AND t.status = 'published' ORDER BY ci.position LIMIT 100`).bind(collection.id).all<{ position: number; note: string | null; slug: string; title: string; year: number | null; coverThumbKey: string | null }>()).results;
-const coverKey = collection.coverKey || items.find(item => item.coverThumbKey)?.coverThumbKey;
+const model = await loadCollectionDetail(db(), slug, Astro.locals.user);
+if (!model) return Astro.rewrite('/404');
+const { collection, items, coverKey } = model;
 ---
 <BaseLayout title={collection.title} description={(collection.description || `Collection ${collection.title} รวม ${items.length} เทปเพลงไทย`).replace(/\s+/gu, ' ').slice(0, 155)} canonicalPath={`/collections/${slug}`} noindex={collection.status !== 'published'}>
   {collection.status !== 'published' && <p class="draft-banner">ยังไม่เผยแพร่ · หน้านี้เห็นได้เฉพาะแอดมิน</p>}

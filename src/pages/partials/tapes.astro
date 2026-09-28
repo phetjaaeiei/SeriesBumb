@@ -1,38 +1,12 @@
 ---
 import { db } from '../../platform/runtime';
 import TapeList from '../../components/ui/TapeList.astro';
-import { RELEASE_TYPES, type ReleaseType } from '../../domain/enums';
-import { getTapePage } from '../../repositories/tapes.repo';
-import type { CatalogSort } from '../../domain/cursor';
-import { CATALOG_LETTERS } from '../../domain/thai';
+import { loadTapesPartial } from '../../loaders/tapes-partial';
 
 export const partial = true;
 Astro.response.headers.set('X-Robots-Tag', 'noindex');
 
-const params = Astro.url.searchParams;
-const decadeText = params.get('decade');
-const decade = decadeText && /^(19[5-9]|20[0-2])0s$/u.test(decadeText) ? Number(decadeText.slice(0, 4)) : null;
-const rawType = params.get('type');
-const releaseType: ReleaseType | null = RELEASE_TYPES.find(type => type === rawType) ?? null;
-const labelSlug = params.get('label');
-const artistSlug = params.get('artist');
-const genreSlug = params.get('genre');
-const [label, artist, genre] = await Promise.all([
-  labelSlug ? db().prepare('SELECT id FROM label WHERE slug = ?').bind(labelSlug).first<{ id: string }>() : null,
-  artistSlug ? db().prepare('SELECT id FROM artist WHERE slug = ?').bind(artistSlug).first<{ id: string }>() : null,
-  genreSlug ? db().prepare('SELECT id FROM genre WHERE slug = ?').bind(genreSlug).first<{ id: string }>() : null,
-]);
-
-const allowedSorts: CatalogSort[] = artist ? ['year'] : label ? ['new', 'year'] : genre || releaseType ? ['new'] : decade ? ['new', 'year'] : ['new', 'year', 'title'];
-const sort: CatalogSort = allowedSorts.includes(params.get('sort') as CatalogSort) ? params.get('sort') as CatalogSort : artist ? 'year' : 'new';
-const requestedLetter = params.get('l');
-const letter = sort === 'title' && !decade && !genre && !releaseType && !label && !artist && requestedLetter && CATALOG_LETTERS.includes(requestedLetter) ? requestedLetter : null;
-const page = await getTapePage(db(), {
-  decade, genreId: genre?.id, labelId: label?.id, artistId: artist?.id, releaseType,
-  sort, letter, cursor: params.get('cursor'), pageSize: label || artist ? 50 : 24,
-});
-const view = params.get('view') === 'grid' ? 'grid' : 'table';
-const showLabel = !label && !artist;
+const { page, view, showLabel } = await loadTapesPartial(db(), Astro.url.searchParams);
 ---
 <div data-tape-partial data-next-cursor={page.nextCursor ?? undefined}>
   <TapeList items={page.items} view={view} showLabel={showLabel} />

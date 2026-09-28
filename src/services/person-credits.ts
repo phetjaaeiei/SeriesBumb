@@ -1,3 +1,5 @@
+import type { SqlClient } from '../db/sql-client';
+
 export type CreditKind = 'tape' | 'song';
 
 export async function addPersonCredit(db: D1Database, input: { personId: string; targetKind: CreditKind; targetId: string; creditedAs: string; role: string; sourceId: string }) {
@@ -20,7 +22,7 @@ export async function deletePersonCredit(db: D1Database, id: string) {
   await db.prepare('DELETE FROM person_credit WHERE id = ?').bind(id).run();
 }
 
-export async function creditsForTarget(db: D1Database, kind: CreditKind, id: string) {
+export async function creditsForTarget(db: SqlClient, kind: CreditKind, id: string) {
   return (await db.prepare(`SELECT pc.id, pc.creditedAs, pc.role, p.slug AS personSlug, p.name AS personName, cs.title AS sourceTitle, cs.url AS sourceUrl
     FROM person_credit pc JOIN person p ON p.id = pc.personId JOIN catalog_source cs ON cs.id = pc.sourceId
     WHERE pc.targetKind = ? AND pc.targetId = ? ORDER BY pc.createdAt, pc.id LIMIT 50`).bind(kind, id)

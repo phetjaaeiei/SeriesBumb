@@ -1,3 +1,5 @@
+import type { SqlClient } from '../db/sql-client';
+
 export type SourceKind = 'artist' | 'tape' | 'song';
 export interface CatalogSource { id: string; entityKind: SourceKind; entityId: string; title: string; url: string; claim: string; accessedAt: number }
 
@@ -7,7 +9,7 @@ export function validateSourceUrl(raw: string): string {
   return url.href;
 }
 
-export async function listCatalogSources(db: D1Database, entityKind: SourceKind, entityId: string): Promise<CatalogSource[]> {
+export async function listCatalogSources(db: SqlClient, entityKind: SourceKind, entityId: string): Promise<CatalogSource[]> {
   return (await db.prepare('SELECT id, entityKind, entityId, title, url, claim, accessedAt FROM catalog_source WHERE entityKind = ? AND entityId = ? ORDER BY createdAt DESC LIMIT 50')
     .bind(entityKind, entityId).all<CatalogSource>()).results;
 }
