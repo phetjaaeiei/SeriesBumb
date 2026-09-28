@@ -1,7 +1,8 @@
 ---
 import { db } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
-const genres = (await db().prepare('SELECT slug, name, publishedTapeCount FROM genre ORDER BY position').all<{ slug: string; name: string; publishedTapeCount: number }>()).results;
+import { loadGenres } from '../../loaders/genres';
+const { genres } = await loadGenres(db());
 ---
 <BaseLayout title="แนวเพลง" canonicalPath="/genres">
   <h1>แนวเพลง</h1>

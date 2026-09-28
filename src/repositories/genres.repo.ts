@@ -10,3 +10,16 @@ export async function listGenreOptions(sql: SqlClient): Promise<GenreOption[]> {
 export async function getGenreIdBySlug(sql: SqlClient, slug: string): Promise<{ id: string } | null> {
   return sql.prepare('SELECT id FROM genre WHERE slug = ?').bind(slug).first<{ id: string }>();
 }
+
+export interface GenreListRow { slug: string; name: string; publishedTapeCount: number }
+
+/** Every genre in display order with its published tape count. */
+export async function listGenres(sql: SqlClient): Promise<GenreListRow[]> {
+  return (await sql.prepare('SELECT slug, name, publishedTapeCount FROM genre ORDER BY position').all<GenreListRow>()).results;
+}
+
+export interface GenreSummary { id: string; name: string; publishedTapeCount: number }
+
+export async function getGenreBySlug(sql: SqlClient, slug: string): Promise<GenreSummary | null> {
+  return sql.prepare('SELECT id, name, publishedTapeCount FROM genre WHERE slug = ?').bind(slug).first<GenreSummary>();
+}
