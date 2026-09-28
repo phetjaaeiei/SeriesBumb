@@ -1,8 +1,8 @@
 import { env } from 'cloudflare:workers';
 import { ActionError, defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
-import { defineAdminAction, defineMemberAction, defineMemberWriteAction } from '../lib/actions';
-import { requireAdmin, requireFreshSession } from '../lib/permissions';
+import { defineAdminAction, defineMemberAction, defineMemberWriteAction, runAdminAction } from '../lib/actions';
+import { requireFreshSession } from '../lib/permissions';
 import { artistSaveSchema, collectionSaveSchema, labelSaveSchema, songSaveSchema, tapeSaveSchema, uploadSchema } from '../lib/schemas';
 import { createArtist, createCollection, createGenre, createLabel, createSong, createTapeDraft, saveArtist, saveCollection, saveGenre, saveLabel, saveSong, saveTape } from '../lib/services/catalog';
 import { deleteTapeImage, uploadImage } from '../lib/services/images';
@@ -155,13 +155,12 @@ export const server = {
       }),
       upload: defineAction({
         accept: 'form', input: uploadSchema,
-        handler: (input, context) => {
-          requireAdmin(context.locals);
+        handler: (input, context) => runAdminAction(context, input, () => {
           if (env.SUPABASE_IMAGE_UPLOADS_ENABLED !== 'true') {
             throw new ActionError({ code: 'SERVICE_UNAVAILABLE', message: 'พักการอัปโหลดรูปเพื่อควบคุมพื้นที่จัดเก็บ' });
           }
           return runCatalog(() => uploadImage(env.DB, supabaseImageStore(env), input));
-        },
+        }),
       }),
     },
   },

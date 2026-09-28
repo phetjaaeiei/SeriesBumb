@@ -1,6 +1,7 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
 import React, { useState } from 'react';
+import { offerReauth } from '../../lib/client/reauth';
 
 export interface AdminUserRow { id: string; name: string; email: string; role: 'member' | 'admin'; commentBanned: number; createdAt: number; protectedAdmin: boolean; self: boolean }
 export interface AdminCommentRow { id: string; body: string; createdAt: number; deletedAt: number | null; canRestore: boolean; authorName: string; authorEmail: string; targetTitle: string | null; targetUrl: string | null }
@@ -19,7 +20,7 @@ export function AdminUsersTable({ initialRows, canManageRoles = false }: { initi
       const response = await actions.admin.users.setRole({ id: row.id, role: next });
       if (response.error) throw new Error(response.error.message);
       setRows(previous => previous.map(item => item.id === row.id ? { ...item, role: next, commentBanned: next === 'admin' ? 0 : item.commentBanned } : item));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'เปลี่ยนสิทธิ์ไม่สำเร็จ'); }
+    } catch (cause) { const text = cause instanceof Error ? cause.message : 'เปลี่ยนสิทธิ์ไม่สำเร็จ'; if (!offerReauth(text)) setError(text); }
     finally { setBusyId(''); }
   }
 
@@ -31,7 +32,7 @@ export function AdminUsersTable({ initialRows, canManageRoles = false }: { initi
       const response = await actions.admin.users.setCommentBan({ id: row.id, banned: next });
       if (response.error) throw new Error(response.error.message);
       setRows(previous => previous.map(item => item.id === row.id ? { ...item, commentBanned: Number(next) } : item));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'เปลี่ยนสถานะไม่สำเร็จ'); }
+    } catch (cause) { const text = cause instanceof Error ? cause.message : 'เปลี่ยนสถานะไม่สำเร็จ'; if (!offerReauth(text)) setError(text); }
     finally { setBusyId(''); }
   }
 

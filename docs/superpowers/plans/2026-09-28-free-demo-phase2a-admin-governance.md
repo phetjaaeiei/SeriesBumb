@@ -31,6 +31,7 @@
 - [ ] Failing unit tests: `auditActionFor('POST', '/_actions/admin.tapes.save')` → `admin.tapes.save`; reads (`admin.lookup`, `admin.health`, any GET) → null; `DELETE /admin/api/audio/<id>` → `DELETE /admin/api/audio`; `auditTargetFrom({ id: 'x' })` → `x`, falls back to `tapeId`, `songId`, `userId`, `artistId`, `memberId`, `targetId`, or the UUID in the path.
 - [ ] Failing integration test: `recordAudit` then `listAudit` returns newest first with cursor.
 - [ ] Implement middleware after `guardAdminActions` (only admins reach it): clone JSON bodies (≤ 64 KB) before `next()`, record after the response with its status; failures to record are logged by name only and never break the request.
+- **Revised after review:** admin actions are audited inside `runAdminAction` (`src/lib/actions.ts`), which covers both RPC and `?_action=` form dispatch, resolves the name exactly as Astro does (`adminActionNameFrom`) and takes the target from zod-validated input (`auditTargetFromInput`). The middleware now only records `/admin/api/*` writes, with the target from the path; no request body is read. `guardAdminActions` uses the same name resolver.
 - [ ] `/admin/audit` read-only table, 50 per page, noindex, linked from AdminNav.
 - [ ] Commit `feat(admin): record every admin write in an audit log`.
 

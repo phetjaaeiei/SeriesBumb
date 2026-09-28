@@ -8,6 +8,7 @@ import { PROVINCES, PROVINCE_NAMES, REGIONS } from '../../lib/provinces';
 import { createOgImage } from '../../lib/client/og-image';
 import { formatDuration, parseDuration } from '../../lib/format';
 import { TRACK_SIDES, appendTrack, changeTrackSide, moveTrack, numberTracks, reorderSide, type TrackSide } from '../../lib/client/track-order';
+import { offerReauth } from '../../lib/client/reauth';
 
 type Kind = 'tapes' | 'songs' | 'artists' | 'labels' | 'genres' | 'collections';
 type LookupKind = 'artists' | 'labels' | 'genres' | 'songs' | 'tapes';
@@ -330,7 +331,7 @@ export default function AdminEditor({ kind, record, artistIds, genreIds, tracks,
       const response = await actions.admin.deleteCatalog({ kind, id, confirmation: confirmation || undefined });
       if (response.error) throw new Error(response.error.message);
       window.location.assign(`/admin/${kind}`);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'ลบรายการไม่สำเร็จ'); setBusy(false); }
+    } catch (cause) { const text = cause instanceof Error ? cause.message : 'ลบรายการไม่สำเร็จ'; if (!offerReauth(text)) setError(text); setBusy(false); }
   }
 
   return <div className="admin-editor">
