@@ -18,7 +18,8 @@
     "test:e2e": "playwright test",
     "types": "wrangler types --env-file .dev.vars.example --strict-vars=false",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply seriesbumb --local"
+    "db:migrate:local": "wrangler d1 migrations apply seriesbumb --local",
+    "check:migrations": "node --experimental-strip-types scripts/check-migrations.ts"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.3",
