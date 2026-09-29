@@ -1,12 +1,13 @@
 import type { SqlClient } from '../db/sql-client';
 import type { SearchKind } from '../domain/enums';
 import { normalizeSearchField, searchDocument } from '../domain/search';
+import { runBatch } from '../repositories/batch.repo';
 import {
   countSearchQueue, dequeueSearchRefs, enqueueArtistDependentStmts, enqueueLabelDependents, enqueueSearchRefsStmt, listArtistSearchSources,
   listCollectionSearchSources, listLabelSearchSources, listQueuedSearchRefs, listSearchRefsAfter, listSongSearchSources, listTapeSearchSources,
   writeSearchDocumentStmts, type SearchDocumentRow, type SearchRef,
 } from '../repositories/search.repo';
-import { clearReindexCursor, getReindexState, recordReindexProgress, setReindexCursorStmt } from '../repositories/stats.repo';
+import { clearReindexCursor, getReindexState, recordReindexProgress, setReindexCursor, setReindexCursorStmt } from '../repositories/stats.repo';
 
 function doc(kind: SearchKind, refId: string, name: string, parts: (string | null | undefined)[], isPublic: boolean): SearchDocumentRow {
   return { kind, refId, nameKey: normalizeSearchField(name), text: searchDocument(parts), isPublic: Number(isPublic) };
@@ -39,7 +40,7 @@ async function loadDocuments(db: SqlClient, refs: SearchRef[]): Promise<SearchDo
 
 async function writeDocuments(db: SqlClient, docs: SearchDocumentRow[]) {
   if (!docs.length) return 0;
-  const results = await db.batch(writeSearchDocumentStmts(db, docs));
+  const results = await runBatch(db, writeSearchDocumentStmts(db, docs));
   return results.reduce((sum, result) => sum + (result.meta.rows_written || 0), 0);
 }
 
@@ -54,7 +55,7 @@ export async function continueReindex(db: SqlClient, limit = 200) {
     const next = await listSearchRefsAfter(db, cursorKind, cursorId);
     if (next.length) {
       const last = next.at(-1)!;
-      await db.batch([
+      await runBatch(db, [
         enqueueSearchRefsStmt(db, next),
         setReindexCursorStmt(db, next.length < 200 ? null : JSON.stringify([last.kind, last.refId])),
       ]);
@@ -72,7 +73,7 @@ export async function continueReindex(db: SqlClient, limit = 200) {
 }
 
 export async function reindexArtistDependents(db: SqlClient, artistId: string) {
-  await db.batch(enqueueArtistDependentStmts(db, artistId));
+  await runBatch(db, enqueueArtistDependentStmts(db, artistId));
   return continueReindex(db);
 }
 
@@ -82,6 +83,6 @@ export async function reindexLabelDependents(db: SqlClient, labelId: string) {
 }
 
 export async function enqueueFullReindex(db: SqlClient) {
-  await setReindexCursorStmt(db, JSON.stringify(['', ''])).run();
+  await setReindexCursor(db, JSON.stringify(['', '']));
   return continueReindex(db);
 }

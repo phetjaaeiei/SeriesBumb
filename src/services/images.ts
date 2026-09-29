@@ -1,6 +1,7 @@
 import type { SqlClient } from '../db/sql-client';
 import type { ImageStore } from '../storage/image-store';
 import { IMAGE_STORAGE_LIMIT } from '../storage/supabase-image-store';
+import { runBatch } from '../repositories/batch.repo';
 import {
   countTapeImages, deleteTapeImageStmt, getImageOwner, getOwnerImage, getTapeImageForDelete, getTapeImageIdByFullKey, insertTapeImageStmt,
   refreshTapeCoverAfterImageDeleteStmt, refreshTapeCoverStmt, setOwnerImageStmt, type ImageOwnerKeyColumn, type ImageOwnerTable,
@@ -77,7 +78,7 @@ export async function uploadImage(db: SqlClient, bucket: ImageStore, input: Uplo
       if ((count?.value ?? 0) >= 40) throw new Error('เทปหนึ่งชุดมีรูปได้ไม่เกิน 40 รูป');
       const id = crypto.randomUUID();
       const kind = input.kind || 'front';
-      await db.batch([
+      await runBatch(db, [
         insertTapeImageStmt(db, { id, tapeId: entityId, kind, fullKey, thumbKey: key, width: input.width!, height: input.height!, bytes: combinedBytes }),
         refreshTapeCoverStmt(db, entityId),
         addImageBytesStmt(db, combinedBytes, Date.now()),
@@ -87,7 +88,7 @@ export async function uploadImage(db: SqlClient, bucket: ImageStore, input: Uplo
     const table = tableForEntity[entityType];
     const column = keyColumnForEntity[entityType];
     const old = await getOwnerImage(db, table, column, entityId);
-    await db.batch([
+    await runBatch(db, [
       setOwnerImageStmt(db, table, column, fullKey, combinedBytes, entityId),
       addImageBytesStmt(db, combinedBytes - (old?.imageBytes ?? 0), Date.now()),
     ]);
@@ -108,7 +109,7 @@ export async function deleteTapeImage(db: SqlClient, bucket: ImageStore, imageId
   const count = await countTapeImages(db, image.tapeId);
   if (image.status === 'published' && (count?.value ?? 0) < 2) throw new Error('เทปที่เผยแพร่ต้องมีรูปปกอย่างน้อยหนึ่งรูป');
   const removeOg = image.ogSourceImageId === imageId && !!image.ogImageKey;
-  await db.batch([
+  await runBatch(db, [
     deleteTapeImageStmt(db, imageId),
     refreshTapeCoverAfterImageDeleteStmt(db, image.tapeId, Number(removeOg)),
     subtractImageBytesStmt(db, image.bytes + (removeOg ? image.ogImageBytes : 0), Date.now()),

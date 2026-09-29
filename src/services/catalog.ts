@@ -9,6 +9,7 @@ import { assertEntityImageKey } from './image-keys';
 import { normalizeSearchField, searchDocument } from '../domain/search';
 import type { ImageKind } from './images';
 import type { ImageStore } from '../storage/image-store';
+import { runBatch } from '../repositories/batch.repo';
 import { getCatalogIdBySlug, type CatalogSlugTable } from '../repositories/admin.repo';
 import {
   deleteArtistMembersStmt, getArtistForSave, insertArtistMembersStmt, insertArtistStmt, listArtistMemberLinks, listArtistNamesByIds,
@@ -70,7 +71,7 @@ export async function createArtist(db: SqlClient, userId: string, nameInput: str
   const id = crypto.randomUUID();
   const slug = await uniqueSlug(db, 'artist', name);
   const now = Date.now();
-  await db.batch([
+  await runBatch(db, [
     insertArtistStmt(db, { id, slug, name, nameSort: thaiSortKey(name), userId, now }),
     ...indexStatements(db, 'artist', id, name, name, false),
   ]);
@@ -82,7 +83,7 @@ export async function createLabel(db: SqlClient, userId: string, nameInput: stri
   const id = crypto.randomUUID();
   const slug = await uniqueSlug(db, 'label', name);
   const now = Date.now();
-  await db.batch([
+  await runBatch(db, [
     insertLabelStmt(db, { id, slug, name, nameSort: thaiSortKey(name), userId, now }),
     ...indexStatements(db, 'label', id, name, name, false),
   ]);
@@ -104,7 +105,7 @@ export async function createSong(db: SqlClient, userId: string, input: { title: 
   const now = Date.now();
   const artistIds = [...new Set(input.artistIds ?? [])].slice(0, 20);
   const singers = artistIds.length ? await listArtistNamesByIds(db, artistIds) : [];
-  await db.batch([
+  await runBatch(db, [
     insertSongStmt(db, { id, slug, title, titleSort: thaiSortKey(title), lyrics: input.lyrics ?? null, userId, now }),
     ...artistIds.map((artistId, position) => insertSongArtistStmt(db, id, artistId, position)),
     incrementSongCountStmt(db, now),
@@ -118,7 +119,7 @@ export async function createTapeDraft(db: SqlClient, userId: string, titleInput?
   const title = titleInput?.trim() || '(ร่างไม่มีชื่อ)';
   const slug = `draft-${id.slice(0, 8)}`;
   const now = Date.now();
-  await db.batch([
+  await runBatch(db, [
     insertTapeDraftStmt(db, { id, slug, title, titleSort: thaiSortKey(title), userId, now }),
     incrementTapeCountStmt(db, now),
     ...indexStatements(db, 'tape', id, title, title, false),
@@ -236,7 +237,7 @@ export async function saveTape(db: SqlClient, userId: string, input: TapeSaveInp
   if (affectedArtists.length) statements.push(refreshArtistSearchVisibilityStmt(db, affectedArtists));
   if (affectedLabels.length) statements.push(refreshLabelSearchVisibilityStmt(db, affectedLabels));
   statements.push(...redirectStatements(db, `/tapes/${current.slug}`, `/tapes/${slug}`));
-  await db.batch(statements);
+  await runBatch(db, statements);
   if (current.ogImageKey && current.ogImageKey !== nextOgKey && bucket) {
     if (waitUntil) waitUntil(bucket.delete(current.ogImageKey));
     else await bucket.delete(current.ogImageKey);
@@ -268,7 +269,7 @@ export async function saveArtist(db: SqlClient, userId: string, input: {
     return { id, personId: previous?.personId ?? null, sourceId: previous?.sourceId ?? null, name: requiredName(member.name, 'ชื่อสมาชิก'), role: member.role || '', years: member.years || null, isCurrent: Number(!!member.isCurrent), position };
   });
   const now = Date.now();
-  await db.batch([
+  await runBatch(db, [
     updateArtistStmt(db, {
       slug, name, nameAlt: input.nameAlt || null, nameSort: thaiSortKey(name), artistType: input.artistType || null, status: input.status || 'unknown',
       province: input.province || null, formedYear: input.formedYear == null ? null : toCeYear(input.formedYear), themes: input.themes || null,
@@ -291,7 +292,7 @@ export async function saveLabel(db: SqlClient, userId: string, input: {
   const old = await getLabelForSave(db, input.id);
   if (!old) throw new Error('ไม่พบค่ายนี้');
   const slug = input.slug ? await uniqueSlug(db, 'label', name, input.slug, input.id) : old.slug;
-  await db.batch([
+  await runBatch(db, [
     updateLabelStmt(db, {
       slug, name, nameAlt: input.nameAlt || null, nameSort: thaiSortKey(name), description: input.description || '',
       logoKey: assertEntityImageKey('labels', input.id, input.logoKey), userId, now: Date.now(), id: input.id,
@@ -329,7 +330,7 @@ export async function saveSong(db: SqlClient, userId: string, input: {
   statements.push(...indexStatements(db, 'song', input.id, title, [title, input.titleAlt, ...singers.map(row => row.name), input.lyricist, input.composer].filter(Boolean).join(' | '), isPublic || old.publishedTapeCount > 0));
   if (affectedArtists.length) statements.push(refreshArtistSearchVisibilityStmt(db, affectedArtists));
   statements.push(...redirectStatements(db, `/songs/${old.slug}`, `/songs/${slug}`));
-  await db.batch(statements);
+  await runBatch(db, statements);
   return { id: input.id, slug };
 }
 
@@ -338,7 +339,7 @@ export async function saveGenre(db: SqlClient, input: { id: string; name: string
   const old = await getGenreSlug(db, input.id);
   if (!old) throw new Error('ไม่พบแนวเพลงนี้');
   const slug = input.slug ? await uniqueSlug(db, 'genre', name, input.slug, input.id) : old.slug;
-  await db.batch([
+  await runBatch(db, [
     updateGenreStmt(db, input.id, name, slug, input.position ?? null),
     ...redirectStatements(db, `/genres/${old.slug}`, `/genres/${slug}`),
   ]);
@@ -350,7 +351,7 @@ export async function createCollection(db: SqlClient, userId: string, titleInput
   const id = crypto.randomUUID();
   const slug = await uniqueSlug(db, 'collection', title);
   const now = Date.now();
-  await db.batch([
+  await runBatch(db, [
     insertCollectionStmt(db, { id, slug, title, userId, now }),
     ...indexStatements(db, 'collection', id, title, title, false),
   ]);
@@ -367,7 +368,7 @@ export async function saveCollection(db: SqlClient, userId: string, input: {
   if (!old) throw new Error('ไม่พบ Collection นี้');
   const slug = input.slug ? await uniqueSlug(db, 'collection', title, input.slug, input.id) : old.slug;
   const items = (input.items ?? []).slice(0, 100).map((item, position) => ({ tapeId: item.tapeId, note: item.note || null, position }));
-  await db.batch([
+  await runBatch(db, [
     updateCollectionStmt(db, {
       slug, title, description: input.description || '', coverKey: assertEntityImageKey('collections', input.id, input.coverKey),
       isFeatured: Number(!!input.isFeatured), status: input.status, userId, now: Date.now(), id: input.id,

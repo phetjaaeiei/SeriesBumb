@@ -8,13 +8,12 @@ import { artistSaveSchema, collectionSaveSchema, labelSaveSchema, songSaveSchema
 import { createArtist, createCollection, createGenre, createLabel, createSong, createTapeDraft, saveArtist, saveCollection, saveGenre, saveLabel, saveSong, saveTape } from '../services/catalog';
 import { deleteTapeImage, uploadImage } from '../services/images';
 import { deleteCatalogEntity } from '../services/catalog-delete';
-import { normalizeThai } from '../domain/thai';
 import { addCatalogSource, deleteCatalogSource } from '../services/catalog-sources';
 import { createPerson, linkArtistMember } from '../services/people';
 import { addArtistRelation, addTapeEdition, deleteArtistRelation, deleteTapeEdition } from '../services/catalog-relations';
 import { addPersonCredit, deletePersonCredit } from '../services/person-credits';
 import { runCatalog } from './run';
-import { lookupAdminChoices } from '../repositories/admin.repo';
+import { loadAdminLookup } from '../loaders/admin/lookup';
 
 export const adminCatalog = {
   credits: {
@@ -41,10 +40,7 @@ export const adminCatalog = {
   }),
   lookup: defineAdminAction({
     input: z.object({ kind: z.enum(['artists', 'labels', 'genres', 'songs', 'tapes']), query: z.string().trim().min(2).max(80) }),
-    handler: async ({ kind, query }) => {
-      const term = `%${normalizeThai(query).replace(/[\\%_]/gu, '\\$&')}%`;
-      return lookupAdminChoices(db(), kind, term);
-    },
+    handler: async ({ kind, query }) => loadAdminLookup(db(), kind, query),
   }),
   artists: {
     create: defineAdminAction({ input: z.object({ name: z.string().trim().min(1).max(200) }), handler: (input, context) => runCatalog(() => createArtist(db(), context.user.id, input.name)) }),

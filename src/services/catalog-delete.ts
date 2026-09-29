@@ -2,6 +2,7 @@ import { AppError } from '../errors/app-error';
 import type { SqlClient } from '../db/sql-client';
 import type { SearchKind } from '../domain/enums';
 import type { ImageStore } from '../storage/image-store';
+import { runBatch } from '../repositories/batch.repo';
 import { countArtistCredits, deleteArtistStmt, getArtistForDelete, refreshArtistPublishedTapeCountsStmt } from '../repositories/artists.repo';
 import { deleteCollectionStmt, getCollectionForDelete } from '../repositories/collections.repo';
 import { countGenreTapes, deleteGenreStmt, getGenreSlug, refreshGenrePublishedTapeCountsStmt } from '../repositories/genres.repo';
@@ -66,7 +67,7 @@ export async function deleteCatalogEntity(db: SqlClient, bucket: ImageStore, kin
       statements.push(refreshOneLabelPublishedTapeCountStmt(db, tape.labelId));
       statements.push(refreshOneLabelSearchVisibilityStmt(db, tape.labelId));
     }
-    await db.batch(statements);
+    await runBatch(db, statements);
     const keys = [...images.flatMap(image => [image.fullKey, image.thumbKey]), ...(tape.ogImageKey ? [tape.ogImageKey] : [])];
     if (keys.length) waitUntil(bucket.delete(keys));
     return { id, kind };
@@ -78,7 +79,7 @@ export async function deleteCatalogEntity(db: SqlClient, bucket: ImageStore, kin
     const linked = await listSongTapeTitles(db, id);
     if (linked.length) throw new CatalogError(`เพลงนี้ยังอยู่ในเทป: ${linked.map(row => row.title).join(', ')}`);
     const artists = await listSongArtistLinks(db, id);
-    await db.batch([
+    await runBatch(db, [
       ...removeIndex(db, 'song', id, `/songs/${song.slug}`),
       deleteSongStmt(db, id),
       decrementSongCountStmt(db, Date.now()),
@@ -92,7 +93,7 @@ export async function deleteCatalogEntity(db: SqlClient, bucket: ImageStore, kin
     if (!genre) throw new CatalogError('ไม่พบแนวเพลงนี้');
     const linked = await countGenreTapes(db, id);
     if (linked?.count) throw new CatalogError(`แนวเพลงนี้ยังผูกกับเทป ${linked.count} ชุด`);
-    await db.batch([deleteGenreStmt(db, id), deleteRedirectsForPathStmt(db, `/genres/${genre.slug}`)]);
+    await runBatch(db, [deleteGenreStmt(db, id), deleteRedirectsForPathStmt(db, `/genres/${genre.slug}`)]);
     return { id, kind };
   }
 
@@ -103,14 +104,14 @@ export async function deleteCatalogEntity(db: SqlClient, bucket: ImageStore, kin
       ? await countArtistCredits(db, id)
       : await countLabelTapes(db, id);
     if (linked?.count) throw new CatalogError(`รายการนี้ยังผูกกับข้อมูลอื่น ${linked.count} รายการ`);
-    await db.batch([...removeIndex(db, kind === 'artists' ? 'artist' : 'label', id, `/${kind}/${row.slug}`), kind === 'artists' ? deleteArtistStmt(db, id) : deleteLabelStmt(db, id), subtractImageBytesStmt(db, row.imageBytes, Date.now())]);
+    await runBatch(db, [...removeIndex(db, kind === 'artists' ? 'artist' : 'label', id, `/${kind}/${row.slug}`), kind === 'artists' ? deleteArtistStmt(db, id) : deleteLabelStmt(db, id), subtractImageBytesStmt(db, row.imageBytes, Date.now())]);
     if (row.imageKey) waitUntil(bucket.delete(thumbKeys(row.imageKey)));
     return { id, kind };
   }
 
   const collection = await getCollectionForDelete(db, id);
   if (!collection) throw new CatalogError('ไม่พบ Collection นี้');
-  await db.batch([...removeIndex(db, 'collection', id, `/collections/${collection.slug}`), deleteCollectionStmt(db, id), subtractImageBytesStmt(db, collection.imageBytes, Date.now())]);
+  await runBatch(db, [...removeIndex(db, 'collection', id, `/collections/${collection.slug}`), deleteCollectionStmt(db, id), subtractImageBytesStmt(db, collection.imageBytes, Date.now())]);
   if (collection.coverKey) waitUntil(bucket.delete(thumbKeys(collection.coverKey)));
   return { id, kind };
 }

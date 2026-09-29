@@ -77,6 +77,11 @@ export function setReindexCursorStmt(sql: SqlClient, cursor: string | null): D1P
   return sql.prepare('UPDATE site_stats SET reindexCursor = ? WHERE id = 1').bind(cursor);
 }
 
+/** Runs setReindexCursorStmt on its own. */
+export async function setReindexCursor(sql: SqlClient, cursor: string | null): Promise<void> {
+  await setReindexCursorStmt(sql, cursor).run();
+}
+
 export async function clearReindexCursor(sql: SqlClient): Promise<void> {
   await sql.prepare('UPDATE site_stats SET reindexCursor = NULL WHERE id = 1').run();
 }
