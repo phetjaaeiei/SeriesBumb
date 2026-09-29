@@ -1,12 +1,8 @@
 ---
 import { db } from '../platform/runtime';
 import BaseLayout from '../components/layout/BaseLayout.astro';
-import { decodeCursor, encodeCursor } from '../domain/cursor';
-const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
-const rows = (await db().prepare(`SELECT r.id, r.body, r.rating, r.createdAt, t.slug, t.title, u.name AS authorName FROM review r JOIN tape t ON t.id = r.tapeId JOIN user u ON u.id = r.userId WHERE r.status = 'published' AND t.status = 'published' ${cursor ? 'AND (r.createdAt, r.id) < (?, ?)' : ''} ORDER BY r.createdAt DESC, r.id DESC LIMIT 21`).bind(...(cursor ? [cursor.key, cursor.id] : [])).all<{ id: string; body: string; rating: number; createdAt: number; slug: string; title: string; authorName: string }>()).results;
-const items = rows.slice(0, 20);
-const last = items.at(-1);
-const next = rows.length > 20 && last ? encodeCursor('new', last.createdAt, last.id) : null;
+import { loadReviews } from '../loaders/reviews';
+const { items, next } = await loadReviews(db(), Astro.url.searchParams);
 ---
 <BaseLayout title="รีวิวล่าสุด" canonicalPath="/reviews" noindex={Astro.url.searchParams.size > 0}>
   <h1>รีวิวล่าสุด</h1><p class="page-lede">ความเห็นของสมาชิกที่ผ่านการตรวจแล้ว</p>

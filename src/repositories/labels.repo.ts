@@ -25,3 +25,8 @@ export interface LabelYearRange { firstYear: number | null; lastYear: number | n
 export async function getLabelPublishedYearRange(sql: SqlClient, labelId: string): Promise<LabelYearRange | null> {
   return sql.prepare("SELECT MIN(year) AS firstYear, MAX(year) AS lastYear FROM tape WHERE labelId = ? AND status = 'published' AND year IS NOT NULL").bind(labelId).first<LabelYearRange>();
 }
+
+/** The first 100 labels with published tapes by name, for the advanced search filter. */
+export async function listLabelFilterOptions(sql: SqlClient): Promise<{ slug: string; name: string }[]> {
+  return (await sql.prepare('SELECT slug, name FROM label WHERE publishedTapeCount > 0 ORDER BY nameSort LIMIT 100').all<{ slug: string; name: string }>()).results;
+}

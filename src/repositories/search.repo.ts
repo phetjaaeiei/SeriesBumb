@@ -1,45 +1,66 @@
-import { RELEASE_TYPES } from '../domain/enums';
-import { buildSearchQuery } from '../domain/search';
+import type { SqlClient } from '../db/sql-client';
 import { decodeCursor, encodeCursor } from '../domain/cursor';
+import { buildSearchQuery, type AdvancedSearchFilters } from '../domain/search';
 
-export type AdvancedKind = 'artist' | 'tape' | 'song' | 'label';
-export interface AdvancedSearchFilters {
-  query: string;
-  kind: AdvancedKind;
-  artist: string;
-  label: string;
-  genre: string;
-  yearFrom: number | null;
-  yearTo: number | null;
-  releaseType: string;
-  province: string;
-  cursor: string | null;
+export interface SearchResult {
+  kind: 'tape' | 'song' | 'artist' | 'label' | 'collection';
+  slug: string;
+  title: string;
+}
+
+const searchKinds: SearchResult['kind'][] = ['tape', 'song', 'artist', 'label', 'collection'];
+
+/** Up to 20 public matches per kind for the quick search; [] for an empty query or when the index cannot be read. */
+export async function searchPublic(sql: SqlClient, rawQuery: string): Promise<SearchResult[]> {
+  const query = buildSearchQuery(rawQuery);
+  if (!query.prefix) return [];
+  let indexed: { results: { kind: SearchResult['kind']; refId: string }[] };
+  try {
+    indexed = query.fts
+      ? await sql.prepare(`SELECT kind, refId FROM (
+          SELECT d.kind, d.refId, row_number() OVER (PARTITION BY d.kind ORDER BY c.rank) AS rn
+          FROM (SELECT rowid, rank FROM search_fts WHERE search_fts MATCH ? ORDER BY rank LIMIT 300) c
+          JOIN search_doc d ON d.docId = c.rowid WHERE d.isPublic = 1
+        ) WHERE rn <= 20`).bind(query.fts).all<{ kind: SearchResult['kind']; refId: string }>()
+      : { results: (await Promise.all(searchKinds.map(kind => sql.prepare(`SELECT kind, refId FROM search_doc
+          WHERE isPublic = 1 AND kind = ? AND nameKey >= ? AND nameKey < ?
+          ORDER BY nameKey LIMIT 20`).bind(kind, query.prefix, `${query.prefix}\uffff`)
+          .all<{ kind: SearchResult['kind']; refId: string }>())))
+          .flatMap(page => page.results) };
+  } catch {
+    return [];
+  }
+  const groups = new Map<SearchResult['kind'], string[]>();
+  for (const row of indexed.results) {
+    const ids = groups.get(row.kind) ?? [];
+    ids.push(row.refId);
+    groups.set(row.kind, ids);
+  }
+  const result: SearchResult[] = [];
+  const tables: { kind: SearchResult['kind']; table: string; title: string }[] = [
+    { kind: 'tape', table: 'tape', title: 'title' },
+    { kind: 'song', table: 'song', title: 'title' },
+    { kind: 'artist', table: 'artist', title: 'name' },
+    { kind: 'label', table: 'label', title: 'name' },
+    { kind: 'collection', table: 'collection', title: 'title' },
+  ];
+  try {
+    for (const { kind, table, title } of tables) {
+      const ids = groups.get(kind);
+      if (!ids?.length) continue;
+      const rows = await sql.prepare(`SELECT slug, ${title} AS title FROM ${table} WHERE id IN (${ids.map(() => '?').join(',')}) LIMIT 20`).bind(...ids).all<{ slug: string; title: string }>();
+      result.push(...rows.results.map(row => ({ kind, ...row })));
+    }
+  } catch {
+    return [];
+  }
+  return result;
 }
 
 export interface AdvancedSearchItem { id: string; slug: string; title: string; sortKey: string; detail: string }
 
-const kinds: AdvancedKind[] = ['artist', 'tape', 'song', 'label'];
-const clean = (value: string | null) => (value ?? '').trim().slice(0, 100);
-const year = (value: string | null) => value && /^\d{4}$/u.test(value) && Number(value) >= 1900 && Number(value) <= 2100 ? Number(value) : null;
-
-export function parseAdvancedSearch(params: URLSearchParams): AdvancedSearchFilters {
-  const kind = params.get('kind');
-  const releaseType = params.get('releaseType');
-  return {
-    query: clean(params.get('q')),
-    kind: kinds.includes(kind as AdvancedKind) ? kind as AdvancedKind : 'song',
-    artist: clean(params.get('artist')),
-    label: clean(params.get('label')),
-    genre: clean(params.get('genre')),
-    yearFrom: year(params.get('yearFrom')),
-    yearTo: year(params.get('yearTo')),
-    releaseType: RELEASE_TYPES.includes(releaseType as typeof RELEASE_TYPES[number]) ? releaseType! : '',
-    province: clean(params.get('province')),
-    cursor: clean(params.get('cursor')) || null,
-  };
-}
-
-export async function advancedSearch(db: D1Database, filters: AdvancedSearchFilters): Promise<{ items: AdvancedSearchItem[]; nextCursor: string | null }> {
+/** One page (20) of public records of `filters.kind` matching every filter, by name/title, with the next page's cursor. */
+export async function advancedSearch(sql: SqlClient, filters: AdvancedSearchFilters): Promise<{ items: AdvancedSearchItem[]; nextCursor: string | null }> {
   const { kind } = filters;
   const table = kind === 'artist' ? 'artist' : kind === 'label' ? 'label' : kind === 'tape' ? 'tape' : 'song';
   const title = kind === 'tape' || kind === 'song' ? 'title' : 'name';
@@ -102,7 +123,7 @@ export async function advancedSearch(db: D1Database, filters: AdvancedSearchFilt
   }
   const cursor = decodeCursor('title', filters.cursor);
   if (cursor) { conditions.push(`(e.${sort} > ? OR (e.${sort} = ? AND e.id > ?))`); values.push(String(cursor.key), String(cursor.key), cursor.id); }
-  const rows = (await db.prepare(`SELECT e.id, e.slug, e.${title} AS title, e.${sort} AS sortKey FROM ${table} e WHERE ${conditions.join(' AND ')} ORDER BY e.${sort}, e.id LIMIT 21`).bind(...values).all<AdvancedSearchItem>()).results;
+  const rows = (await sql.prepare(`SELECT e.id, e.slug, e.${title} AS title, e.${sort} AS sortKey FROM ${table} e WHERE ${conditions.join(' AND ')} ORDER BY e.${sort}, e.id LIMIT 21`).bind(...values).all<AdvancedSearchItem>()).results;
   const hasMore = rows.length > 20;
   const items = rows.slice(0, 20).map(item => ({ ...item, detail: '' }));
   const last = items.at(-1);

@@ -23,3 +23,8 @@ export interface GenreSummary { id: string; name: string; publishedTapeCount: nu
 export async function getGenreBySlug(sql: SqlClient, slug: string): Promise<GenreSummary | null> {
   return sql.prepare('SELECT id, name, publishedTapeCount FROM genre WHERE slug = ?').bind(slug).first<GenreSummary>();
 }
+
+/** The first 50 genres in display order, for the advanced search filter. */
+export async function listGenreFilterOptions(sql: SqlClient): Promise<{ slug: string; name: string }[]> {
+  return (await sql.prepare('SELECT slug, name FROM genre ORDER BY position LIMIT 50').all<{ slug: string; name: string }>()).results;
+}

@@ -56,3 +56,11 @@ export async function listSongPublishedTapes(sql: SqlClient, songId: string): Pr
 export async function hasUserLikedSong(sql: SqlClient, userId: string, songId: string): Promise<boolean> {
   return (await sql.prepare('SELECT 1 AS value FROM song_like WHERE userId = ? AND songId = ?').bind(userId, songId).first<{ value: number }>()) !== null;
 }
+
+export interface UserSongEntry { id: string; createdAt: number; slug: string; title: string; publishedTapeCount: number }
+
+/** Up to 49 guest-visible songs the user liked, newest like first, after `cursor` (one more than a page). */
+export async function listUserLikedSongs(sql: SqlClient, userId: string, cursor: { key: CursorKey; id: string } | null): Promise<UserSongEntry[]> {
+  const extra = cursor ? 'AND (e.createdAt, e.songId) < (?, ?)' : '';
+  return (await sql.prepare(`SELECT e.songId AS id, e.createdAt, s.slug, s.title, s.publishedTapeCount FROM song_like e JOIN song s ON s.id = e.songId WHERE e.userId = ? AND (s.isPublic = 1 OR s.publishedTapeCount > 0) ${extra} ORDER BY e.createdAt DESC, e.songId DESC LIMIT 49`).bind(userId, ...(cursor ? [cursor.key, cursor.id] : [])).all<UserSongEntry>()).results;
+}

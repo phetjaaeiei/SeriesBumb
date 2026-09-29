@@ -1,3 +1,4 @@
+import { RELEASE_TYPES } from './enums';
 import { normalizeThai } from './thai';
 
 /** Normalize one catalog field, retaining no separators inside the field. */
@@ -23,56 +24,38 @@ export function buildSearchQuery(input: string): { text: string; fts: string | n
   };
 }
 
-export interface SearchResult {
-  kind: 'tape' | 'song' | 'artist' | 'label' | 'collection';
-  slug: string;
-  title: string;
+export type AdvancedKind = 'artist' | 'tape' | 'song' | 'label';
+export interface AdvancedSearchFilters {
+  query: string;
+  kind: AdvancedKind;
+  artist: string;
+  label: string;
+  genre: string;
+  yearFrom: number | null;
+  yearTo: number | null;
+  releaseType: string;
+  province: string;
+  cursor: string | null;
 }
 
-const searchKinds: SearchResult['kind'][] = ['tape', 'song', 'artist', 'label', 'collection'];
+const kinds: AdvancedKind[] = ['artist', 'tape', 'song', 'label'];
+const clean = (value: string | null) => (value ?? '').trim().slice(0, 100);
+const year = (value: string | null) => value && /^\d{4}$/u.test(value) && Number(value) >= 1900 && Number(value) <= 2100 ? Number(value) : null;
 
-export async function searchPublic(db: D1Database, rawQuery: string): Promise<SearchResult[]> {
-  const query = buildSearchQuery(rawQuery);
-  if (!query.prefix) return [];
-  let indexed: { results: { kind: SearchResult['kind']; refId: string }[] };
-  try {
-    indexed = query.fts
-      ? await db.prepare(`SELECT kind, refId FROM (
-          SELECT d.kind, d.refId, row_number() OVER (PARTITION BY d.kind ORDER BY c.rank) AS rn
-          FROM (SELECT rowid, rank FROM search_fts WHERE search_fts MATCH ? ORDER BY rank LIMIT 300) c
-          JOIN search_doc d ON d.docId = c.rowid WHERE d.isPublic = 1
-        ) WHERE rn <= 20`).bind(query.fts).all<{ kind: SearchResult['kind']; refId: string }>()
-      : { results: (await Promise.all(searchKinds.map(kind => db.prepare(`SELECT kind, refId FROM search_doc
-          WHERE isPublic = 1 AND kind = ? AND nameKey >= ? AND nameKey < ?
-          ORDER BY nameKey LIMIT 20`).bind(kind, query.prefix, `${query.prefix}\uffff`)
-          .all<{ kind: SearchResult['kind']; refId: string }>())))
-          .flatMap(page => page.results) };
-  } catch {
-    return [];
-  }
-  const groups = new Map<SearchResult['kind'], string[]>();
-  for (const row of indexed.results) {
-    const ids = groups.get(row.kind) ?? [];
-    ids.push(row.refId);
-    groups.set(row.kind, ids);
-  }
-  const result: SearchResult[] = [];
-  const tables: { kind: SearchResult['kind']; table: string; title: string }[] = [
-    { kind: 'tape', table: 'tape', title: 'title' },
-    { kind: 'song', table: 'song', title: 'title' },
-    { kind: 'artist', table: 'artist', title: 'name' },
-    { kind: 'label', table: 'label', title: 'name' },
-    { kind: 'collection', table: 'collection', title: 'title' },
-  ];
-  try {
-    for (const { kind, table, title } of tables) {
-      const ids = groups.get(kind);
-      if (!ids?.length) continue;
-      const rows = await db.prepare(`SELECT slug, ${title} AS title FROM ${table} WHERE id IN (${ids.map(() => '?').join(',')}) LIMIT 20`).bind(...ids).all<{ slug: string; title: string }>();
-      result.push(...rows.results.map(row => ({ kind, ...row })));
-    }
-  } catch {
-    return [];
-  }
-  return result;
+/** Bounds and normalizes /search/advanced query parameters; unknown values fall back to no filter. */
+export function parseAdvancedSearch(params: URLSearchParams): AdvancedSearchFilters {
+  const kind = params.get('kind');
+  const releaseType = params.get('releaseType');
+  return {
+    query: clean(params.get('q')),
+    kind: kinds.includes(kind as AdvancedKind) ? kind as AdvancedKind : 'song',
+    artist: clean(params.get('artist')),
+    label: clean(params.get('label')),
+    genre: clean(params.get('genre')),
+    yearFrom: year(params.get('yearFrom')),
+    yearTo: year(params.get('yearTo')),
+    releaseType: RELEASE_TYPES.includes(releaseType as typeof RELEASE_TYPES[number]) ? releaseType! : '',
+    province: clean(params.get('province')),
+    cursor: clean(params.get('cursor')) || null,
+  };
 }

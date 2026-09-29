@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createArtist, createLabel, createSong, createTapeDraft, saveArtist, saveLabel, saveTape } from '../../src/services/catalog';
-import { searchPublic } from '../../src/domain/search';
+import { searchPublic } from '../../src/repositories/search.repo';
 import { enqueueFullReindex } from '../../src/services/search-admin';
 
 describe('dependent search indexing', () => {

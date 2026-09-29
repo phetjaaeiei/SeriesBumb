@@ -1,4 +1,4 @@
-import { decodeCursor, encodeCursor, type CatalogSort } from '../domain/cursor';
+import { decodeCursor, encodeCursor, type CatalogSort, type CursorKey } from '../domain/cursor';
 import type { ReleaseType } from '../domain/enums';
 import type { SqlClient } from '../db/sql-client';
 
@@ -153,4 +153,27 @@ export interface TapeViewerEngagement { liked: number; owned: number }
 /** Whether this user liked and owns the tape (0/1 flags), or null when the query returns no row. */
 export async function getTapeViewerEngagement(sql: SqlClient, userId: string, tapeId: string): Promise<TapeViewerEngagement | null> {
   return sql.prepare('SELECT EXISTS(SELECT 1 FROM tape_like WHERE userId = ? AND tapeId = ?) AS liked, EXISTS(SELECT 1 FROM tape_owner WHERE userId = ? AND tapeId = ?) AS owned').bind(userId, tapeId, userId, tapeId).first<TapeViewerEngagement>();
+}
+
+/** The highest rowid in `tape` (drafts included), or null on an empty table. */
+export async function getMaxTapeRowid(sql: SqlClient): Promise<{ value: number | null } | null> {
+  return sql.prepare('SELECT max(rowid) AS value FROM tape').first<{ value: number | null }>();
+}
+
+/** The first published tape at or after `rowid`, in rowid order. */
+export async function getPublishedTapeSlugFromRowid(sql: SqlClient, rowid: number): Promise<{ slug: string } | null> {
+  return sql.prepare("SELECT slug FROM tape WHERE status = 'published' AND rowid >= ? ORDER BY rowid LIMIT 1").bind(rowid).first<{ slug: string }>();
+}
+
+/** The published tape with the lowest rowid. */
+export async function getFirstPublishedTapeSlug(sql: SqlClient): Promise<{ slug: string } | null> {
+  return sql.prepare("SELECT slug FROM tape WHERE status = 'published' ORDER BY rowid LIMIT 1").first<{ slug: string }>();
+}
+
+export interface UserTapeEntry { id: string; createdAt: number; slug: string; title: string; year: number | null; coverThumbKey: string | null }
+
+/** Up to 49 published tapes the user liked (`tape_like`) or owns (`tape_owner`), newest first, after `cursor` (one more than a page). */
+export async function listUserTapeEntries(sql: SqlClient, table: 'tape_like' | 'tape_owner', userId: string, cursor: { key: CursorKey; id: string } | null): Promise<UserTapeEntry[]> {
+  const extra = cursor ? 'AND (e.createdAt, e.tapeId) < (?, ?)' : '';
+  return (await sql.prepare(`SELECT e.tapeId AS id, e.createdAt, t.slug, t.title, t.year, t.coverThumbKey FROM ${table} e JOIN tape t ON t.id = e.tapeId WHERE e.userId = ? AND t.status = 'published' ${extra} ORDER BY e.createdAt DESC, e.tapeId DESC LIMIT 49`).bind(userId, ...(cursor ? [cursor.key, cursor.id] : [])).all<UserTapeEntry>()).results;
 }

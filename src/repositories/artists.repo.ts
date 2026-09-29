@@ -137,3 +137,8 @@ export async function listArtistReelLinks(sql: SqlClient, artistId: string): Pro
     WHERE ta.artistId = ? AND ta.isPublished = 1 AND t.status = 'published' AND t.reelUrl IS NOT NULL
     ORDER BY t.yearSort, t.title LIMIT 30`).bind(artistId).all<ArtistReelLinkRow>()).results;
 }
+
+/** The first 100 artists with a public song by name, for the advanced search filter. */
+export async function listArtistFilterOptions(sql: SqlClient): Promise<{ slug: string; name: string }[]> {
+  return (await sql.prepare('SELECT a.slug, a.name FROM artist a WHERE EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1) ORDER BY a.nameSort LIMIT 100').all<{ slug: string; name: string }>()).results;
+}
