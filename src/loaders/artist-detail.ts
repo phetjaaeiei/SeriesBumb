@@ -7,8 +7,8 @@ import {
   type ArtistAppearanceRow, type ArtistDetail, type ArtistMemberRow, type ArtistReelLinkRow, type ArtistSongRow, type SimilarArtistRow,
 } from '../repositories/artists.repo';
 import { getTapePage, type TapeListItem } from '../repositories/tapes.repo';
-import { publicArtistRelations } from '../services/catalog-relations';
-import { listCatalogSources, type CatalogSource } from '../services/catalog-sources';
+import { publicArtistRelations } from '../repositories/relations.repo';
+import { listCatalogSources, type CatalogSource } from '../repositories/sources.repo';
 
 export type { ArtistDetail, ArtistMemberRow, ArtistSongRow };
 

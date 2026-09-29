@@ -1,6 +1,6 @@
 import type { SqlClient } from '../../db/sql-client';
 import { getCatalogEntityTitle } from '../../repositories/admin.repo';
-import { listCatalogSources, type CatalogSource, type SourceKind } from '../../services/catalog-sources';
+import { listCatalogSources, type CatalogSource, type SourceKind } from '../../repositories/sources.repo';
 
 export type { CatalogSource, SourceKind };
 

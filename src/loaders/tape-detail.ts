@@ -2,11 +2,11 @@ import type { SqlClient } from '../db/sql-client';
 import type { SessionUser } from '../domain/types';
 import { listPublishedCollectionsForTape, type CollectionLink } from '../repositories/collections.repo';
 import { listPublishedTapeReviews, type PublishedReview } from '../repositories/community.repo';
+import { creditsForTarget } from '../repositories/credits.repo';
+import { publicTapeEditions } from '../repositories/relations.repo';
+import { listCatalogSources, type CatalogSource } from '../repositories/sources.repo';
 import { getTapeBySlug, getTapeViewerEngagement, listRelatedTapesByArtist, listRelatedTapesByLabel, type RelatedTape, type TapeDetail, type TapeViewerEngagement } from '../repositories/tapes.repo';
-import { publicTapeEditions } from '../services/catalog-relations';
-import { listCatalogSources, type CatalogSource } from '../services/catalog-sources';
 import { listComments } from '../services/comments';
-import { creditsForTarget } from '../services/person-credits';
 
 export type { TapeDetail };
 

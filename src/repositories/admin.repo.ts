@@ -48,3 +48,10 @@ export type CatalogSlugTable = 'artist' | 'label' | 'genre' | 'song' | 'tape' | 
 export async function getCatalogIdBySlug(sql: SqlClient, table: CatalogSlugTable, slug: string): Promise<{ id: string } | null> {
   return sql.prepare(`SELECT id FROM ${table} WHERE slug = ?`).bind(slug).first<{ id: string }>();
 }
+
+export type RecordIdTable = 'artist' | 'tape' | 'song' | 'person';
+
+/** `{ id }` when `table` has a record with this id, or null; the existence check write paths run before linking to it. */
+export async function getRecordId(sql: SqlClient, table: RecordIdTable, id: string): Promise<{ id: string } | null> {
+  return sql.prepare(`SELECT id FROM ${table} WHERE id = ?`).bind(id).first<{ id: string }>();
+}

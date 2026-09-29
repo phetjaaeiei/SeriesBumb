@@ -1,9 +1,9 @@
 import type { SqlClient } from '../db/sql-client';
 import type { SessionUser } from '../domain/types';
+import { creditsForTarget } from '../repositories/credits.repo';
 import { getSongBySlug, hasUserLikedSong, listSongArtists, listSongPublishedTapes, type SongArtist, type SongDetail, type SongTapeRow } from '../repositories/songs.repo';
-import { listCatalogSources, type CatalogSource } from '../services/catalog-sources';
+import { listCatalogSources, type CatalogSource } from '../repositories/sources.repo';
 import { listComments } from '../services/comments';
-import { creditsForTarget } from '../services/person-credits';
 
 export type { SongArtist, SongDetail, SongTapeRow };
 

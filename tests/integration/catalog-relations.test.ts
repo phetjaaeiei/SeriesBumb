@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { addArtistRelation, addTapeEdition, publicArtistRelations, publicTapeEditions } from '../../src/services/catalog-relations';
+import { publicArtistRelations, publicTapeEditions } from '../../src/repositories/relations.repo';
+import { addArtistRelation, addTapeEdition } from '../../src/services/catalog-relations';
 import { addCatalogSource } from '../../src/services/catalog-sources';
 
 describe('sourced catalog relations', () => {

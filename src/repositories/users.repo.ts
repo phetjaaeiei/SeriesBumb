@@ -18,3 +18,28 @@ export async function listAdminUsers(sql: SqlClient, query: string, cursor: { ke
   const bind = [ ...(query ? [`%${query}%`, `%${query}%`] : []), ...(cursor ? [cursor.key, cursor.id] : []) ];
   return (await sql.prepare(`SELECT id, name, email, role, commentBanned, createdAt FROM user WHERE 1 = 1 ${where} ${page} ORDER BY createdAt DESC, id DESC LIMIT 51`).bind(...bind).all<AdminUserListRow>()).results;
 }
+
+/** The user's comment ban flag (0 or 1), or null when the user does not exist. */
+export async function getUserCommentBanned(sql: SqlClient, userId: string): Promise<{ commentBanned: number } | null> {
+  return sql.prepare('SELECT commentBanned FROM user WHERE id = ?').bind(userId).first<{ commentBanned: number }>();
+}
+
+/** The user's email and role, for changing that role, or null. */
+export async function getUserForRoleChange(sql: SqlClient, userId: string): Promise<{ id: string; email: string; role: 'member' | 'admin' } | null> {
+  return sql.prepare('SELECT id, email, role FROM user WHERE id = ?').bind(userId).first<{ id: string; email: string; role: 'member' | 'admin' }>();
+}
+
+/** Sets the user's role; becoming an admin also lifts a comment ban. */
+export async function updateUserRole(sql: SqlClient, userId: string, role: 'member' | 'admin', now: number): Promise<void> {
+  await sql.prepare('UPDATE user SET role = ?, commentBanned = CASE WHEN ? = ? THEN 0 ELSE commentBanned END, updatedAt = ? WHERE id = ?').bind(role, role, 'admin', now, userId).run();
+}
+
+/** The user's role, for banning them from comments, or null. */
+export async function getUserRole(sql: SqlClient, userId: string): Promise<{ id: string; role: string } | null> {
+  return sql.prepare('SELECT id, role FROM user WHERE id = ?').bind(userId).first<{ id: string; role: string }>();
+}
+
+/** Sets the user's comment ban flag (0 or 1). */
+export async function setUserCommentBanned(sql: SqlClient, userId: string, banned: number, now: number): Promise<void> {
+  await sql.prepare('UPDATE user SET commentBanned = ?, updatedAt = ? WHERE id = ?').bind(banned, now, userId).run();
+}

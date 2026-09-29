@@ -30,3 +30,12 @@ export interface PersonAdminRow { id: string; slug: string; name: string }
 export async function listPeopleForAdmin(sql: SqlClient): Promise<PersonAdminRow[]> {
   return (await sql.prepare('SELECT id, slug, name FROM person ORDER BY name LIMIT 100').all<PersonAdminRow>()).results;
 }
+
+/** The person already using `slug`, or null. */
+export async function getPersonIdBySlug(sql: SqlClient, slug: string): Promise<{ id: string } | null> {
+  return sql.prepare('SELECT id FROM person WHERE slug = ?').bind(slug).first<{ id: string }>();
+}
+
+export async function insertPerson(sql: SqlClient, person: { id: string; slug: string; name: string; now: number }): Promise<void> {
+  await sql.prepare('INSERT INTO person (id, slug, name, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)').bind(person.id, person.slug, person.name, person.now, person.now).run();
+}

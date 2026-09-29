@@ -234,3 +234,13 @@ export async function countArtistCredits(sql: SqlClient, id: string): Promise<{ 
 export function deleteArtistStmt(sql: SqlClient, id: string): D1PreparedStatement {
   return sql.prepare('DELETE FROM artist WHERE id = ?').bind(id);
 }
+
+/** A band member row and the artist it belongs to, or null. */
+export async function getArtistMemberArtist(sql: SqlClient, memberId: string): Promise<{ id: string; artistId: string } | null> {
+  return sql.prepare('SELECT id, artistId FROM artist_member WHERE id = ?').bind(memberId).first<{ id: string; artistId: string }>();
+}
+
+/** Links the member to a person and the source that proves it (both null to unlink). */
+export async function setArtistMemberPerson(sql: SqlClient, memberId: string, personId: string | null, sourceId: string | null): Promise<void> {
+  await sql.prepare('UPDATE artist_member SET personId = ?, sourceId = ? WHERE id = ?').bind(personId, sourceId, memberId).run();
+}

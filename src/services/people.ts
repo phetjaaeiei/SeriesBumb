@@ -1,30 +1,35 @@
+import type { SqlClient } from '../db/sql-client';
 import { slugCandidates } from '../domain/slug';
+import { getRecordId } from '../repositories/admin.repo';
+import { getArtistMemberArtist, setArtistMemberPerson } from '../repositories/artists.repo';
+import { getPersonIdBySlug, insertPerson } from '../repositories/people.repo';
+import { getArtistCatalogSourceId } from '../repositories/sources.repo';
 
-export async function createPerson(db: D1Database, rawName: string) {
+export async function createPerson(db: SqlClient, rawName: string) {
   const name = rawName.trim().normalize('NFC');
   if (!name || [...name].length > 100) throw new Error('ชื่อบุคคลต้องมี 1–100 ตัวอักษร');
   const candidates = slugCandidates(name);
   if (!candidates.length) throw new Error('ชื่อบุคคลไม่ถูกต้อง');
   const slug = await (async () => {
     for (const candidate of candidates) {
-      if (!await db.prepare('SELECT id FROM person WHERE slug = ?').bind(candidate).first()) return candidate;
+      if (!await getPersonIdBySlug(db, candidate)) return candidate;
     }
     throw new Error('มีชื่อบุคคลนี้หลายรายการ กรุณาตรวจรายการเดิม');
   })();
   const id = crypto.randomUUID();
   const now = Date.now();
-  await db.prepare('INSERT INTO person (id, slug, name, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)').bind(id, slug, name, now, now).run();
+  await insertPerson(db, { id, slug, name, now });
   return { id, slug, name };
 }
 
-export async function linkArtistMember(db: D1Database, memberId: string, personId: string | null, sourceId: string | null) {
-  const member = await db.prepare('SELECT id, artistId FROM artist_member WHERE id = ?').bind(memberId).first<{ id: string; artistId: string }>();
+export async function linkArtistMember(db: SqlClient, memberId: string, personId: string | null, sourceId: string | null) {
+  const member = await getArtistMemberArtist(db, memberId);
   if (!member) throw new Error('ไม่พบสมาชิกวง');
   if (personId) {
-    const person = await db.prepare('SELECT id FROM person WHERE id = ?').bind(personId).first();
-    const source = sourceId ? await db.prepare("SELECT id FROM catalog_source WHERE id = ? AND entityKind = 'artist' AND entityId = ?").bind(sourceId, member.artistId).first() : null;
+    const person = await getRecordId(db, 'person', personId);
+    const source = sourceId ? await getArtistCatalogSourceId(db, sourceId, member.artistId) : null;
     if (!person || !source) throw new Error('ต้องเลือกบุคคลและแหล่งอ้างอิงของศิลปินนี้');
   }
-  await db.prepare('UPDATE artist_member SET personId = ?, sourceId = ? WHERE id = ?').bind(personId, personId ? sourceId : null, memberId).run();
+  await setArtistMemberPerson(db, memberId, personId, personId ? sourceId : null);
   return { memberId, personId };
 }

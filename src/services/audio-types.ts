@@ -1,22 +1,7 @@
 import { AppError, appErrorCodeForStatus } from '../errors/app-error';
-/** Private audio files never participate in the public catalog/search index. */
-export type AudioProvider = 'supabase' | 'firebase' | 'drive';
-export type AudioStatus = 'pending' | 'uploading' | 'ready' | 'failed' | 'deleting';
+import type { AudioProvider } from '../domain/audio';
 
-export interface AudioFile {
-  id: string;
-  title: string;
-  filename: string;
-  provider: AudioProvider;
-  size: number;
-  contentType: string;
-  createdAt: number;
-  note: string | null;
-  songId: string | null;
-  tapeId: string | null;
-  driveUrl: string | null;
-  status: AudioStatus;
-}
+export type { AudioFile, AudioProvider, AudioStatus } from '../domain/audio';
 
 export interface AudioUsage {
   provider: AudioProvider;

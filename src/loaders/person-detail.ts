@@ -1,7 +1,7 @@
 import type { SqlClient } from '../db/sql-client';
 import type { SessionUser } from '../domain/types';
 import { getPersonBySlug, listPublicPersonMemberships, type PersonMembershipRow, type PersonSummary } from '../repositories/people.repo';
-import { publicCreditsForPerson } from '../services/person-credits';
+import { publicCreditsForPerson } from '../repositories/credits.repo';
 
 export interface PersonDetailModel {
   person: PersonSummary;

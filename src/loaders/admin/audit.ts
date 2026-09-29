@@ -1,6 +1,6 @@
 import type { SqlClient } from '../../db/sql-client';
 import { decodeCursor, encodeCursor } from '../../domain/cursor';
-import { listAudit, type AuditRow } from '../../services/audit';
+import { listAudit, type AuditRow } from '../../repositories/audit.repo';
 
 export type { AuditRow };
 

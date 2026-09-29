@@ -1,7 +1,7 @@
 /** @jsxRuntime classic */
 import { actions } from 'astro:actions';
 import React, { useState } from 'react';
-import type { CatalogSource, SourceKind } from '../../services/catalog-sources';
+import type { CatalogSource, SourceKind } from '../../loaders/admin/sources';
 
 export default function CatalogSources({ entityKind, entityId, initial }: { entityKind: SourceKind; entityId: string; initial: CatalogSource[] }) {
   const [rows, setRows] = useState(initial);

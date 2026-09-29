@@ -1,8 +1,8 @@
 import type { SqlClient } from '../../db/sql-client';
 import { getCreditTargetTitle } from '../../repositories/admin.repo';
+import { creditsForTarget } from '../../repositories/credits.repo';
 import { listPersonChoices, type PersonChoice } from '../../repositories/people.repo';
 import { listSourceChoices, type SourceChoice } from '../../repositories/sources.repo';
-import { creditsForTarget } from '../../services/person-credits';
 
 export type { PersonChoice, SourceChoice };
 
