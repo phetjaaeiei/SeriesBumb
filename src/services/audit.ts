@@ -1,4 +1,5 @@
 // Admin accountability without extra personal data: who, what, which record, outcome, when.
+import type { SqlClient } from '../db/sql-client';
 
 const UUID_IN_PATH = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu;
 const TARGET_KEYS = ['id', 'tapeId', 'songId', 'userId', 'artistId', 'memberId', 'targetId', 'personId', 'imageId', 'entityId', 'relatedArtistId'] as const;
@@ -86,7 +87,7 @@ export async function withAudit<R>(
 
 export interface AuditRow extends AuditEntry { id: string; createdAt: number }
 
-export async function listAudit(db: D1Database, cursor: { createdAt: number; id: string } | null, limit = 50): Promise<{ rows: AuditRow[]; next: { createdAt: number; id: string } | null }> {
+export async function listAudit(db: SqlClient, cursor: { createdAt: number; id: string } | null, limit = 50): Promise<{ rows: AuditRow[]; next: { createdAt: number; id: string } | null }> {
   const statement = cursor
     ? db.prepare('SELECT id, actorUserId, actorEmail, action, targetId, status, createdAt FROM audit_log WHERE (createdAt, id) < (?, ?) ORDER BY createdAt DESC, id DESC LIMIT ?').bind(cursor.createdAt, cursor.id, limit + 1)
     : db.prepare('SELECT id, actorUserId, actorEmail, action, targetId, status, createdAt FROM audit_log ORDER BY createdAt DESC, id DESC LIMIT ?').bind(limit + 1);

@@ -40,3 +40,10 @@ export async function listPublishedCollectionItems(sql: SqlClient, collectionId:
 export async function listPublishedCollectionsForTape(sql: SqlClient, tapeId: string): Promise<CollectionLink[]> {
   return (await sql.prepare(`SELECT c.slug, c.title FROM collection_item ci JOIN collection c ON c.id = ci.collectionId WHERE ci.tapeId = ? AND c.status = 'published' ORDER BY c.position`).bind(tapeId).all<CollectionLink>()).results;
 }
+
+export interface CollectionItemEditRow { tapeId: string; note: string | null }
+
+/** The collection's tapes in order (drafts included), as the admin editor edits them. */
+export async function listCollectionItemsForEdit(sql: SqlClient, collectionId: string): Promise<CollectionItemEditRow[]> {
+  return (await sql.prepare('SELECT tapeId, note FROM collection_item WHERE collectionId = ? ORDER BY position').bind(collectionId).all<CollectionItemEditRow>()).results;
+}

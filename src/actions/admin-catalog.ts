@@ -14,6 +14,7 @@ import { createPerson, linkArtistMember } from '../services/people';
 import { addArtistRelation, addTapeEdition, deleteArtistRelation, deleteTapeEdition } from '../services/catalog-relations';
 import { addPersonCredit, deletePersonCredit } from '../services/person-credits';
 import { runCatalog } from './run';
+import { lookupAdminChoices } from '../repositories/admin.repo';
 
 export const adminCatalog = {
   credits: {
@@ -41,10 +42,8 @@ export const adminCatalog = {
   lookup: defineAdminAction({
     input: z.object({ kind: z.enum(['artists', 'labels', 'genres', 'songs', 'tapes']), query: z.string().trim().min(2).max(80) }),
     handler: async ({ kind, query }) => {
-      const table = { artists: 'artist', labels: 'label', genres: 'genre', songs: 'song', tapes: 'tape' }[kind];
-      const column = kind === 'songs' || kind === 'tapes' ? 'title' : 'name';
       const term = `%${normalizeThai(query).replace(/[\\%_]/gu, '\\$&')}%`;
-      return (await db().prepare(`SELECT id, ${column} AS label FROM ${table} WHERE lower(${column}) LIKE ? ESCAPE '\\' ORDER BY ${column} LIMIT 20`).bind(term).all<{ id: string; label: string }>()).results;
+      return lookupAdminChoices(db(), kind, term);
     },
   }),
   artists: {

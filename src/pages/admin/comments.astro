@@ -1,26 +1,10 @@
 ---
 import { db } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
-import { AdminCommentsTable, type AdminCommentRow } from '../../components/admin/CommunityTables';
-import { decodeCursor, encodeCursor } from '../../domain/cursor';
+import { AdminCommentsTable } from '../../components/admin/CommunityTables';
+import { loadAdminComments } from '../../loaders/admin/comments';
 
-const kind = Astro.url.searchParams.get('kind') === 'tape' ? 'tape' : Astro.url.searchParams.get('kind') === 'song' ? 'song' : 'all';
-const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
-const kindWhere = kind === 'tape' ? 'AND c.tapeId IS NOT NULL' : kind === 'song' ? 'AND c.songId IS NOT NULL' : '';
-const page = cursor ? 'AND (c.createdAt, c.id) < (?, ?)' : '';
-type QueryRow = Omit<AdminCommentRow, 'canRestore' | 'targetUrl' | 'targetTitle'> & { tapeSlug: string | null; tapeTitle: string | null; songSlug: string | null; songTitle: string | null; deletedByAdmin: number };
-const all = (await db().prepare(`SELECT c.id, c.body, c.createdAt, c.deletedAt, c.deletedByAdmin, u.name AS authorName, u.email AS authorEmail,
-  t.slug AS tapeSlug, t.title AS tapeTitle, s.slug AS songSlug, s.title AS songTitle
-  FROM comment c JOIN user u ON u.id = c.userId LEFT JOIN tape t ON t.id = c.tapeId LEFT JOIN song s ON s.id = c.songId
-  WHERE 1 = 1 ${kindWhere} ${page}
-  ORDER BY c.createdAt DESC, c.id DESC LIMIT 51`).bind(...(cursor ? [cursor.key, cursor.id] : [])).all<QueryRow>()).results;
-const rows: AdminCommentRow[] = all.slice(0, 50).map(row => ({
-  id: row.id, body: row.body, createdAt: row.createdAt, deletedAt: row.deletedAt,
-  authorName: row.authorName, authorEmail: row.authorEmail, canRestore: Boolean(row.deletedByAdmin),
-  targetTitle: row.tapeTitle || row.songTitle, targetUrl: row.tapeSlug ? `/tapes/${encodeURIComponent(row.tapeSlug)}` : row.songSlug ? `/songs/${encodeURIComponent(row.songSlug)}` : null,
-}));
-const last = rows.at(-1);
-const next = all.length > 50 && last ? encodeCursor('new', last.createdAt, last.id) : null;
+const { kind, rows, next } = await loadAdminComments(db(), Astro.url.searchParams);
 ---
 <AdminLayout title="จัดการคอมเมนต์">
   <h1>จัดการคอมเมนต์</h1><p class="page-lede">ตรวจและกู้คืนคอมเมนต์ในคลัง</p>

@@ -142,3 +142,22 @@ export async function listArtistReelLinks(sql: SqlClient, artistId: string): Pro
 export async function listArtistFilterOptions(sql: SqlClient): Promise<{ slug: string; name: string }[]> {
   return (await sql.prepare('SELECT a.slug, a.name FROM artist a WHERE EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1) ORDER BY a.nameSort LIMIT 100').all<{ slug: string; name: string }>()).results;
 }
+
+/** An artist's id and name by id, or null. */
+export async function getArtistNameById(sql: SqlClient, id: string): Promise<{ id: string; name: string } | null> {
+  return sql.prepare('SELECT id, name FROM artist WHERE id = ?').bind(id).first<{ id: string; name: string }>();
+}
+
+export interface ArtistMemberLinkRow { id: string; name: string; role: string; personId: string | null; sourceId: string | null }
+
+/** The artist's first 40 members in order, with the person and source each one is linked to. */
+export async function listArtistMembersForPersonLinks(sql: SqlClient, artistId: string): Promise<ArtistMemberLinkRow[]> {
+  return (await sql.prepare('SELECT id, name, role, personId, sourceId FROM artist_member WHERE artistId = ? ORDER BY position LIMIT 40').bind(artistId).all<ArtistMemberLinkRow>()).results;
+}
+
+export interface ArtistMemberEditRow { id: string; name: string; role: string; years: string | null; isCurrent: number }
+
+/** Every member of the artist in order, as the admin editor edits them. */
+export async function listArtistMembersForEdit(sql: SqlClient, artistId: string): Promise<ArtistMemberEditRow[]> {
+  return (await sql.prepare('SELECT id, name, role, years, isCurrent FROM artist_member WHERE artistId = ? ORDER BY position').bind(artistId).all<ArtistMemberEditRow>()).results;
+}

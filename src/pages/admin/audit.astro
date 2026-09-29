@@ -1,12 +1,9 @@
 ---
 import { db } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
-import { decodeCursor, encodeCursor } from '../../domain/cursor';
-import { listAudit } from '../../services/audit';
+import { loadAdminAudit } from '../../loaders/admin/audit';
 
-const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
-const { rows, next } = await listAudit(db(), cursor ? { createdAt: Number(cursor.key), id: cursor.id } : null);
-const nextCursor = next ? encodeCursor('new', next.createdAt, next.id) : null;
+const { rows, nextCursor } = await loadAdminAudit(db(), Astro.url.searchParams);
 const time = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Asia/Bangkok' });
 ---
 <AdminLayout title="บันทึกการทำงานของแอดมิน">

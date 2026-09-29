@@ -64,3 +64,8 @@ export async function listUserLikedSongs(sql: SqlClient, userId: string, cursor:
   const extra = cursor ? 'AND (e.createdAt, e.songId) < (?, ?)' : '';
   return (await sql.prepare(`SELECT e.songId AS id, e.createdAt, s.slug, s.title, s.publishedTapeCount FROM song_like e JOIN song s ON s.id = e.songId WHERE e.userId = ? AND (s.isPublic = 1 OR s.publishedTapeCount > 0) ${extra} ORDER BY e.createdAt DESC, e.songId DESC LIMIT 49`).bind(userId, ...(cursor ? [cursor.key, cursor.id] : [])).all<UserSongEntry>()).results;
 }
+
+/** The song's artist ids in credit order. */
+export async function listSongArtistIds(sql: SqlClient, songId: string): Promise<string[]> {
+  return (await sql.prepare('SELECT artistId AS id FROM song_artist WHERE songId = ? ORDER BY position').bind(songId).all<{ id: string }>()).results.map(row => row.id);
+}

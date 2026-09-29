@@ -129,3 +129,9 @@ export async function advancedSearch(sql: SqlClient, filters: AdvancedSearchFilt
   const last = items.at(-1);
   return { items, nextCursor: hasMore && last ? encodeCursor('title', last.sortKey, last.id) : null };
 }
+
+/** Records waiting in the search reindex queue. */
+export async function countSearchQueue(sql: SqlClient): Promise<number> {
+  const row = await sql.prepare('SELECT COUNT(*) AS count FROM search_queue').first<{ count: number }>();
+  return row?.count ?? 0;
+}

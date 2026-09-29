@@ -1,21 +1,10 @@
 ---
 import { db, config } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
-import { AdminUsersTable, type AdminUserRow } from '../../components/admin/CommunityTables';
-import { canManageRoles } from '../../services/admin-community';
-import { decodeCursor, encodeCursor } from '../../domain/cursor';
+import { AdminUsersTable } from '../../components/admin/CommunityTables';
+import { loadAdminUsers } from '../../loaders/admin/users';
 
-const query = (Astro.url.searchParams.get('q') || '').trim().slice(0, 100);
-const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
-const where = query ? 'AND (name LIKE ? OR email LIKE ?)' : '';
-const page = cursor ? 'AND (createdAt, id) < (?, ?)' : '';
-const bind = [ ...(query ? [`%${query}%`, `%${query}%`] : []), ...(cursor ? [cursor.key, cursor.id] : []) ];
-const all = (await db().prepare(`SELECT id, name, email, role, commentBanned, createdAt FROM user WHERE 1 = 1 ${where} ${page} ORDER BY createdAt DESC, id DESC LIMIT 51`).bind(...bind).all<Omit<AdminUserRow, 'protectedAdmin' | 'self'>>()).results;
-const bootstrap = config().auth.adminEmails;
-const rows: AdminUserRow[] = all.slice(0, 50).map(row => ({ ...row, protectedAdmin: bootstrap.has(row.email.toLowerCase()), self: row.id === Astro.locals.user?.id }));
-const manageRoles = canManageRoles(Astro.locals.user?.email ?? '', config().auth.adminEmails);
-const last = rows.at(-1);
-const next = all.length > 50 && last ? encodeCursor('new', last.createdAt, last.id) : null;
+const { query, rows, next, canManageRoles: manageRoles } = await loadAdminUsers(db(), Astro.url.searchParams, Astro.locals.user, config().auth.adminEmails);
 ---
 <AdminLayout title="จัดการผู้ใช้">
   <h1>จัดการผู้ใช้</h1><p class="page-lede">แต่งตั้งแอดมินและจัดการสิทธิ์คอมเมนต์</p>

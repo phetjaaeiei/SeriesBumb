@@ -177,3 +177,34 @@ export async function listUserTapeEntries(sql: SqlClient, table: 'tape_like' | '
   const extra = cursor ? 'AND (e.createdAt, e.tapeId) < (?, ?)' : '';
   return (await sql.prepare(`SELECT e.tapeId AS id, e.createdAt, t.slug, t.title, t.year, t.coverThumbKey FROM ${table} e JOIN tape t ON t.id = e.tapeId WHERE e.userId = ? AND t.status = 'published' ${extra} ORDER BY e.createdAt DESC, e.tapeId DESC LIMIT 49`).bind(userId, ...(cursor ? [cursor.key, cursor.id] : [])).all<UserTapeEntry>()).results;
 }
+
+/** The tape's artist ids in credit order. */
+export async function listTapeArtistIds(sql: SqlClient, tapeId: string): Promise<string[]> {
+  return (await sql.prepare('SELECT artistId AS id FROM tape_artist WHERE tapeId = ? ORDER BY position').bind(tapeId).all<{ id: string }>()).results.map(row => row.id);
+}
+
+/** The tape's genre ids. */
+export async function listTapeGenreIds(sql: SqlClient, tapeId: string): Promise<string[]> {
+  return (await sql.prepare('SELECT genreId AS id FROM tape_genre WHERE tapeId = ?').bind(tapeId).all<{ id: string }>()).results.map(row => row.id);
+}
+
+export interface TapeTrackEditRow { songId: string; side: 'A' | 'B' | 'C' | 'D'; position: number; durationSec: number | null; note: string | null }
+
+/** The tape's tracks by side and position, as the admin editor edits them. */
+export async function listTapeTracksForEdit(sql: SqlClient, tapeId: string): Promise<TapeTrackEditRow[]> {
+  return (await sql.prepare('SELECT songId, side, position, durationSec, note FROM tape_track WHERE tapeId = ? ORDER BY side, position').bind(tapeId).all<TapeTrackEditRow>()).results;
+}
+
+export interface TapeImageEditRow { id: string; kind: 'front' | 'back' | 'inside' | 'cassette' | 'other'; fullKey: string; thumbKey: string; position: number }
+
+/** The tape's images in display order, as the admin editor edits them. */
+export async function listTapeImagesForEdit(sql: SqlClient, tapeId: string): Promise<TapeImageEditRow[]> {
+  return (await sql.prepare('SELECT id, kind, fullKey, thumbKey, position FROM tape_image WHERE tapeId = ? ORDER BY position').bind(tapeId).all<TapeImageEditRow>()).results;
+}
+
+export interface DraftTapeRow { id: string; title: string; updatedAt: number }
+
+/** The ten draft tapes that have waited longest since their last edit. */
+export async function listOldestDraftTapes(sql: SqlClient): Promise<DraftTapeRow[]> {
+  return (await sql.prepare("SELECT id, title, updatedAt FROM tape WHERE status = 'draft' ORDER BY updatedAt ASC, id ASC LIMIT 10").all<DraftTapeRow>()).results;
+}

@@ -2,23 +2,15 @@
 import { db } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import CatalogRelations from '../../components/admin/CatalogRelations';
-const kind = Astro.url.searchParams.get('kind');
-const id = Astro.url.searchParams.get('id') ?? '';
-if ((kind !== 'artist' && kind !== 'tape') || !/^[0-9a-f-]{36}$/iu.test(id)) return Astro.rewrite('/404');
-const table = kind === 'artist' ? 'artist' : 'tape';
-const column = kind === 'artist' ? 'name' : 'title';
-const current = await db().prepare(`SELECT ${column} AS title FROM ${table} WHERE id = ?`).bind(id).first<{ title: string }>();
-if (!current) return Astro.rewrite('/404');
-const [choices, sources, rows] = await Promise.all([
-  db().prepare(`SELECT id, ${column} AS title FROM ${table} ORDER BY ${kind === 'artist' ? 'nameSort' : 'titleSort'} LIMIT 100`).all<{ id: string; title: string }>(),
-  db().prepare('SELECT id, title FROM catalog_source WHERE entityKind = ? AND entityId = ? ORDER BY createdAt DESC LIMIT 50').bind(kind, id).all<{ id: string; title: string }>(),
-  kind === 'artist' ? db().prepare('SELECT ar.id, a.name AS targetTitle, ar.relationType FROM artist_relation ar JOIN artist a ON a.id = ar.relatedArtistId WHERE ar.artistId = ? ORDER BY a.nameSort LIMIT 50').bind(id).all<{ id: string; targetTitle: string; relationType: string }>() : db().prepare('SELECT te.id, t.title AS targetTitle, te.format, te.editionYear FROM tape_edition te JOIN tape t ON t.id = te.relatedTapeId WHERE te.tapeId = ? ORDER BY t.titleSort LIMIT 50').bind(id).all<{ id: string; targetTitle: string; format: string; editionYear: number | null }>(),
-]);
+import { loadAdminRelations } from '../../loaders/admin/relations';
+const model = await loadAdminRelations(db(), Astro.url.searchParams);
+if (!model) return Astro.rewrite('/404');
+const { kind, id, title, choices, sources, rows } = model;
 ---
-<AdminLayout title={`ความสัมพันธ์ ${current.title}`}>
-  <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><a href={`/admin/${kind === 'artist' ? 'artists' : 'tapes'}/${id}`}>{current.title}</a><span>/</span>ความสัมพันธ์</nav>
-  <h1>ความสัมพันธ์ · {current.title}</h1>
+<AdminLayout title={`ความสัมพันธ์ ${title}`}>
+  <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><a href={`/admin/${kind === 'artist' ? 'artists' : 'tapes'}/${id}`}>{title}</a><span>/</span>ความสัมพันธ์</nav>
+  <h1>ความสัมพันธ์ · {title}</h1>
   <p class="page-lede">เชื่อมเฉพาะศิลปินหรือฉบับที่มีหลักฐานชัดเจน ฉบับร่างจะไม่แสดงในหน้าสาธารณะ</p>
-  {!sources.results.length && <p><a href={`/admin/sources?kind=${kind}&id=${id}`}>เพิ่มแหล่งอ้างอิงก่อน</a></p>}
-  <CatalogRelations kind={kind} entityId={id} choices={choices.results} sources={sources.results} initial={rows.results} client:load />
+  {!sources.length && <p><a href={`/admin/sources?kind=${kind}&id=${id}`}>เพิ่มแหล่งอ้างอิงก่อน</a></p>}
+  <CatalogRelations kind={kind} entityId={id} choices={choices} sources={sources} initial={rows} client:load />
 </AdminLayout>

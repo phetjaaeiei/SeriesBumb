@@ -2,20 +2,15 @@
 import { db } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import CatalogSources from '../../components/admin/CatalogSources';
-import { listCatalogSources, type SourceKind } from '../../services/catalog-sources';
+import { loadAdminSources } from '../../loaders/admin/sources';
 
-const kind = Astro.url.searchParams.get('kind');
-const id = Astro.url.searchParams.get('id') ?? '';
-if ((kind !== 'artist' && kind !== 'tape' && kind !== 'song') || !/^[0-9a-f-]{36}$/iu.test(id)) return Astro.rewrite('/404');
-const table = kind === 'artist' ? 'artist' : kind === 'tape' ? 'tape' : 'song';
-const column = kind === 'artist' ? 'name' : 'title';
-const record = await db().prepare(`SELECT ${column} AS title FROM ${table} WHERE id = ?`).bind(id).first<{ title: string }>();
-if (!record) return Astro.rewrite('/404');
-const sources = await listCatalogSources(db(), kind as SourceKind, id);
+const model = await loadAdminSources(db(), Astro.url.searchParams);
+if (!model) return Astro.rewrite('/404');
+const { kind, id, title, sources } = model;
 ---
-<AdminLayout title={`แหล่งอ้างอิง ${record.title}`}>
-  <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><a href={`/admin/${kind === 'artist' ? 'artists' : kind === 'tape' ? 'tapes' : 'songs'}/${id}`}>{record.title}</a><span>/</span><span>แหล่งอ้างอิง</span></nav>
-  <h1>แหล่งอ้างอิง · {record.title}</h1>
+<AdminLayout title={`แหล่งอ้างอิง ${title}`}>
+  <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><a href={`/admin/${kind === 'artist' ? 'artists' : kind === 'tape' ? 'tapes' : 'songs'}/${id}`}>{title}</a><span>/</span><span>แหล่งอ้างอิง</span></nav>
+  <h1>แหล่งอ้างอิง · {title}</h1>
   <p class="page-lede">ระบุข้อความที่ตรวจสอบได้จากแต่ละแหล่ง แยกจากบันทึกไฟล์ต้นฉบับส่วนตัว</p>
-  <CatalogSources entityKind={kind as SourceKind} entityId={id} initial={sources} client:load />
+  <CatalogSources entityKind={kind} entityId={id} initial={sources} client:load />
 </AdminLayout>

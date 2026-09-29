@@ -16,3 +16,17 @@ export async function listPublicPersonMemberships(sql: SqlClient, personId: stri
   WHERE am.personId = ? AND (a.publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1))
   ORDER BY a.nameSort, am.position LIMIT 50`).bind(personId).all<PersonMembershipRow>()).results;
 }
+
+export interface PersonChoice { id: string; title: string }
+
+/** Up to 500 people by name as picker choices for person credits. */
+export async function listPersonChoices(sql: SqlClient): Promise<PersonChoice[]> {
+  return (await sql.prepare('SELECT id, name AS title FROM person ORDER BY name LIMIT 500').all<PersonChoice>()).results;
+}
+
+export interface PersonAdminRow { id: string; slug: string; name: string }
+
+/** The first 100 people by name for the admin people manager. */
+export async function listPeopleForAdmin(sql: SqlClient): Promise<PersonAdminRow[]> {
+  return (await sql.prepare('SELECT id, slug, name FROM person ORDER BY name LIMIT 100').all<PersonAdminRow>()).results;
+}

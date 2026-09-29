@@ -1,3 +1,4 @@
+import type { SqlClient } from '../db/sql-client';
 import { buildSearchQuery } from '../domain/search';
 import { decodeCursor, encodeCursor, type CatalogSort } from '../domain/cursor';
 
@@ -29,7 +30,7 @@ const catalog = {
   collections: { table: 'collection', name: 'title', key: 'position', sort: 'year', searchKind: 'collection' },
 } as const satisfies Record<AdminCatalogKind, { table: string; name: string; key: string; sort: CatalogSort; searchKind: string | null }>;
 
-export async function getAdminCatalogPage(db: D1Database, options: AdminCatalogOptions): Promise<{ items: AdminCatalogRow[]; nextCursor: string | null }> {
+export async function getAdminCatalogPage(db: SqlClient, options: AdminCatalogOptions): Promise<{ items: AdminCatalogRow[]; nextCursor: string | null }> {
   const config = catalog[options.kind];
   const size = Math.min(Math.max(Math.floor(options.pageSize ?? 50), 1), 50);
   const search = buildSearchQuery(options.query ?? '');
