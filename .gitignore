@@ -10,3 +10,6 @@ playwright-report/
 test-results/
 bundled/
 .deploys/
+
+# Local D1 exports hold member names and emails; keep them outside the repo (scripts/backup-export.ts refuses).
+backups/

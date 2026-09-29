@@ -8,7 +8,7 @@
 | Export รายคืนแบบเข้ารหัส (`.github/workflows/backup.yml`) | ข้อมูลทุกตาราง ยกเว้น session, verification และดัชนีค้นหา | 30 วัน (GitHub artifact) | ปิดจนกว่าจะตั้งค่าตามข้อ 1 |
 | สำรองไฟล์ Supabase (`npm run backup:storage`) | รูปภาพ (public) และไฟล์เพลง (private) | ตามที่เก็บไว้ในเครื่อง | เจ้าของรันเองเดือนละครั้ง |
 
-`scripts/deploy.ts` จด bookmark ของ Time Travel ไว้ใน `.deploys/` ก่อน apply migration ทุกครั้ง จึงย้อนกลับไปก่อน deploy ใด ๆ ได้ภายใน 7 วัน
+`scripts/deploy.ts` ขอ bookmark ของ Time Travel ก่อน apply migration ทุกครั้งและพิมพ์ออกมาเป็นบรรทัด `• D1 bookmark before migrate` ถ้า deploy ล้ม จะพิมพ์คำสั่ง `time-travel restore ... --bookmark ...` ให้พร้อมใช้ ส่วน `.deploys/` บันทึกไว้เฉพาะ deploy ที่สำเร็จ (พร้อม bookmark เดียวกัน) จึงย้อนกลับไปก่อน deploy ใด ๆ ได้ภายใน 7 วัน
 
 ## 1. เปิด export รายคืน
 
@@ -31,6 +31,12 @@ repo นี้เป็น public ใครที่ login GitHub ก็ดา�
 
 ปิด: ลบ variable `BACKUP_AGE_RECIPIENT` ได้เลย workflow จะรายงานว่าปิดอยู่และหยุดโดยไม่ export
 
+**ตรวจทุกเดือน:** GitHub ปิด workflow ที่ตั้งเวลาไว้โดยอัตโนมัติเมื่อ repo สาธารณะไม่มี commit ครบ 60 วัน และ artifact เก่าจะหมดอายุภายใน 30 วันหลังจากนั้น
+```bash
+gh run list --repo phetjaaeiei/SeriesBumb --workflow backup.yml --limit 1   # ต้องมีรอบที่รันภายใน 1–2 วันที่ผ่านมา
+gh workflow enable backup.yml --repo phetjaaeiei/SeriesBumb                  # ถ้าถูกปิดไป ให้เปิดกลับ
+```
+
 ## 2. ดาวน์โหลดและถอดรหัส
 
 ```bash
@@ -40,7 +46,10 @@ mkdir -p ~/SeriesBumb-backups/d1/restore
 age -d -i ~/.config/seriesbumb/backup-age.key ~/SeriesBumb-backups/d1/seriesbumb-d1-YYYY-MM-DD.tar.age | tar -x -C ~/SeriesBumb-backups/d1/restore
 ```
 
-ในไฟล์จะมี `seriesbumb-YYYY-MM-DD.sql` (INSERT เท่านั้น ไม่มี schema) กับ `.manifest.json` (จำนวนแถวของแต่ละตารางและ SHA-256)
+ในไฟล์จะมี `seriesbumb-YYYY-MM-DD.sql` (INSERT เท่านั้น ไม่มี schema) กับ `.manifest.json` ซึ่งเก็บจำนวนแถวของแต่ละตาราง, SHA-256 และ `lossyRows`
+- `lossyRows` คือแถวที่ข้อความมีทั้งการขึ้นบรรทัดจริงและ `\n` หรือ `\r` ที่พิมพ์เป็นตัวอักษร
+- D1 export เก็บแถวเหล่านี้ได้ไม่ตรง 100% ถ้ามี ให้เทียบแถวนั้นกับของเดิมหลัง restore
+- โฟลเดอร์ `restore` มีชื่อและอีเมลสมาชิกแบบไม่เข้ารหัส เมื่อใช้เสร็จให้ลบทันที: `rm -rf ~/SeriesBumb-backups/d1/restore`
 
 ## 3. กู้คืน
 
@@ -58,7 +67,13 @@ npx wrangler d1 time-travel restore seriesbumb --bookmark <bookmark>
 ให้ restore ลงฐานใหม่ก่อนเสมอ แล้วจึงสลับ binding
 1. `npx wrangler d1 create seriesbumb-restore`
 2. ใส่ฐานใหม่ใน `wrangler.jsonc` แล้วรัน `npx wrangler d1 migrations apply seriesbumb-restore --remote`
-3. นำข้อมูลเข้า โดยสคริปต์จะตรวจ checksum, ไม่ยอมเขียนทับฐานที่มีข้อมูล และตรวจจำนวนแถวหลังนำเข้า:
+3. นำข้อมูลเข้า สคริปต์ทำงานดังนี้:
+   - ตรวจ checksum
+   - ไม่ยอมเขียนทับฐานที่มีข้อมูล
+   - นำเข้าตาราง parent ก่อนเสมอ
+   - ตรวจจำนวนแถวหลังนำเข้าแต่ละส่วน
+   - D1 Free เขียนได้ 100k แถวต่อวัน สคริปต์จึงหยุดเมื่อใกล้ถึงงบ (ค่าเริ่มต้น `--max-writes 80000`) และบอกให้รันคำสั่งเดิมอีกครั้งหลัง 07:00 น. ของวันถัดไป ความคืบหน้าเก็บไว้ในไฟล์ `.restore-state.json` ข้างไฟล์ dump
+   - ระหว่างที่ restore ข้ามวัน อย่าสลับ binding และให้เว็บเดิมทำงานต่อไป
    ```bash
    npm run restore:export -- --database seriesbumb-restore --remote --file ~/SeriesBumb-backups/d1/restore/seriesbumb-YYYY-MM-DD.sql
    ```
@@ -68,10 +83,12 @@ npx wrangler d1 time-travel restore seriesbumb --bookmark <bookmark>
 
 ### ซ้อมกู้คืน (ทำทุก 3 เดือน)
 
-ซ้อมบนเครื่องได้โดยไม่แตะ production:
+ซ้อมบนเครื่องได้โดยไม่แตะ production ใช้โฟลเดอร์ส่วนตัวแล้วลบทิ้งเมื่อเสร็จ:
 ```bash
-npx wrangler d1 migrations apply seriesbumb --local --persist-to /tmp/restore-drill
-npm run restore:export -- --database seriesbumb --local --persist-to /tmp/restore-drill --file <dump.sql>
+drill=$(mktemp -d ~/restore-drill.XXXX) && chmod 700 "$drill"
+npx wrangler d1 migrations apply seriesbumb --local --persist-to "$drill"
+npm run restore:export -- --database seriesbumb --local --persist-to "$drill" --file <dump.sql>
+rm -rf "$drill" ~/SeriesBumb-backups/d1/restore
 ```
 
 ## 4. สำรองไฟล์ Supabase
