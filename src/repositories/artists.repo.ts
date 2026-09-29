@@ -1,3 +1,4 @@
+import { jsonParam } from '../db/client';
 import type { SqlClient } from '../db/sql-client';
 import type { ArtistStatus, ArtistType } from '../domain/enums';
 
@@ -160,4 +161,76 @@ export interface ArtistMemberEditRow { id: string; name: string; role: string; y
 /** Every member of the artist in order, as the admin editor edits them. */
 export async function listArtistMembersForEdit(sql: SqlClient, artistId: string): Promise<ArtistMemberEditRow[]> {
   return (await sql.prepare('SELECT id, name, role, years, isCurrent FROM artist_member WHERE artistId = ? ORDER BY position').bind(artistId).all<ArtistMemberEditRow>()).results;
+}
+
+// Writes for the admin artist editor and the catalog services that keep artist counters in step.
+
+export interface ArtistInsert { id: string; slug: string; name: string; nameSort: string; userId: string; now: number }
+
+/** A new artist with unknown status and an empty bio. */
+export function insertArtistStmt(sql: SqlClient, artist: ArtistInsert): D1PreparedStatement {
+  return sql.prepare("INSERT INTO artist (id, slug, name, nameSort, status, bio, createdBy, createdAt, updatedBy, updatedAt) VALUES (?, ?, ?, ?, 'unknown', '', ?, ?, ?, ?)").bind(artist.id, artist.slug, artist.name, artist.nameSort, artist.userId, artist.now, artist.userId, artist.now);
+}
+
+/** Names of the artists with these ids (non-empty), in no particular order. */
+export async function listArtistNamesByIds(sql: SqlClient, ids: string[]): Promise<{ name: string }[]> {
+  return (await sql.prepare(`SELECT name FROM artist WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all<{ name: string }>()).results;
+}
+
+/** Id, name and slug of the artists with these ids (non-empty), in no particular order. */
+export async function listArtistNameSlugsByIds(sql: SqlClient, ids: string[]): Promise<{ id: string; name: string; slug: string }[]> {
+  return (await sql.prepare(`SELECT id, name, slug FROM artist WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all<{ id: string; name: string; slug: string }>()).results;
+}
+
+/** Recounts, for each of these artists, the published tapes they are credited on directly or through a song. */
+export function refreshArtistPublishedTapeCountsStmt(sql: SqlClient, artistIds: string[]): D1PreparedStatement {
+  return sql.prepare(`UPDATE artist SET publishedTapeCount = (SELECT COUNT(DISTINCT tapeId) FROM (SELECT ta.tapeId FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId WHERE ta.artistId = artist.id AND t.status = 'published' UNION SELECT tt.tapeId FROM song_artist sa JOIN tape_track tt ON tt.songId = sa.songId JOIN tape t ON t.id = tt.tapeId WHERE sa.artistId = artist.id AND t.status = 'published')) WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(artistIds));
+}
+
+export interface ArtistSaveRow { slug: string; name: string; publishedTapeCount: number; hasPublicSong: number }
+
+/** The stored fields saveArtist keeps or compares against (hasPublicSong 0/1), or null. */
+export async function getArtistForSave(sql: SqlClient, id: string): Promise<ArtistSaveRow | null> {
+  return sql.prepare('SELECT slug, name, publishedTapeCount, EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1) AS hasPublicSong FROM artist WHERE id = ?').bind(id).first<ArtistSaveRow>();
+}
+
+/** Every member of the artist with the person and source it is linked to (any order). */
+export async function listArtistMemberLinks(sql: SqlClient, artistId: string): Promise<{ id: string; personId: string | null; sourceId: string | null }[]> {
+  return (await sql.prepare('SELECT id, personId, sourceId FROM artist_member WHERE artistId = ?').bind(artistId).all<{ id: string; personId: string | null; sourceId: string | null }>()).results;
+}
+
+export interface ArtistUpdate {
+  id: string; slug: string; name: string; nameAlt: string | null; nameSort: string; artistType: ArtistType | null; status: ArtistStatus;
+  province: string | null; formedYear: number | null; themes: string | null; yearsActive: string | null; bio: string; imageKey: string | null;
+  userId: string; now: number;
+}
+
+/** Overwrites every editable column of the artist. */
+export function updateArtistStmt(sql: SqlClient, artist: ArtistUpdate): D1PreparedStatement {
+  return sql.prepare('UPDATE artist SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, artistType = ?, status = ?, province = ?, formedYear = ?, themes = ?, yearsActive = ?, bio = ?, imageKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(artist.slug, artist.name, artist.nameAlt, artist.nameSort, artist.artistType, artist.status, artist.province, artist.formedYear, artist.themes, artist.yearsActive, artist.bio, artist.imageKey, artist.userId, artist.now, artist.id);
+}
+
+export function deleteArtistMembersStmt(sql: SqlClient, artistId: string): D1PreparedStatement {
+  return sql.prepare('DELETE FROM artist_member WHERE artistId = ?').bind(artistId);
+}
+
+export interface ArtistMemberInsert { id: string; personId: string | null; sourceId: string | null; name: string; role: string; years: string | null; isCurrent: number; position: number }
+
+/** Inserts the artist's members (ids, person and source links included). */
+export function insertArtistMembersStmt(sql: SqlClient, artistId: string, members: ArtistMemberInsert[]): D1PreparedStatement {
+  return sql.prepare(`INSERT INTO artist_member (id, artistId, personId, sourceId, name, role, years, isCurrent, position) SELECT json_extract(value,'$.id'), ?, json_extract(value,'$.personId'), json_extract(value,'$.sourceId'), json_extract(value,'$.name'), json_extract(value,'$.role'), json_extract(value,'$.years'), json_extract(value,'$.isCurrent'), json_extract(value,'$.position') FROM json_each(?)`).bind(artistId, jsonParam(members));
+}
+
+/** The artist's slug and image (key and bytes), for deleting it, or null. */
+export async function getArtistForDelete(sql: SqlClient, id: string): Promise<{ slug: string; imageKey: string | null; imageBytes: number } | null> {
+  return sql.prepare('SELECT slug, imageKey AS imageKey, imageBytes FROM artist WHERE id = ?').bind(id).first<{ slug: string; imageKey: string | null; imageBytes: number }>();
+}
+
+/** How many tape and song credits the artist still has, as a `{ count }` row. */
+export async function countArtistCredits(sql: SqlClient, id: string): Promise<{ count: number } | null> {
+  return sql.prepare('SELECT (SELECT COUNT(*) FROM tape_artist WHERE artistId = ?) + (SELECT COUNT(*) FROM song_artist WHERE artistId = ?) AS count').bind(id, id).first<{ count: number }>();
+}
+
+export function deleteArtistStmt(sql: SqlClient, id: string): D1PreparedStatement {
+  return sql.prepare('DELETE FROM artist WHERE id = ?').bind(id);
 }

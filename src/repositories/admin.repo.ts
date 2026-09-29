@@ -1,5 +1,6 @@
 // Admin-only reads that span several catalog tables: the editor's record and picker labels,
-// the pickers' lookup, and the record titles the sources/relations/credits pages lead with.
+// the pickers' lookup, the record titles the sources/relations/credits pages lead with, and the
+// slug lookup the catalog services use to keep slugs unique.
 import type { SqlClient } from '../db/sql-client';
 import type { AdminCatalogKind } from './admin-catalog.repo';
 
@@ -39,4 +40,11 @@ export async function getCatalogEntityTitle(sql: SqlClient, kind: CatalogEntityK
 /** The title of the tape or song that person credits attach to, or null. */
 export async function getCreditTargetTitle(sql: SqlClient, kind: 'tape' | 'song', id: string): Promise<{ title: string } | null> {
   return sql.prepare(`SELECT title FROM ${kind} WHERE id = ?`).bind(id).first<{ title: string }>();
+}
+
+export type CatalogSlugTable = 'artist' | 'label' | 'genre' | 'song' | 'tape' | 'collection';
+
+/** The id of the record in `table` that already uses `slug`, or null when the slug is free there. */
+export async function getCatalogIdBySlug(sql: SqlClient, table: CatalogSlugTable, slug: string): Promise<{ id: string } | null> {
+  return sql.prepare(`SELECT id FROM ${table} WHERE slug = ?`).bind(slug).first<{ id: string }>();
 }

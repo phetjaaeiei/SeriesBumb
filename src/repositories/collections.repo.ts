@@ -1,3 +1,4 @@
+import { jsonParam } from '../db/client';
 import type { SqlClient } from '../db/sql-client';
 
 export interface CollectionLink { slug: string; title: string }
@@ -46,4 +47,42 @@ export interface CollectionItemEditRow { tapeId: string; note: string | null }
 /** The collection's tapes in order (drafts included), as the admin editor edits them. */
 export async function listCollectionItemsForEdit(sql: SqlClient, collectionId: string): Promise<CollectionItemEditRow[]> {
   return (await sql.prepare('SELECT tapeId, note FROM collection_item WHERE collectionId = ? ORDER BY position').bind(collectionId).all<CollectionItemEditRow>()).results;
+}
+
+// Writes for the admin collection editor.
+
+export interface CollectionInsert { id: string; slug: string; title: string; userId: string; now: number }
+
+/** A new draft collection after the last one in display order. */
+export function insertCollectionStmt(sql: SqlClient, collection: CollectionInsert): D1PreparedStatement {
+  return sql.prepare("INSERT INTO collection (id, slug, title, position, status, createdBy, createdAt, updatedBy, updatedAt) VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM collection), 'draft', ?, ?, ?, ?)").bind(collection.id, collection.slug, collection.title, collection.userId, collection.now, collection.userId, collection.now);
+}
+
+export async function getCollectionSlug(sql: SqlClient, id: string): Promise<{ slug: string } | null> {
+  return sql.prepare('SELECT slug FROM collection WHERE id = ?').bind(id).first<{ slug: string }>();
+}
+
+export interface CollectionUpdate { id: string; slug: string; title: string; description: string; coverKey: string | null; isFeatured: number; status: 'draft' | 'published'; userId: string; now: number }
+
+/** Overwrites every editable column of the collection. */
+export function updateCollectionStmt(sql: SqlClient, collection: CollectionUpdate): D1PreparedStatement {
+  return sql.prepare('UPDATE collection SET slug = ?, title = ?, description = ?, coverKey = ?, isFeatured = ?, status = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(collection.slug, collection.title, collection.description, collection.coverKey, collection.isFeatured, collection.status, collection.userId, collection.now, collection.id);
+}
+
+export function deleteCollectionItemsStmt(sql: SqlClient, collectionId: string): D1PreparedStatement {
+  return sql.prepare('DELETE FROM collection_item WHERE collectionId = ?').bind(collectionId);
+}
+
+/** Inserts the collection's tapes with their positions and notes. */
+export function insertCollectionItemsStmt(sql: SqlClient, collectionId: string, items: { tapeId: string; note: string | null; position: number }[]): D1PreparedStatement {
+  return sql.prepare(`INSERT INTO collection_item (collectionId, tapeId, position, note) SELECT ?, json_extract(value,'$.tapeId'), json_extract(value,'$.position'), json_extract(value,'$.note') FROM json_each(?)`).bind(collectionId, jsonParam(items));
+}
+
+/** The collection's slug and cover (key and bytes), for deleting it, or null. */
+export async function getCollectionForDelete(sql: SqlClient, id: string): Promise<{ slug: string; coverKey: string | null; imageBytes: number } | null> {
+  return sql.prepare('SELECT slug, coverKey, imageBytes FROM collection WHERE id = ?').bind(id).first<{ slug: string; coverKey: string | null; imageBytes: number }>();
+}
+
+export function deleteCollectionStmt(sql: SqlClient, id: string): D1PreparedStatement {
+  return sql.prepare('DELETE FROM collection WHERE id = ?').bind(id);
 }
