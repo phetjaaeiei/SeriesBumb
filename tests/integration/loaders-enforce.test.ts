@@ -19,7 +19,7 @@ describe('admin lookup loader', () => {
     expect(artists).toContainEqual({ id: artist.id, label: artist.name });
     // Zero-width characters are stripped from the query, as the action did before it moved here.
     const [first, ...rest] = [...artist.name];
-    expect(await loadAdminLookup(env.DB, 'artists', `${first}​${rest.join('')}`)).toContainEqual({ id: artist.id, label: artist.name });
+    expect(await loadAdminLookup(env.DB, 'artists', `${first}\u200b${rest.join('')}`)).toContainEqual({ id: artist.id, label: artist.name });
 
     const tape = await one<{ id: string; title: string }>('SELECT id, title FROM tape WHERE id = ?', seeded.tapeIds[0]);
     expect(await loadAdminLookup(env.DB, 'tapes', tape.title)).toContainEqual({ id: tape.id, label: tape.title });

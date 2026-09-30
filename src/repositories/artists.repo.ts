@@ -40,7 +40,7 @@ export async function listVisibleArtists(sql: SqlClient, filter: VisibleArtistFi
   const where = [visibleArtist];
   const bindings: (string | number)[] = [];
   if (province) { where.push('province = ?'); bindings.push(province); }
-  else if (letter && letter !== '0-9') { where.push('nameSort >= ? AND nameSort < ?'); bindings.push(`${/[A-Z]/u.test(letter) ? '2' : '1'}${letter.toLowerCase()}`, `${/[A-Z]/u.test(letter) ? '2' : '1'}${letter.toLowerCase()}￿`); }
+  else if (letter && letter !== '0-9') { where.push('nameSort >= ? AND nameSort < ?'); bindings.push(`${/[A-Z]/u.test(letter) ? '2' : '1'}${letter.toLowerCase()}`, `${/[A-Z]/u.test(letter) ? '2' : '1'}${letter.toLowerCase()}\uffff`); }
   else if (letter === '0-9') { where.push("nameSort >= '0' AND nameSort < '1'"); }
   if (cursor) { where.push('(nameSort, id) > (?, ?)'); bindings.push(cursor.key, cursor.id); }
   return (await sql.prepare(`SELECT id, slug, name, artistType, status, province, publishedTapeCount, nameSort FROM artist WHERE ${where.join(' AND ')} ORDER BY nameSort, id LIMIT 51`).bind(...bindings).all<ArtistListRow>()).results;

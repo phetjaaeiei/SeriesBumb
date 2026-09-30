@@ -3,9 +3,12 @@ import { describe, expect, it } from 'vitest';
 
 // Guards the layer rules in eslint.config.mjs against silent regressions.
 const eslint = new ESLint({ cwd: process.cwd() });
-async function restricted(filePath: string, code: string): Promise<number> {
+async function lint(filePath: string, code: string): Promise<{ restricted: number; fatal: number }> {
   const [result] = await eslint.lintText(code, { filePath });
-  return result.messages.filter((message) => message.ruleId === 'no-restricted-imports' || message.ruleId === 'no-restricted-syntax').length;
+  return {
+    restricted: result.messages.filter((message) => message.ruleId === 'no-restricted-imports' || message.ruleId === 'no-restricted-syntax').length,
+    fatal: result.messages.filter((message) => message.fatal).length,
+  };
 }
 
 describe('layer boundary lint rules', () => {
@@ -22,6 +25,8 @@ describe('layer boundary lint rules', () => {
     ['src/domain/x.ts', "import { db } from '../platform/runtime'; export { db };"],
     ['src/loaders/x.ts', "import { ActionError } from 'astro:actions'; export { ActionError };"],
     ['src/repositories/x.repo.ts', "import { saveTape } from '../services/catalog'; export { saveTape };"],
+    ['src/repositories/x.repo.ts', "export async function f() { return import('../services/catalog'); }"],
+    ['src/repositories/x.repo.ts', "export type T = import('../loaders/home').HomeModel;"],
     ['src/actions/x.ts', "import { lookupAdminChoices } from '../repositories/admin.repo'; export { lookupAdminChoices };"],
     ['src/actions/x.ts', "export async function f() { return import('../repositories/admin.repo'); }"],
     ['src/pages/x.astro', "---\nimport { getTapePage } from '../repositories/tapes.repo';\nvoid getTapePage;\n---\n<p />"],
@@ -30,7 +35,7 @@ describe('layer boundary lint rules', () => {
     ['src/components/admin/X.tsx', "export type { AdminChoice } from '../../repositories/admin.repo';"],
     ['src/components/X.astro', "---\ntype C = import('../repositories/admin.repo').AdminChoice;\nconst c: C[] = [];\nvoid c;\n---\n<p />"],
   ])('rejects %s: %s', async (file, code) => {
-    expect(await restricted(file, code)).toBeGreaterThan(0);
+    expect((await lint(file, code)).restricted).toBeGreaterThan(0);
   });
 
   it.each([
@@ -43,7 +48,9 @@ describe('layer boundary lint rules', () => {
     ['src/http/middleware/x.ts', "import { getRedirectTarget } from '../../repositories/redirects.repo'; export { getRedirectTarget };"],
     ['src/components/admin/X.tsx', "import type { AdminChoice } from '../../loaders/admin/editor'; export const x: AdminChoice[] = [];"],
     ['src/actions/x.ts', "import { loadAdminLookup } from '../loaders/admin/lookup'; export { loadAdminLookup };"],
+    ['src/repositories/x.repo.ts', "import type { SqlClient } from '../db/sql-client'; import { normalizeThai } from '../domain/thai'; export type { SqlClient }; export { normalizeThai };"],
   ])('allows %s: %s', async (file, code) => {
-    expect(await restricted(file, code)).toBe(0);
+    // A snippet that fails to parse reports no rule messages, so an allow case must also parse.
+    expect(await lint(file, code)).toEqual({ restricted: 0, fatal: 0 });
   });
 }, 30_000);

@@ -23,7 +23,7 @@ export class CommentError extends AppError {
 
 export function normalizeComment(input: string): string {
   return input.normalize('NFC')
-    .replace(/[\u0000-\u0009\u000b-\u001f\u007f‪-‮⁦-⁩]/gu, '')
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f\u202a-\u202e\u2066-\u2069]/gu, '')
     .replace(/\r\n?/gu, '\n')
     .replace(/\n{3,}/gu, '\n\n')
     .trim();

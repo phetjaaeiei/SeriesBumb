@@ -13,7 +13,12 @@ const repositories = { regex: String.raw`(^|/)repositories/`, message: 'Pages, c
 const upperLayers = { regex: String.raw`(^|/)(services|loaders|actions|pages|components|http|auth)/`, message: 'repositories/ is the bottom layer: SQL only, no imports from services, loaders or the web layer.' };
 const outsideDomain = { regex: String.raw`^(?!\./)(?!\.\./errors/app-error$)`, message: 'domain/ holds pure rules: import only other domain modules (and ../errors/app-error), no packages.' };
 // esquery regex sources for the same patterns in import() expressions and type references.
-const dynamicSources = new Map([[cloudflare, '^cloudflare:'], [astroModules, '^astro:'], [repositories, String.raw`(^|\/)repositories\/`]]);
+const dynamicSources = new Map([
+  [cloudflare, '^cloudflare:'],
+  [astroModules, '^astro:'],
+  [repositories, String.raw`(^|\/)repositories\/`],
+  [upperLayers, String.raw`(^|\/)(services|loaders|actions|pages|components|http|auth)\/`],
+]);
 const dynamic = (source, message) => [
   { selector: `ImportExpression[source.value=/${source}/]`, message },
   { selector: `TSImportType[argument.literal.value=/${source}/]`, message },

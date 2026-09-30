@@ -12,7 +12,7 @@ const dump = [
 
 describe('restore plan', () => {
   it('groups INSERT lines by table, ignoring look-alikes inside values', () => {
-    const tricky = `${dump}\nINSERT INTO "comment" ("body") VALUES('hi INSERT INTO "session" x');`;
+    const tricky = `${dump}\nINSERT INTO "comment" ("body") VALUES('hi\u2028INSERT INTO "session" x');`;
     const byTable = splitDumpByTable(tricky);
     expect([...byTable.keys()]).toEqual(['account', 'tape', 'tape_image', 'user', 'comment']);
     expect(byTable.get('user')).toHaveLength(2);
