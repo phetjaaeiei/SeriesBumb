@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createArtist, createCollection, createGenre, createLabel, createSong, createTapeDraft, saveArtist, saveCollection, saveGenre, saveLabel, saveSong, saveTape } from '../../src/services/catalog';
 import { getTapeBySlug } from '../../src/repositories/tapes.repo';
-import { searchPublic } from '../../src/domain/search';
+import { searchPublic } from '../../src/repositories/search.repo';
 
 const db = env.DB;
 

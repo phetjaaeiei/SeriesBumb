@@ -1,19 +1,15 @@
 ---
 import { db } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
-import { advancedSearch, parseAdvancedSearch } from '../../repositories/advanced-search.repo';
+import { loadAdvancedSearch } from '../../loaders/search-advanced';
 import { RELEASE_TYPES } from '../../domain/enums';
 
 const params = Astro.url.searchParams;
-const filters = parseAdvancedSearch(params);
-const { items, nextCursor } = await advancedSearch(db(), filters);
+const { filters, items, nextCursor, genres, artists, labels } = await loadAdvancedSearch(db(), params);
 const paths = { artist: 'artists', tape: 'tapes', song: 'songs', label: 'labels' };
 const kinds = [{ value: 'song', label: 'เพลง' }, { value: 'artist', label: 'ศิลปิน' }, { value: 'tape', label: 'เทป' }, { value: 'label', label: 'ค่ายเพลง' }];
 const next = new URLSearchParams(params);
 if (nextCursor) next.set('cursor', nextCursor);
-const genres = (await db().prepare('SELECT slug, name FROM genre ORDER BY position LIMIT 50').all<{ slug: string; name: string }>()).results;
-const artists = (await db().prepare('SELECT a.slug, a.name FROM artist a WHERE EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = a.id AND s.isPublic = 1) ORDER BY a.nameSort LIMIT 100').all<{ slug: string; name: string }>()).results;
-const labels = (await db().prepare('SELECT slug, name FROM label WHERE publishedTapeCount > 0 ORDER BY nameSort LIMIT 100').all<{ slug: string; name: string }>()).results;
 const releaseLabels: Record<string, string> = { album: 'อัลบั้ม', compilation: 'รวมศิลปิน', soundtrack: 'เพลงประกอบ', single: 'ซิงเกิล', other: 'อื่น ๆ' };
 ---
 <BaseLayout title="ค้นหาแบบละเอียด" canonicalPath="/search/advanced" noindex>

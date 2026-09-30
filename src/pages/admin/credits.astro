@@ -2,21 +2,14 @@
 import { db } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
 import PersonCredits from '../../components/admin/PersonCredits';
-import { creditsForTarget } from '../../services/person-credits';
-const kind = Astro.url.searchParams.get('kind');
-const id = Astro.url.searchParams.get('id') ?? '';
-if ((kind !== 'tape' && kind !== 'song') || !/^[0-9a-f-]{36}$/iu.test(id)) return Astro.rewrite('/404');
-const current = await db().prepare(`SELECT title FROM ${kind} WHERE id = ?`).bind(id).first<{ title: string }>();
-if (!current) return Astro.rewrite('/404');
-const [people, sources, credits] = await Promise.all([
-  db().prepare('SELECT id, name AS title FROM person ORDER BY name LIMIT 500').all<{ id: string; title: string }>(),
-  db().prepare('SELECT id, title FROM catalog_source WHERE entityKind = ? AND entityId = ? ORDER BY createdAt DESC LIMIT 50').bind(kind, id).all<{ id: string; title: string }>(),
-  creditsForTarget(db(), kind, id),
-]);
+import { loadAdminCredits } from '../../loaders/admin/credits';
+const model = await loadAdminCredits(db(), Astro.url.searchParams);
+if (!model) return Astro.rewrite('/404');
+const { kind, id, title, people, sources, credits } = model;
 ---
-<AdminLayout title={`เครดิตบุคคล ${current.title}`}>
-  <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><a href={`/admin/${kind === 'tape' ? 'tapes' : 'songs'}/${id}`}>{current.title}</a><span>/</span>เครดิต</nav>
-  <h1>เครดิตบุคคล · {current.title}</h1>
+<AdminLayout title={`เครดิตบุคคล ${title}`}>
+  <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/admin">หลังบ้าน</a><span>/</span><a href={`/admin/${kind === 'tape' ? 'tapes' : 'songs'}/${id}`}>{title}</a><span>/</span>เครดิต</nav>
+  <h1>เครดิตบุคคล · {title}</h1>
   <p class="page-lede">เพิ่มเฉพาะชื่อและหน้าที่ที่อ่านได้จากหลักฐานของรายการนี้ <a href="/admin/people">จัดการบุคคล</a> · <a href={`/admin/sources?kind=${kind}&id=${id}`}>จัดการหลักฐาน</a></p>
-  <PersonCredits kind={kind} targetId={id} people={people.results} sources={sources.results} initial={credits} client:load />
+  <PersonCredits kind={kind} targetId={id} people={people} sources={sources} initial={credits} client:load />
 </AdminLayout>

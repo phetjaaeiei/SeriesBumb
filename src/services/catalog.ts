@@ -1,5 +1,5 @@
-import { jsonParam } from '../db/client';
-import type { ReleaseType } from '../domain/enums';
+import type { SqlClient } from '../db/sql-client';
+import type { ReleaseType, SearchKind } from '../domain/enums';
 import { decadeOf, toCeYear, yearSortOf } from '../domain/format';
 import { slugCandidates, SLUG_MAX, SLUG_RE } from '../domain/slug';
 import { thaiSortKey } from '../domain/thai';
@@ -9,9 +9,31 @@ import { assertEntityImageKey } from './image-keys';
 import { normalizeSearchField, searchDocument } from '../domain/search';
 import type { ImageKind } from './images';
 import type { ImageStore } from '../storage/image-store';
-
-type EntityTable = 'artist' | 'label' | 'genre' | 'song' | 'tape' | 'collection';
-type SearchKind = Exclude<EntityTable, 'genre'>;
+import { runBatch } from '../repositories/batch.repo';
+import { getCatalogIdBySlug, type CatalogSlugTable } from '../repositories/admin.repo';
+import {
+  deleteArtistMembersStmt, getArtistForSave, insertArtistMembersStmt, insertArtistStmt, listArtistMemberLinks, listArtistNamesByIds,
+  listArtistNameSlugsByIds, refreshArtistPublishedTapeCountsStmt, updateArtistStmt,
+} from '../repositories/artists.repo';
+import {
+  deleteCollectionItemsStmt, getCollectionSlug, insertCollectionItemsStmt, insertCollectionStmt, updateCollectionStmt,
+} from '../repositories/collections.repo';
+import { getGenreSlug, insertGenre, refreshGenrePublishedTapeCountsStmt, updateGenreStmt } from '../repositories/genres.repo';
+import { listTapeImagesForSave, reorderTapeImagesStmt } from '../repositories/images.repo';
+import { getLabelForSave, getLabelName, insertLabelStmt, refreshLabelPublishedTapeCountsStmt, updateLabelStmt } from '../repositories/labels.repo';
+import { moveRedirectStmts } from '../repositories/redirects.repo';
+import {
+  indexSearchDocStmts, refreshArtistSearchVisibilityStmt, refreshLabelSearchVisibilityStmt, refreshSongSearchVisibilityStmt,
+} from '../repositories/search.repo';
+import {
+  deleteSongArtistsStmt, getSongForSave, insertSongArtistStmt, insertSongArtistsStmt, insertSongStmt, listArtistIdsOfSongs,
+  listSongArtistLinks, refreshSongPublishedTapeCountsStmt, updateSongStmt,
+} from '../repositories/songs.repo';
+import { adjustImageBytesStmt, adjustPublishedTapeCountStmt, incrementSongCountStmt, incrementTapeCountStmt } from '../repositories/stats.repo';
+import {
+  deleteTapeArtistsStmt, deleteTapeGenresStmt, deleteTapeTracksStmt, getTapeForSave, insertTapeArtistsStmt, insertTapeDraftStmt,
+  insertTapeGenresStmt, insertTapeTracksStmt, listTapeArtistLinks, listTapeGenreLinks, listTapeTrackSongLinks, updateTapeStmt,
+} from '../repositories/tapes.repo';
 
 function requiredName(value: string, label: string): string {
   const name = value.trim().replace(/\s+/gu, ' ');
@@ -19,95 +41,87 @@ function requiredName(value: string, label: string): string {
   return name;
 }
 
-async function uniqueSlug(db: D1Database, table: EntityTable, name: string, desired?: string | null, id?: string, options?: { year?: number | null; qualifierSlug?: string | null }): Promise<string> {
+async function uniqueSlug(db: SqlClient, table: CatalogSlugTable, name: string, desired?: string | null, id?: string, options?: { year?: number | null; qualifierSlug?: string | null }): Promise<string> {
   if (desired) {
     if (!SLUG_RE.test(desired) || [...desired].length > SLUG_MAX) throw new Error('รูปแบบลิงก์ไม่ถูกต้อง');
-    const row = await db.prepare(`SELECT id FROM ${table} WHERE slug = ?`).bind(desired).first<{ id: string }>();
+    const row = await getCatalogIdBySlug(db, table, desired);
     if (row && row.id !== id) throw new Error('ลิงก์นี้ถูกใช้แล้ว');
     return desired;
   }
   const candidates = slugCandidates(name, options);
   for (const candidate of candidates) {
-    const row = await db.prepare(`SELECT id FROM ${table} WHERE slug = ?`).bind(candidate).first<{ id: string }>();
+    const row = await getCatalogIdBySlug(db, table, candidate);
     if (!row || row.id === id) return candidate;
   }
   return `item-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-function indexStatements(db: D1Database, kind: SearchKind, refId: string, name: string, text: string, isPublic: boolean): D1PreparedStatement[] {
+function indexStatements(db: SqlClient, kind: SearchKind, refId: string, name: string, text: string, isPublic: boolean): D1PreparedStatement[] {
   const normalized = searchDocument(text.split(' | '));
-  return [
-    db.prepare(`INSERT INTO search_doc (kind, refId, isPublic, nameKey) VALUES (?, ?, ?, ?) ON CONFLICT(kind, refId) DO UPDATE SET isPublic = excluded.isPublic, nameKey = excluded.nameKey`).bind(kind, refId, Number(isPublic), normalizeSearchField(name)),
-    db.prepare('DELETE FROM search_fts WHERE rowid = (SELECT docId FROM search_doc WHERE kind = ? AND refId = ?)').bind(kind, refId),
-    db.prepare('INSERT INTO search_fts (rowid, text) SELECT docId, ? FROM search_doc WHERE kind = ? AND refId = ?').bind(normalized, kind, refId),
-  ];
+  return indexSearchDocStmts(db, kind, refId, isPublic, normalizeSearchField(name), normalized);
 }
 
-function redirectStatements(db: D1Database, oldPath: string, newPath: string): D1PreparedStatement[] {
+function redirectStatements(db: SqlClient, oldPath: string, newPath: string): D1PreparedStatement[] {
   if (oldPath === newPath) return [];
-  return [
-    db.prepare('DELETE FROM redirect WHERE fromPath = ?').bind(newPath),
-    db.prepare('UPDATE redirect SET toPath = ? WHERE toPath = ?').bind(newPath, oldPath),
-    db.prepare('INSERT OR REPLACE INTO redirect (fromPath, toPath, createdAt) VALUES (?, ?, ?)').bind(oldPath, newPath, Date.now()),
-  ];
+  return moveRedirectStmts(db, oldPath, newPath, Date.now());
 }
 
-export async function createArtist(db: D1Database, userId: string, nameInput: string) {
+export async function createArtist(db: SqlClient, userId: string, nameInput: string) {
   const name = requiredName(nameInput, 'ชื่อศิลปิน');
   const id = crypto.randomUUID();
   const slug = await uniqueSlug(db, 'artist', name);
   const now = Date.now();
-  await db.batch([
-    db.prepare("INSERT INTO artist (id, slug, name, nameSort, status, bio, createdBy, createdAt, updatedBy, updatedAt) VALUES (?, ?, ?, ?, 'unknown', '', ?, ?, ?, ?)").bind(id, slug, name, thaiSortKey(name), userId, now, userId, now),
+  await runBatch(db, [
+    insertArtistStmt(db, { id, slug, name, nameSort: thaiSortKey(name), userId, now }),
     ...indexStatements(db, 'artist', id, name, name, false),
   ]);
   return { id, slug };
 }
 
-export async function createLabel(db: D1Database, userId: string, nameInput: string) {
+export async function createLabel(db: SqlClient, userId: string, nameInput: string) {
   const name = requiredName(nameInput, 'ชื่อค่าย');
   const id = crypto.randomUUID();
   const slug = await uniqueSlug(db, 'label', name);
   const now = Date.now();
-  await db.batch([
-    db.prepare("INSERT INTO label (id, slug, name, nameSort, description, createdBy, createdAt, updatedBy, updatedAt) VALUES (?, ?, ?, ?, '', ?, ?, ?, ?)").bind(id, slug, name, thaiSortKey(name), userId, now, userId, now),
+  await runBatch(db, [
+    insertLabelStmt(db, { id, slug, name, nameSort: thaiSortKey(name), userId, now }),
     ...indexStatements(db, 'label', id, name, name, false),
   ]);
   return { id, slug };
 }
 
-export async function createGenre(db: D1Database, nameInput: string) {
+export async function createGenre(db: SqlClient, nameInput: string) {
   const name = requiredName(nameInput, 'ชื่อแนวเพลง');
   const id = crypto.randomUUID();
   const slug = await uniqueSlug(db, 'genre', name);
-  await db.prepare('INSERT INTO genre (id, slug, name, position) VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM genre))').bind(id, slug, name).run();
+  await insertGenre(db, id, slug, name);
   return { id, slug };
 }
 
-export async function createSong(db: D1Database, userId: string, input: { title: string; artistIds?: string[]; lyrics?: string | null }) {
+export async function createSong(db: SqlClient, userId: string, input: { title: string; artistIds?: string[]; lyrics?: string | null }) {
   const title = requiredName(input.title, 'ชื่อเพลง');
   const id = crypto.randomUUID();
   const slug = await uniqueSlug(db, 'song', title);
   const now = Date.now();
   const artistIds = [...new Set(input.artistIds ?? [])].slice(0, 20);
-  const singers = artistIds.length ? await db.prepare(`SELECT name FROM artist WHERE id IN (${artistIds.map(() => '?').join(',')})`).bind(...artistIds).all<{ name: string }>() : { results: [] as { name: string }[] };
-  await db.batch([
-    db.prepare('INSERT INTO song (id, slug, title, titleSort, lyrics, createdBy, createdAt, updatedBy, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, slug, title, thaiSortKey(title), input.lyrics ?? null, userId, now, userId, now),
-    ...artistIds.map((artistId, position) => db.prepare('INSERT INTO song_artist (songId, artistId, position) VALUES (?, ?, ?)').bind(id, artistId, position)),
-    db.prepare('UPDATE site_stats SET songCount = songCount + 1, updatedAt = ? WHERE id = 1').bind(now),
-    ...indexStatements(db, 'song', id, title, `${title} | ${singers.results.map(row => row.name).join(' | ')}`, false),
+  const singers = artistIds.length ? await listArtistNamesByIds(db, artistIds) : [];
+  await runBatch(db, [
+    insertSongStmt(db, { id, slug, title, titleSort: thaiSortKey(title), lyrics: input.lyrics ?? null, userId, now }),
+    ...artistIds.map((artistId, position) => insertSongArtistStmt(db, id, artistId, position)),
+    incrementSongCountStmt(db, now),
+    ...indexStatements(db, 'song', id, title, `${title} | ${singers.map(row => row.name).join(' | ')}`, false),
   ]);
   return { id, slug };
 }
 
-export async function createTapeDraft(db: D1Database, userId: string, titleInput?: string) {
+export async function createTapeDraft(db: SqlClient, userId: string, titleInput?: string) {
   const id = crypto.randomUUID();
   const title = titleInput?.trim() || '(ร่างไม่มีชื่อ)';
   const slug = `draft-${id.slice(0, 8)}`;
   const now = Date.now();
-  await db.batch([
-    db.prepare("INSERT INTO tape (id, slug, title, titleSort, releaseType, status, createdBy, createdAt, updatedBy, updatedAt) VALUES (?, ?, ?, ?, 'album', 'draft', ?, ?, ?, ?)").bind(id, slug, title, thaiSortKey(title), userId, now, userId, now),
-    db.prepare('UPDATE site_stats SET tapeCount = tapeCount + 1, updatedAt = ? WHERE id = 1').bind(now),
+  await runBatch(db, [
+    insertTapeDraftStmt(db, { id, slug, title, titleSort: thaiSortKey(title), userId, now }),
+    incrementTapeCountStmt(db, now),
     ...indexStatements(db, 'tape', id, title, title, false),
   ]);
   return { id, slug };
@@ -135,47 +149,47 @@ export interface TapeSaveInput {
   ogSourceTitle?: string | null;
 }
 
-export async function saveTape(db: D1Database, userId: string, input: TapeSaveInput, bucket?: ImageStore, waitUntil?: (promise: Promise<unknown>) => void) {
+export async function saveTape(db: SqlClient, userId: string, input: TapeSaveInput, bucket?: ImageStore, waitUntil?: (promise: Promise<unknown>) => void) {
   const title = requiredName(input.title, 'ชื่อเทป');
-  const current = await db.prepare('SELECT id, slug, slugLocked, status, publishedAt, labelId, coverImageId, ogImageKey, ogImageBytes, ogSourceImageId, ogSourceTitle FROM tape WHERE id = ?').bind(input.id).first<{ id: string; slug: string; slugLocked: number; status: 'draft' | 'published'; publishedAt: number | null; labelId: string | null; coverImageId: string | null; ogImageKey: string | null; ogImageBytes: number; ogSourceImageId: string | null; ogSourceTitle: string | null }>();
+  const current = await getTapeForSave(db, input.id);
   if (!current) throw new Error('ไม่พบเทปนี้');
   const artistIds = [...new Set(input.artistIds ?? [])];
   const genreIds = [...new Set(input.genreIds ?? [])];
   const tracks = input.tracks ?? [];
   if (artistIds.length > 20 || tracks.length > 60) throw new Error('จำนวนศิลปินหรือเพลงเกินขีดจำกัด');
   if (input.status === 'published' && !artistIds.length && !['compilation', 'soundtrack'].includes(input.releaseType)) throw new Error('กรุณาระบุศิลปินก่อนเผยแพร่');
-  const images = await db.prepare('SELECT id, kind, thumbKey FROM tape_image WHERE tapeId = ? ORDER BY position, id').bind(input.id).all<{ id: string; kind: ImageKind; thumbKey: string }>();
+  const images = await listTapeImagesForSave(db, input.id);
   if (input.images) {
-    const storedIds = new Set(images.results.map(image => image.id));
+    const storedIds = new Set(images.map(image => image.id));
     const submittedIds = input.images.map(image => image.id);
     if (submittedIds.length !== storedIds.size || new Set(submittedIds).size !== storedIds.size || submittedIds.some(id => !storedIds.has(id))) {
       throw new CatalogError('รายการรูปเปลี่ยนไปแล้ว กรุณาโหลดหน้าใหม่ก่อนบันทึก');
     }
   }
   const orderedImages = input.images
-    ? input.images.map(image => ({ ...images.results.find(stored => stored.id === image.id)!, kind: image.kind }))
-    : images.results;
+    ? input.images.map(image => ({ ...images.find(stored => stored.id === image.id)!, kind: image.kind }))
+    : images;
   const cover = orderedImages.find(image => image.kind === 'front') || orderedImages[0];
   if (input.status === 'published' && !cover) throw new Error('กรุณาเพิ่มรูปปกก่อนเผยแพร่');
   const old = await Promise.all([
-    db.prepare('SELECT artistId FROM tape_artist WHERE tapeId = ?').bind(input.id).all<{ artistId: string }>(),
-    db.prepare('SELECT genreId FROM tape_genre WHERE tapeId = ?').bind(input.id).all<{ genreId: string }>(),
-    db.prepare('SELECT songId FROM tape_track WHERE tapeId = ?').bind(input.id).all<{ songId: string }>(),
+    listTapeArtistLinks(db, input.id),
+    listTapeGenreLinks(db, input.id),
+    listTapeTrackSongLinks(db, input.id),
   ]);
-  const affectedGenres = [...new Set([...old[1].results.map(row => row.genreId), ...genreIds])];
-  const affectedSongs = [...new Set([...old[2].results.map(row => row.songId), ...tracks.map(track => track.songId)])];
-  const songArtists = affectedSongs.length ? await db.prepare(`SELECT DISTINCT artistId FROM song_artist WHERE songId IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedSongs)).all<{ artistId: string }>() : { results: [] as { artistId: string }[] };
-  const affectedArtists = [...new Set([...old[0].results.map(row => row.artistId), ...artistIds, ...songArtists.results.map(row => row.artistId)])];
+  const affectedGenres = [...new Set([...old[1].map(row => row.genreId), ...genreIds])];
+  const affectedSongs = [...new Set([...old[2].map(row => row.songId), ...tracks.map(track => track.songId)])];
+  const songArtists = affectedSongs.length ? await listArtistIdsOfSongs(db, affectedSongs) : [];
+  const affectedArtists = [...new Set([...old[0].map(row => row.artistId), ...artistIds, ...songArtists.map(row => row.artistId)])];
   const affectedLabels = [...new Set([current.labelId, input.labelId].filter((value): value is string => !!value))];
   const year = input.year == null ? null : toCeYear(input.year);
   if (year != null && (year < 1950 || year > new Date().getFullYear() + 1)) throw new Error('ปีที่ออกเทปไม่ถูกต้อง');
-  const names = artistIds.length ? await db.prepare(`SELECT id, name, slug FROM artist WHERE id IN (${artistIds.map(() => '?').join(',')})`).bind(...artistIds).all<{ id: string; name: string; slug: string }>() : { results: [] as { id: string; name: string; slug: string }[] };
+  const names = artistIds.length ? await listArtistNameSlugsByIds(db, artistIds) : [];
   const customSlug = input.slug || undefined;
   const autoSlug = current.publishedAt === null && !current.slugLocked && !customSlug;
   const slug = customSlug || autoSlug
     ? await uniqueSlug(db, 'tape', title, customSlug, input.id, {
       year,
-      qualifierSlug: names.results.find(row => row.id === artistIds[0])?.slug,
+      qualifierSlug: names.find(row => row.id === artistIds[0])?.slug,
     })
     : current.slug;
   const slugLocked = customSlug ? 1 : current.slugLocked;
@@ -193,36 +207,37 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
   const nextOgSourceTitle = nextOgKey ? input.ogSourceTitle === undefined ? current.ogSourceTitle : input.ogSourceTitle : null;
   const now = Date.now();
   const publishedAt = input.status === 'published' ? current.publishedAt ?? now : current.publishedAt;
-  const labelName = input.labelId ? await db.prepare('SELECT name FROM label WHERE id = ?').bind(input.labelId).first<{ name: string }>() : null;
-  const searchText = [title, input.titleAlt, ...names.results.map(row => row.name), labelName?.name, input.catalogNo].filter(Boolean).join(' | ');
+  const labelName = input.labelId ? await getLabelName(db, input.labelId) : null;
+  const searchText = [title, input.titleAlt, ...names.map(row => row.name), labelName?.name, input.catalogNo].filter(Boolean).join(' | ');
   const relationPublished = Number(input.status === 'published');
   const statements: D1PreparedStatement[] = [
-    ...(input.images ? [db.prepare(`UPDATE tape_image SET
-      kind = (SELECT json_extract(value, '$.kind') FROM json_each(?1) WHERE json_extract(value, '$.id') = tape_image.id),
-      position = (SELECT CAST(json_extract(value, '$.position') AS INTEGER) FROM json_each(?1) WHERE json_extract(value, '$.id') = tape_image.id)
-      WHERE tapeId = ?2 AND id IN (SELECT json_extract(value, '$.id') FROM json_each(?1))`)
-      .bind(jsonParam(input.images.map((image, position) => ({ ...image, position }))), input.id)] : []),
-    db.prepare(`UPDATE tape SET slug = ?, slugLocked = ?, title = ?, titleAlt = ?, titleSort = ?, labelId = ?, year = ?, yearSort = ?, decade = ?, releaseType = ?, catalogNo = ?, description = ?, reelUrl = ?, isRare = ?, status = ?, publishedAt = ?, coverImageId = ?, coverThumbKey = ?, ogImageKey = ?, ogImageBytes = ?, ogSourceImageId = ?, ogSourceTitle = ?, updatedBy = ?, updatedAt = ? WHERE id = ?`).bind(slug, slugLocked, title, input.titleAlt || null, thaiSortKey(title), input.labelId || null, year, yearSortOf(year), decadeOf(year), input.releaseType, input.catalogNo || null, input.description || '', input.reelUrl || null, Number(!!input.isRare), input.status, publishedAt, cover?.id || null, cover?.thumbKey || null, nextOgKey, nextOgBytes, nextOgSourceImageId, nextOgSourceTitle, userId, now, input.id),
-    db.prepare('DELETE FROM tape_artist WHERE tapeId = ?').bind(input.id),
-    db.prepare('INSERT INTO tape_artist (tapeId, artistId, position, isPublished, yearSort) SELECT ?, value, CAST(key AS INTEGER), ?, ? FROM json_each(?)').bind(input.id, relationPublished, yearSortOf(year), jsonParam(artistIds)),
-    db.prepare('DELETE FROM tape_genre WHERE tapeId = ?').bind(input.id),
-    db.prepare('INSERT INTO tape_genre (tapeId, genreId, isPublished, publishedAt) SELECT ?, value, ?, ? FROM json_each(?)').bind(input.id, relationPublished, publishedAt, jsonParam(genreIds)),
-    db.prepare('DELETE FROM tape_track WHERE tapeId = ?').bind(input.id),
-    db.prepare(`INSERT INTO tape_track (id, tapeId, songId, side, position, durationSec, note)
-      SELECT json_extract(value,'$.id'), ?, json_extract(value,'$.songId'), json_extract(value,'$.side'), json_extract(value,'$.position'), json_extract(value,'$.durationSec'), json_extract(value,'$.note') FROM json_each(?)`).bind(input.id, jsonParam(tracks.map(track => ({ ...track, id: crypto.randomUUID() })))),
-    db.prepare('UPDATE site_stats SET publishedTapeCount = publishedTapeCount + ?, updatedAt = ? WHERE id = 1').bind(Number(input.status === 'published') - Number(current.status === 'published'), now),
+    ...(input.images ? [reorderTapeImagesStmt(db, input.id, input.images.map((image, position) => ({ ...image, position })))] : []),
+    updateTapeStmt(db, {
+      slug, slugLocked, title, titleAlt: input.titleAlt || null, titleSort: thaiSortKey(title), labelId: input.labelId || null, year,
+      yearSort: yearSortOf(year), decade: decadeOf(year), releaseType: input.releaseType, catalogNo: input.catalogNo || null,
+      description: input.description || '', reelUrl: input.reelUrl || null, isRare: Number(!!input.isRare), status: input.status, publishedAt,
+      coverImageId: cover?.id || null, coverThumbKey: cover?.thumbKey || null, ogImageKey: nextOgKey, ogImageBytes: nextOgBytes,
+      ogSourceImageId: nextOgSourceImageId, ogSourceTitle: nextOgSourceTitle, userId, now, id: input.id,
+    }),
+    deleteTapeArtistsStmt(db, input.id),
+    insertTapeArtistsStmt(db, input.id, relationPublished, yearSortOf(year), artistIds),
+    deleteTapeGenresStmt(db, input.id),
+    insertTapeGenresStmt(db, input.id, relationPublished, publishedAt, genreIds),
+    deleteTapeTracksStmt(db, input.id),
+    insertTapeTracksStmt(db, input.id, tracks.map(track => ({ ...track, id: crypto.randomUUID() }))),
+    adjustPublishedTapeCountStmt(db, Number(input.status === 'published') - Number(current.status === 'published'), now),
   ];
-  if (nextOgBytes !== current.ogImageBytes) statements.push(db.prepare('UPDATE site_stats SET imageBytes = MAX(0, imageBytes + ?), updatedAt = ? WHERE id = 1').bind(nextOgBytes - current.ogImageBytes, now));
-  if (affectedSongs.length) statements.push(db.prepare(`UPDATE song SET publishedTapeCount = (SELECT COUNT(DISTINCT t.id) FROM tape_track tt JOIN tape t ON t.id = tt.tapeId WHERE tt.songId = song.id AND t.status = 'published') WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedSongs)));
-  if (affectedArtists.length) statements.push(db.prepare(`UPDATE artist SET publishedTapeCount = (SELECT COUNT(DISTINCT tapeId) FROM (SELECT ta.tapeId FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId WHERE ta.artistId = artist.id AND t.status = 'published' UNION SELECT tt.tapeId FROM song_artist sa JOIN tape_track tt ON tt.songId = sa.songId JOIN tape t ON t.id = tt.tapeId WHERE sa.artistId = artist.id AND t.status = 'published')) WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedArtists)));
-  if (affectedLabels.length) statements.push(db.prepare(`UPDATE label SET publishedTapeCount = (SELECT COUNT(*) FROM tape WHERE labelId = label.id AND status = 'published') WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedLabels)));
-  if (affectedGenres.length) statements.push(db.prepare(`UPDATE genre SET publishedTapeCount = (SELECT COUNT(*) FROM tape_genre WHERE genreId = genre.id AND isPublished = 1) WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedGenres)));
+  if (nextOgBytes !== current.ogImageBytes) statements.push(adjustImageBytesStmt(db, nextOgBytes - current.ogImageBytes, now));
+  if (affectedSongs.length) statements.push(refreshSongPublishedTapeCountsStmt(db, affectedSongs));
+  if (affectedArtists.length) statements.push(refreshArtistPublishedTapeCountsStmt(db, affectedArtists));
+  if (affectedLabels.length) statements.push(refreshLabelPublishedTapeCountsStmt(db, affectedLabels));
+  if (affectedGenres.length) statements.push(refreshGenrePublishedTapeCountsStmt(db, affectedGenres));
   statements.push(...indexStatements(db, 'tape', input.id, title, searchText, input.status === 'published'));
-  if (affectedSongs.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN isPublic = 1 OR publishedTapeCount > 0 THEN 1 ELSE 0 END FROM song WHERE id = search_doc.refId) WHERE kind = 'song' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedSongs)));
-  if (affectedArtists.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1) THEN 1 ELSE 0 END FROM artist WHERE id = search_doc.refId) WHERE kind = 'artist' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedArtists)));
-  if (affectedLabels.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 THEN 1 ELSE 0 END FROM label WHERE id = search_doc.refId) WHERE kind = 'label' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedLabels)));
+  if (affectedSongs.length) statements.push(refreshSongSearchVisibilityStmt(db, affectedSongs));
+  if (affectedArtists.length) statements.push(refreshArtistSearchVisibilityStmt(db, affectedArtists));
+  if (affectedLabels.length) statements.push(refreshLabelSearchVisibilityStmt(db, affectedLabels));
   statements.push(...redirectStatements(db, `/tapes/${current.slug}`, `/tapes/${slug}`));
-  await db.batch(statements);
+  await runBatch(db, statements);
   if (current.ogImageKey && current.ogImageKey !== nextOgKey && bucket) {
     if (waitUntil) waitUntil(bucket.delete(current.ogImageKey));
     else await bucket.delete(current.ogImageKey);
@@ -230,7 +245,7 @@ export async function saveTape(db: D1Database, userId: string, input: TapeSaveIn
   return { id: input.id, slug, status: input.status };
 }
 
-export async function saveArtist(db: D1Database, userId: string, input: {
+export async function saveArtist(db: SqlClient, userId: string, input: {
   id: string; name: string; nameAlt?: string | null; slug?: string | null;
   artistType?: 'band' | 'solo' | 'group' | null;
   status?: 'active' | 'inactive' | 'hiatus' | 'deceased' | 'unknown';
@@ -239,10 +254,10 @@ export async function saveArtist(db: D1Database, userId: string, input: {
   members?: { id?: string; name: string; role?: string; years?: string | null; isCurrent?: boolean }[];
 }) {
   const name = requiredName(input.name, 'ชื่อศิลปิน');
-  const old = await db.prepare('SELECT slug, name, publishedTapeCount, EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1) AS hasPublicSong FROM artist WHERE id = ?').bind(input.id).first<{ slug: string; name: string; publishedTapeCount: number; hasPublicSong: number }>();
+  const old = await getArtistForSave(db, input.id);
   if (!old) throw new Error('ไม่พบศิลปินนี้');
   const slug = input.slug ? await uniqueSlug(db, 'artist', name, input.slug, input.id) : old.slug;
-  const previousMembers = (await db.prepare('SELECT id, personId, sourceId FROM artist_member WHERE artistId = ?').bind(input.id).all<{ id: string; personId: string | null; sourceId: string | null }>()).results;
+  const previousMembers = await listArtistMemberLinks(db, input.id);
   const previousById = new Map(previousMembers.map(member => [member.id, member]));
   const seenMembers = new Set<string>();
   const members = (input.members ?? []).slice(0, 40).map((member, position) => {
@@ -254,10 +269,14 @@ export async function saveArtist(db: D1Database, userId: string, input: {
     return { id, personId: previous?.personId ?? null, sourceId: previous?.sourceId ?? null, name: requiredName(member.name, 'ชื่อสมาชิก'), role: member.role || '', years: member.years || null, isCurrent: Number(!!member.isCurrent), position };
   });
   const now = Date.now();
-  await db.batch([
-    db.prepare('UPDATE artist SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, artistType = ?, status = ?, province = ?, formedYear = ?, themes = ?, yearsActive = ?, bio = ?, imageKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, name, input.nameAlt || null, thaiSortKey(name), input.artistType || null, input.status || 'unknown', input.province || null, input.formedYear == null ? null : toCeYear(input.formedYear), input.themes || null, input.yearsActive || null, input.bio || '', assertEntityImageKey('artists', input.id, input.imageKey), userId, now, input.id),
-    db.prepare('DELETE FROM artist_member WHERE artistId = ?').bind(input.id),
-    db.prepare(`INSERT INTO artist_member (id, artistId, personId, sourceId, name, role, years, isCurrent, position) SELECT json_extract(value,'$.id'), ?, json_extract(value,'$.personId'), json_extract(value,'$.sourceId'), json_extract(value,'$.name'), json_extract(value,'$.role'), json_extract(value,'$.years'), json_extract(value,'$.isCurrent'), json_extract(value,'$.position') FROM json_each(?)`).bind(input.id, jsonParam(members)),
+  await runBatch(db, [
+    updateArtistStmt(db, {
+      slug, name, nameAlt: input.nameAlt || null, nameSort: thaiSortKey(name), artistType: input.artistType || null, status: input.status || 'unknown',
+      province: input.province || null, formedYear: input.formedYear == null ? null : toCeYear(input.formedYear), themes: input.themes || null,
+      yearsActive: input.yearsActive || null, bio: input.bio || '', imageKey: assertEntityImageKey('artists', input.id, input.imageKey), userId, now, id: input.id,
+    }),
+    deleteArtistMembersStmt(db, input.id),
+    insertArtistMembersStmt(db, input.id, members),
     ...indexStatements(db, 'artist', input.id, name, [name, input.nameAlt, ...members.map(member => member.name)].filter(Boolean).join(' | '), old.publishedTapeCount > 0 || old.hasPublicSong === 1),
     ...redirectStatements(db, `/artists/${old.slug}`, `/artists/${slug}`),
   ]);
@@ -265,16 +284,19 @@ export async function saveArtist(db: D1Database, userId: string, input: {
   return { id: input.id, slug };
 }
 
-export async function saveLabel(db: D1Database, userId: string, input: {
+export async function saveLabel(db: SqlClient, userId: string, input: {
   id: string; name: string; nameAlt?: string | null; slug?: string | null;
   description?: string; logoKey?: string | null;
 }) {
   const name = requiredName(input.name, 'ชื่อค่าย');
-  const old = await db.prepare('SELECT slug, name, publishedTapeCount FROM label WHERE id = ?').bind(input.id).first<{ slug: string; name: string; publishedTapeCount: number }>();
+  const old = await getLabelForSave(db, input.id);
   if (!old) throw new Error('ไม่พบค่ายนี้');
   const slug = input.slug ? await uniqueSlug(db, 'label', name, input.slug, input.id) : old.slug;
-  await db.batch([
-    db.prepare('UPDATE label SET slug = ?, name = ?, nameAlt = ?, nameSort = ?, description = ?, logoKey = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, name, input.nameAlt || null, thaiSortKey(name), input.description || '', assertEntityImageKey('labels', input.id, input.logoKey), userId, Date.now(), input.id),
+  await runBatch(db, [
+    updateLabelStmt(db, {
+      slug, name, nameAlt: input.nameAlt || null, nameSort: thaiSortKey(name), description: input.description || '',
+      logoKey: assertEntityImageKey('labels', input.id, input.logoKey), userId, now: Date.now(), id: input.id,
+    }),
     ...indexStatements(db, 'label', input.id, name, [name, input.nameAlt].filter(Boolean).join(' | '), old.publishedTapeCount > 0),
     ...redirectStatements(db, `/labels/${old.slug}`, `/labels/${slug}`),
   ]);
@@ -282,71 +304,77 @@ export async function saveLabel(db: D1Database, userId: string, input: {
   return { id: input.id, slug };
 }
 
-export async function saveSong(db: D1Database, userId: string, input: {
+export async function saveSong(db: SqlClient, userId: string, input: {
   id: string; title: string; titleAlt?: string | null; slug?: string | null;
   artistIds?: string[]; lyricist?: string | null; composer?: string | null;
   arranger?: string | null; lyrics?: string | null; notes?: string | null; isPublic?: boolean;
 }) {
   const title = requiredName(input.title, 'ชื่อเพลง');
-  const old = await db.prepare('SELECT slug, publishedTapeCount, isPublic FROM song WHERE id = ?').bind(input.id).first<{ slug: string; publishedTapeCount: number; isPublic: number }>();
+  const old = await getSongForSave(db, input.id);
   if (!old) throw new Error('ไม่พบเพลงนี้');
   const slug = input.slug ? await uniqueSlug(db, 'song', title, input.slug, input.id) : old.slug;
-  const oldArtists = await db.prepare('SELECT artistId FROM song_artist WHERE songId = ?').bind(input.id).all<{ artistId: string }>();
+  const oldArtists = await listSongArtistLinks(db, input.id);
   const artistIds = [...new Set(input.artistIds ?? [])].slice(0, 20);
-  const affectedArtists = [...new Set([...oldArtists.results.map(row => row.artistId), ...artistIds])];
+  const affectedArtists = [...new Set([...oldArtists.map(row => row.artistId), ...artistIds])];
   const isPublic = input.isPublic === undefined ? Boolean(old.isPublic) : input.isPublic;
-  const singers = artistIds.length ? await db.prepare(`SELECT name FROM artist WHERE id IN (${artistIds.map(() => '?').join(',')})`).bind(...artistIds).all<{ name: string }>() : { results: [] as { name: string }[] };
+  const singers = artistIds.length ? await listArtistNamesByIds(db, artistIds) : [];
   const statements = [
-    db.prepare('UPDATE song SET slug = ?, title = ?, titleAlt = ?, titleSort = ?, lyricist = ?, composer = ?, arranger = ?, lyrics = ?, notes = ?, isPublic = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, title, input.titleAlt || null, thaiSortKey(title), input.lyricist || null, input.composer || null, input.arranger || null, input.lyrics || null, input.notes || null, Number(isPublic), userId, Date.now(), input.id),
-    db.prepare('DELETE FROM song_artist WHERE songId = ?').bind(input.id),
-    db.prepare('INSERT INTO song_artist (songId, artistId, position) SELECT ?, value, CAST(key AS INTEGER) FROM json_each(?)').bind(input.id, jsonParam(artistIds)),
+    updateSongStmt(db, {
+      slug, title, titleAlt: input.titleAlt || null, titleSort: thaiSortKey(title), lyricist: input.lyricist || null, composer: input.composer || null,
+      arranger: input.arranger || null, lyrics: input.lyrics || null, notes: input.notes || null, isPublic: Number(isPublic), userId, now: Date.now(), id: input.id,
+    }),
+    deleteSongArtistsStmt(db, input.id),
+    insertSongArtistsStmt(db, input.id, artistIds),
   ];
-  if (affectedArtists.length) statements.push(db.prepare(`UPDATE artist SET publishedTapeCount = (SELECT COUNT(DISTINCT tapeId) FROM (SELECT ta.tapeId FROM tape_artist ta JOIN tape t ON t.id = ta.tapeId WHERE ta.artistId = artist.id AND t.status = 'published' UNION SELECT tt.tapeId FROM song_artist sa JOIN tape_track tt ON tt.songId = sa.songId JOIN tape t ON t.id = tt.tapeId WHERE sa.artistId = artist.id AND t.status = 'published')) WHERE id IN (SELECT value FROM json_each(?))`).bind(jsonParam(affectedArtists)));
-  statements.push(...indexStatements(db, 'song', input.id, title, [title, input.titleAlt, ...singers.results.map(row => row.name), input.lyricist, input.composer].filter(Boolean).join(' | '), isPublic || old.publishedTapeCount > 0));
-  if (affectedArtists.length) statements.push(db.prepare("UPDATE search_doc SET isPublic = (SELECT CASE WHEN publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1) THEN 1 ELSE 0 END FROM artist WHERE id = search_doc.refId) WHERE kind = 'artist' AND refId IN (SELECT value FROM json_each(?))").bind(jsonParam(affectedArtists)));
+  if (affectedArtists.length) statements.push(refreshArtistPublishedTapeCountsStmt(db, affectedArtists));
+  statements.push(...indexStatements(db, 'song', input.id, title, [title, input.titleAlt, ...singers.map(row => row.name), input.lyricist, input.composer].filter(Boolean).join(' | '), isPublic || old.publishedTapeCount > 0));
+  if (affectedArtists.length) statements.push(refreshArtistSearchVisibilityStmt(db, affectedArtists));
   statements.push(...redirectStatements(db, `/songs/${old.slug}`, `/songs/${slug}`));
-  await db.batch(statements);
+  await runBatch(db, statements);
   return { id: input.id, slug };
 }
 
-export async function saveGenre(db: D1Database, input: { id: string; name: string; slug?: string | null; position?: number }) {
+export async function saveGenre(db: SqlClient, input: { id: string; name: string; slug?: string | null; position?: number }) {
   const name = requiredName(input.name, 'ชื่อแนวเพลง');
-  const old = await db.prepare('SELECT slug FROM genre WHERE id = ?').bind(input.id).first<{ slug: string }>();
+  const old = await getGenreSlug(db, input.id);
   if (!old) throw new Error('ไม่พบแนวเพลงนี้');
   const slug = input.slug ? await uniqueSlug(db, 'genre', name, input.slug, input.id) : old.slug;
-  await db.batch([
-    db.prepare('UPDATE genre SET name = ?, slug = ?, position = COALESCE(?, position) WHERE id = ?').bind(name, slug, input.position ?? null, input.id),
+  await runBatch(db, [
+    updateGenreStmt(db, input.id, name, slug, input.position ?? null),
     ...redirectStatements(db, `/genres/${old.slug}`, `/genres/${slug}`),
   ]);
   return { id: input.id, slug };
 }
 
-export async function createCollection(db: D1Database, userId: string, titleInput: string) {
+export async function createCollection(db: SqlClient, userId: string, titleInput: string) {
   const title = requiredName(titleInput, 'ชื่อ Collection');
   const id = crypto.randomUUID();
   const slug = await uniqueSlug(db, 'collection', title);
   const now = Date.now();
-  await db.batch([
-    db.prepare("INSERT INTO collection (id, slug, title, position, status, createdBy, createdAt, updatedBy, updatedAt) VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM collection), 'draft', ?, ?, ?, ?)").bind(id, slug, title, userId, now, userId, now),
+  await runBatch(db, [
+    insertCollectionStmt(db, { id, slug, title, userId, now }),
     ...indexStatements(db, 'collection', id, title, title, false),
   ]);
   return { id, slug };
 }
 
-export async function saveCollection(db: D1Database, userId: string, input: {
+export async function saveCollection(db: SqlClient, userId: string, input: {
   id: string; title: string; slug?: string | null; description?: string;
   coverKey?: string | null; isFeatured?: boolean; status: 'draft' | 'published';
   items?: { tapeId: string; note?: string | null }[];
 }) {
   const title = requiredName(input.title, 'ชื่อ Collection');
-  const old = await db.prepare('SELECT slug FROM collection WHERE id = ?').bind(input.id).first<{ slug: string }>();
+  const old = await getCollectionSlug(db, input.id);
   if (!old) throw new Error('ไม่พบ Collection นี้');
   const slug = input.slug ? await uniqueSlug(db, 'collection', title, input.slug, input.id) : old.slug;
   const items = (input.items ?? []).slice(0, 100).map((item, position) => ({ tapeId: item.tapeId, note: item.note || null, position }));
-  await db.batch([
-    db.prepare('UPDATE collection SET slug = ?, title = ?, description = ?, coverKey = ?, isFeatured = ?, status = ?, updatedBy = ?, updatedAt = ? WHERE id = ?').bind(slug, title, input.description || '', assertEntityImageKey('collections', input.id, input.coverKey), Number(!!input.isFeatured), input.status, userId, Date.now(), input.id),
-    db.prepare('DELETE FROM collection_item WHERE collectionId = ?').bind(input.id),
-    db.prepare(`INSERT INTO collection_item (collectionId, tapeId, position, note) SELECT ?, json_extract(value,'$.tapeId'), json_extract(value,'$.position'), json_extract(value,'$.note') FROM json_each(?)`).bind(input.id, jsonParam(items)),
+  await runBatch(db, [
+    updateCollectionStmt(db, {
+      slug, title, description: input.description || '', coverKey: assertEntityImageKey('collections', input.id, input.coverKey),
+      isFeatured: Number(!!input.isFeatured), status: input.status, userId, now: Date.now(), id: input.id,
+    }),
+    deleteCollectionItemsStmt(db, input.id),
+    insertCollectionItemsStmt(db, input.id, items),
     ...indexStatements(db, 'collection', input.id, title, title, input.status === 'published'),
     ...redirectStatements(db, `/collections/${old.slug}`, `/collections/${slug}`),
   ]);

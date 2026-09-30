@@ -1,3 +1,5 @@
+import type { SqlClient } from '../db/sql-client';
+
 export interface TapeReadiness {
   id: string;
   title: string;
@@ -15,7 +17,7 @@ interface TapeReadinessRow extends Omit<TapeReadiness, 'issues'> {
   labelId: string | null;
 }
 
-export async function getTapeReadiness(db: D1Database): Promise<TapeReadiness[]> {
+export async function getTapeReadiness(db: SqlClient): Promise<TapeReadiness[]> {
   const result = await db.prepare(`SELECT t.id, t.title, t.year, t.releaseType, t.description, t.labelId,
     (SELECT COUNT(*) FROM tape_image i WHERE i.tapeId = t.id) AS coverCount,
     (SELECT COUNT(*) FROM tape_artist a WHERE a.tapeId = t.id) AS artistCount,

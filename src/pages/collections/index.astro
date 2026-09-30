@@ -3,15 +3,8 @@ import { db, imageBaseUrl } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
 import Placeholder from '../../components/ui/Placeholder.astro';
 import { imageUrl } from '../../domain/urls';
-const collections = (await db().prepare(`SELECT c.id, c.slug, c.title, c.description,
-  COALESCE(c.coverKey, (SELECT firstTape.coverThumbKey FROM collection_item firstItem
-    JOIN tape firstTape ON firstTape.id = firstItem.tapeId AND firstTape.status = 'published'
-    WHERE firstItem.collectionId = c.id AND firstTape.coverThumbKey IS NOT NULL
-    ORDER BY firstItem.position LIMIT 1)) AS displayCoverKey,
-  COUNT(t.id) AS tapeCount
-  FROM collection c LEFT JOIN collection_item ci ON ci.collectionId = c.id
-  LEFT JOIN tape t ON t.id = ci.tapeId AND t.status = 'published'
-  WHERE c.status = 'published' GROUP BY c.id ORDER BY c.position, c.id LIMIT 100`).all<{ id: string; slug: string; title: string; description: string; displayCoverKey: string | null; tapeCount: number }>()).results;
+import { loadCollections } from '../../loaders/collections';
+const { collections } = await loadCollections(db());
 ---
 <BaseLayout title="Collection" canonicalPath="/collections">
   <h1>Collection</h1>

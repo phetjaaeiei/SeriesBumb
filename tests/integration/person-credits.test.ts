@@ -1,7 +1,8 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { addCatalogSource } from '../../src/services/catalog-sources';
-import { addPersonCredit, creditsForTarget, publicCreditsForPerson } from '../../src/services/person-credits';
+import { creditsForTarget, publicCreditsForPerson } from '../../src/repositories/credits.repo';
+import { addPersonCredit } from '../../src/services/person-credits';
 
 describe('sourced person credits', () => {
   it('requires a source on the target and hides draft appearances', async () => {

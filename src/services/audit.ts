@@ -1,4 +1,8 @@
 // Admin accountability without extra personal data: who, what, which record, outcome, when.
+import type { SqlClient } from '../db/sql-client';
+import { insertAuditLog, type AuditEntry } from '../repositories/audit.repo';
+
+export type { AuditEntry };
 
 const UUID_IN_PATH = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu;
 const TARGET_KEYS = ['id', 'tapeId', 'songId', 'userId', 'artistId', 'memberId', 'targetId', 'personId', 'imageId', 'entityId', 'relatedArtistId'] as const;
@@ -44,17 +48,8 @@ export function auditTargetFromInput(input: unknown): string | null {
   return null;
 }
 
-export interface AuditEntry {
-  actorUserId: string;
-  actorEmail: string;
-  action: string;
-  targetId: string | null;
-  status: number;
-}
-
-export async function recordAudit(db: D1Database, entry: AuditEntry, now = Date.now()): Promise<void> {
-  await db.prepare('INSERT INTO audit_log (id, actorUserId, actorEmail, action, targetId, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .bind(crypto.randomUUID(), entry.actorUserId, entry.actorEmail, entry.action, entry.targetId, entry.status, now).run();
+export async function recordAudit(db: SqlClient, entry: AuditEntry, now = Date.now()): Promise<void> {
+  await insertAuditLog(db, crypto.randomUUID(), entry, now);
 }
 
 export interface AuditActor { id: string; email: string }
@@ -64,7 +59,7 @@ export interface AuditActor { id: string; email: string }
  * A failed audit write is logged by name only and never changes the write's outcome.
  */
 export async function withAudit<R>(
-  db: D1Database,
+  db: SqlClient,
   entry: { actor: AuditActor; action: string; targetId: string | null },
   run: () => Promise<R> | R,
   statusOf: (error: unknown) => number,
@@ -82,16 +77,4 @@ export async function withAudit<R>(
       console.error('Unable to record admin audit', error instanceof Error ? error.name : 'unknown');
     }
   }
-}
-
-export interface AuditRow extends AuditEntry { id: string; createdAt: number }
-
-export async function listAudit(db: D1Database, cursor: { createdAt: number; id: string } | null, limit = 50): Promise<{ rows: AuditRow[]; next: { createdAt: number; id: string } | null }> {
-  const statement = cursor
-    ? db.prepare('SELECT id, actorUserId, actorEmail, action, targetId, status, createdAt FROM audit_log WHERE (createdAt, id) < (?, ?) ORDER BY createdAt DESC, id DESC LIMIT ?').bind(cursor.createdAt, cursor.id, limit + 1)
-    : db.prepare('SELECT id, actorUserId, actorEmail, action, targetId, status, createdAt FROM audit_log ORDER BY createdAt DESC, id DESC LIMIT ?').bind(limit + 1);
-  const results = (await statement.all<AuditRow>()).results;
-  const rows = results.slice(0, limit);
-  const last = rows.at(-1);
-  return { rows, next: results.length > limit && last ? { createdAt: last.createdAt, id: last.id } : null };
 }

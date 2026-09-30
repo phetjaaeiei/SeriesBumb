@@ -1,5 +1,8 @@
-export type SourceKind = 'artist' | 'tape' | 'song';
-export interface CatalogSource { id: string; entityKind: SourceKind; entityId: string; title: string; url: string; claim: string; accessedAt: number }
+import type { SqlClient } from '../db/sql-client';
+import { getRecordId } from '../repositories/admin.repo';
+import { deleteCatalogSourceById, insertCatalogSource, type CatalogSource } from '../repositories/sources.repo';
+
+export type { CatalogSource, SourceKind } from '../repositories/sources.repo';
 
 export function validateSourceUrl(raw: string): string {
   const url = new URL(raw);
@@ -7,23 +10,17 @@ export function validateSourceUrl(raw: string): string {
   return url.href;
 }
 
-export async function listCatalogSources(db: D1Database, entityKind: SourceKind, entityId: string): Promise<CatalogSource[]> {
-  return (await db.prepare('SELECT id, entityKind, entityId, title, url, claim, accessedAt FROM catalog_source WHERE entityKind = ? AND entityId = ? ORDER BY createdAt DESC LIMIT 50')
-    .bind(entityKind, entityId).all<CatalogSource>()).results;
-}
-
-export async function addCatalogSource(db: D1Database, adminId: string, input: Omit<CatalogSource, 'id'>): Promise<CatalogSource> {
+export async function addCatalogSource(db: SqlClient, adminId: string, input: Omit<CatalogSource, 'id'>): Promise<CatalogSource> {
   const table = input.entityKind === 'artist' ? 'artist' : input.entityKind === 'tape' ? 'tape' : 'song';
-  const exists = await db.prepare(`SELECT id FROM ${table} WHERE id = ?`).bind(input.entityId).first();
+  const exists = await getRecordId(db, table, input.entityId);
   if (!exists) throw new Error('ไม่พบรายการที่อ้างอิง');
   const url = validateSourceUrl(input.url);
   const id = crypto.randomUUID();
   const now = Date.now();
-  await db.prepare('INSERT INTO catalog_source (id, entityKind, entityId, title, url, claim, accessedAt, createdBy, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(id, input.entityKind, input.entityId, input.title.trim(), url, input.claim.trim(), input.accessedAt, adminId, now).run();
+  await insertCatalogSource(db, { id, entityKind: input.entityKind, entityId: input.entityId, title: input.title.trim(), url, claim: input.claim.trim(), accessedAt: input.accessedAt, createdBy: adminId, now });
   return { ...input, id, url };
 }
 
-export async function deleteCatalogSource(db: D1Database, id: string): Promise<void> {
-  await db.prepare('DELETE FROM catalog_source WHERE id = ?').bind(id).run();
+export async function deleteCatalogSource(db: SqlClient, id: string): Promise<void> {
+  await deleteCatalogSourceById(db, id);
 }

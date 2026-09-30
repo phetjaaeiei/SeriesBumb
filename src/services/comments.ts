@@ -1,5 +1,13 @@
+import type { SqlClient } from '../db/sql-client';
 import { AppError } from '../errors/app-error';
 import { decodeCursor, encodeCursor } from '../domain/cursor';
+import {
+  getCommentRow, getOwnLiveCommentTarget, getVisibleCommentTarget, insertCommentIfAllowed, listCommentRows, refreshCommentCount, softDeleteOwnComment,
+  type CommentRow, type CommentTarget,
+} from '../repositories/community.repo';
+import { getUserCommentBanned } from '../repositories/users.repo';
+
+export type { CommentTarget };
 
 export interface CommentDto {
   id: string;
@@ -8,7 +16,6 @@ export interface CommentDto {
   author: { name: string; image: string | null };
   isMine: boolean;
 }
-export type CommentTarget = { tapeId: string; songId?: never } | { songId: string; tapeId?: never };
 
 export class CommentError extends AppError {
   constructor(message: string, code: 'BAD_REQUEST' | 'NOT_FOUND' | 'FORBIDDEN' = 'BAD_REQUEST') { super(message, code); }
@@ -22,17 +29,9 @@ export function normalizeComment(input: string): string {
     .trim();
 }
 
-function targetConfig(target: CommentTarget) {
-  return target.tapeId
-    ? { column: 'tapeId' as const, id: target.tapeId, table: 'tape' as const, visible: "status = 'published'" }
-    : { column: 'songId' as const, id: target.songId!, table: 'song' as const, visible: '(isPublic = 1 OR publishedTapeCount > 0)' };
-}
-
-async function assertVisible(db: D1Database, target: CommentTarget) {
-  const config = targetConfig(target);
-  const row = await db.prepare(`SELECT id FROM ${config.table} WHERE id = ? AND ${config.visible}`).bind(config.id).first();
+async function assertVisible(db: SqlClient, target: CommentTarget) {
+  const row = await getVisibleCommentTarget(db, target);
   if (!row) throw new CommentError('ไม่พบรายการนี้', 'NOT_FOUND');
-  return config;
 }
 
 function safeAvatar(value: string | null): string | null {
@@ -43,55 +42,49 @@ function safeAvatar(value: string | null): string | null {
   } catch { return null; }
 }
 
-function dto(row: { id: string; body: string; createdAt: number; userId: string; name: string; image: string | null }, viewerId?: string | null): CommentDto {
+function dto(row: CommentRow, viewerId?: string | null): CommentDto {
   return { id: row.id, body: row.body, createdAt: row.createdAt, author: { name: [...row.name].slice(0, 50).join(''), image: safeAvatar(row.image) }, isMine: row.userId === viewerId };
 }
 
-export async function listComments(db: D1Database, target: CommentTarget, cursor?: string | null, viewerId?: string | null) {
-  const config = await assertVisible(db, target);
+/**
+ * One page of 20 comments on a visible tape or song, newest first, as the viewer sees them (their own
+ * marked, avatars limited to Google's image host). Shared by the comments.list action and the tape
+ * and song loaders; throws NOT_FOUND when the target is not visible.
+ */
+export async function listComments(db: SqlClient, target: CommentTarget, cursor?: string | null, viewerId?: string | null) {
+  await assertVisible(db, target);
   const decoded = decodeCursor('new', cursor);
-  const paging = decoded ? 'AND (c.createdAt, c.id) < (?, ?)' : '';
-  const query = `SELECT c.id, c.body, c.createdAt, c.userId, u.name, u.image FROM comment c JOIN user u ON u.id = c.userId
-    WHERE c.${config.column} = ? AND c.deletedAt IS NULL ${paging} ORDER BY c.createdAt DESC, c.id DESC LIMIT 21`;
-  const rows = (await db.prepare(query).bind(config.id, ...(decoded ? [decoded.key, decoded.id] : [])).all<{ id: string; body: string; createdAt: number; userId: string; name: string; image: string | null }>()).results;
+  const rows = await listCommentRows(db, target, decoded);
   const more = rows.length > 20;
   const page = rows.slice(0, 20);
   const last = page.at(-1);
   return { items: page.map(row => dto(row, viewerId)), nextCursor: more && last ? encodeCursor('new', last.createdAt, last.id) : null };
 }
 
-export async function createComment(db: D1Database, userId: string, role: 'member' | 'admin', target: CommentTarget, rawBody: string) {
+export async function createComment(db: SqlClient, userId: string, role: 'member' | 'admin', target: CommentTarget, rawBody: string) {
   const body = normalizeComment(rawBody);
   if ([...body].length < 1 || [...body].length > 1000) throw new CommentError('คอมเมนต์ต้องมี 1–1,000 ตัวอักษร');
-  const config = targetConfig(target);
   const id = crypto.randomUUID();
   const now = Date.now();
-  const rateWhere = role === 'admin' ? '' : `AND (SELECT COUNT(*) FROM comment WHERE userId = ? AND createdAt > ?) < 5
-    AND (SELECT COUNT(*) FROM comment WHERE userId = ? AND createdAt > ?) < 50`;
-  const insert = db.prepare(`INSERT INTO comment (id, userId, tapeId, songId, body, createdAt)
-    SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT commentBanned FROM user WHERE id = ?) = 0 ${rateWhere}
-      AND EXISTS (SELECT 1 FROM ${config.table} WHERE id = ? AND ${config.visible})`);
-  const binds: (string | number | null)[] = [id, userId, target.tapeId || null, target.songId || null, body, now, userId];
-  if (role !== 'admin') binds.push(userId, now - 60_000, userId, now - 86_400_000);
-  binds.push(config.id);
-  const result = await insert.bind(...binds).run();
-  if (!result.meta.changes) {
-    const current = await db.prepare('SELECT commentBanned FROM user WHERE id = ?').bind(userId).first<{ commentBanned: number }>();
+  // Admins skip the rate limit: 5 comments a minute and 50 a day for members.
+  const rateWindows = role === 'admin' ? null : { minuteSince: now - 60_000, daySince: now - 86_400_000 };
+  const changes = await insertCommentIfAllowed(db, { id, userId, target, body, now }, rateWindows);
+  if (!changes) {
+    const current = await getUserCommentBanned(db, userId);
     if (current?.commentBanned) throw new CommentError('บัญชีนี้ถูกระงับการคอมเมนต์', 'FORBIDDEN');
     await assertVisible(db, target);
     throw new CommentError('คอมเมนต์ถี่เกินไป กรุณารอสักครู่');
   }
-  await db.prepare(`UPDATE ${config.table} SET commentCount = (SELECT COUNT(*) FROM comment WHERE ${config.column} = ? AND deletedAt IS NULL) WHERE id = ?`).bind(config.id, config.id).run();
-  const row = await db.prepare('SELECT c.id, c.body, c.createdAt, c.userId, u.name, u.image FROM comment c JOIN user u ON u.id = c.userId WHERE c.id = ?').bind(id).first<{ id: string; body: string; createdAt: number; userId: string; name: string; image: string | null }>();
+  await refreshCommentCount(db, target);
+  const row = await getCommentRow(db, id);
   return dto(row!, userId);
 }
 
-export async function deleteOwnComment(db: D1Database, userId: string, commentId: string) {
-  const row = await db.prepare('SELECT tapeId, songId FROM comment WHERE id = ? AND userId = ? AND deletedAt IS NULL').bind(commentId, userId).first<{ tapeId: string | null; songId: string | null }>();
+export async function deleteOwnComment(db: SqlClient, userId: string, commentId: string) {
+  const row = await getOwnLiveCommentTarget(db, commentId, userId);
   if (!row) throw new CommentError('ไม่พบคอมเมนต์นี้', 'NOT_FOUND');
-  const result = await db.prepare('UPDATE comment SET deletedAt = ?, deletedBy = ?, deletedByAdmin = 0 WHERE id = ? AND userId = ? AND deletedAt IS NULL').bind(Date.now(), userId, commentId, userId).run();
-  if (!result.meta.changes) throw new CommentError('ไม่พบคอมเมนต์นี้', 'NOT_FOUND');
-  const config = targetConfig(row.tapeId ? { tapeId: row.tapeId } : { songId: row.songId! });
-  await db.prepare(`UPDATE ${config.table} SET commentCount = (SELECT COUNT(*) FROM comment WHERE ${config.column} = ? AND deletedAt IS NULL) WHERE id = ?`).bind(config.id, config.id).run();
+  const changes = await softDeleteOwnComment(db, commentId, userId, Date.now());
+  if (!changes) throw new CommentError('ไม่พบคอมเมนต์นี้', 'NOT_FOUND');
+  await refreshCommentCount(db, row.tapeId ? { tapeId: row.tapeId } : { songId: row.songId! });
   return { id: commentId };
 }

@@ -1,19 +1,12 @@
 ---
 import { db } from '../../../platform/runtime';
 import AdminLayout from '../../../components/layout/AdminLayout.astro';
-import { getAdminCatalogPage, type AdminCatalogKind } from '../../../repositories/admin-catalog.repo';
+import { loadAdminCatalog } from '../../../loaders/admin/catalog';
 
 const labelMap = { tapes: 'เทป', songs: 'เพลง', artists: 'ศิลปิน', labels: 'ค่ายเพลง', genres: 'แนวเพลง', collections: 'Collection' } as const;
-const kind = Astro.params.kind as AdminCatalogKind;
-if (!Object.hasOwn(labelMap, kind)) return Astro.rewrite('/404');
-
-const query = (Astro.url.searchParams.get('q') || '').trim().slice(0, 100);
-const requestedStatus = Astro.url.searchParams.get('status');
-const status = requestedStatus === 'draft' || requestedStatus === 'published' ? requestedStatus : 'all';
-const unlinked = Astro.url.searchParams.get('unlinked') === '1';
-const { items, nextCursor } = await getAdminCatalogPage(db(), {
-  kind, query, status, unlinked, cursor: Astro.url.searchParams.get('cursor'),
-});
+const model = await loadAdminCatalog(db(), Astro.params.kind, Astro.url.searchParams);
+if (!model) return Astro.rewrite('/404');
+const { kind, query, status, unlinked, items, nextCursor } = model;
 const nextParams = new URLSearchParams();
 if (query) nextParams.set('q', query);
 if (status !== 'all') nextParams.set('status', status);

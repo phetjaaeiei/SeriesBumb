@@ -8,24 +8,17 @@ import Tabs from '../../components/ui/Tabs.astro';
 import Tag from '../../components/ui/Tag.astro';
 import ExpandableText from '../../components/ui/ExpandableText.astro';
 import { formatDuration, formatYear, releaseTypeLabel } from '../../domain/format';
-import { getTapeBySlug } from '../../repositories/tapes.repo';
 import { imageUrl } from '../../domain/urls';
 import EngagementButton from '../../components/islands/EngagementButton';
 import Comments from '../../components/islands/Comments';
-import { listComments } from '../../services/comments';
-import { listCatalogSources } from '../../services/catalog-sources';
 import { CorrectionForm, ReviewForm } from '../../components/islands/ContributionForms';
-import { publicTapeEditions } from '../../services/catalog-relations';
-import { creditsForTarget } from '../../services/person-credits';
+import { loadTapeDetail } from '../../loaders/tape-detail';
 
 const slug = Astro.params.slug ?? '';
 const isAdmin = Astro.locals.user?.role === 'admin';
-const tape = await getTapeBySlug(db(), slug, isAdmin);
-if (!tape) return Astro.rewrite('/404');
-const unpublished = tape.status !== 'published';
-const catalogSources = await listCatalogSources(db(), 'tape', tape.id);
-const credits = await creditsForTarget(db(), 'tape', tape.id);
-const editions = !unpublished ? await publicTapeEditions(db(), tape.id) : [];
+const model = await loadTapeDetail(db(), slug, Astro.locals.user);
+if (!model) return Astro.rewrite('/404');
+const { tape, unpublished, catalogSources, credits, editions, collections, related, engagement, firstComments, publicReviews } = model;
 const artistNames = tape.artists.map(artist => artist.name).join(' / ') || 'รวมศิลปิน';
 const cover = tape.images.find(image => image.id === tape.coverImageId) ?? tape.images.find(image => image.kind === 'front') ?? tape.images[0];
 const gallery = cover ? [cover, ...tape.images.filter(image => image.id !== cover.id)] : [];
@@ -43,17 +36,7 @@ const sideGroups = sides.map(side => {
   const tracks = tape.tracks.filter(track => track.side === side);
   return { side, tracks, total: tracks.reduce((seconds, track) => seconds + (track.durationSec ?? 0), 0), incomplete: tracks.some(track => track.durationSec === null) };
 });
-const relatedStatement = tape.artists[0]
-  ? db().prepare(`SELECT t.slug, t.title, t.year FROM tape_artist ta JOIN artist a ON a.id = ta.artistId JOIN tape t ON t.id = ta.tapeId WHERE a.slug = ? AND t.status = 'published' AND t.id != ? ORDER BY t.yearSort, t.id LIMIT 8`).bind(tape.artists[0].slug, tape.id)
-  : tape.labelId ? db().prepare("SELECT slug, title, year FROM tape WHERE labelId = ? AND status = 'published' AND id != ? ORDER BY yearSort, id LIMIT 8").bind(tape.labelId, tape.id) : null;
-const [collections, related] = await Promise.all([
-  db().prepare(`SELECT c.slug, c.title FROM collection_item ci JOIN collection c ON c.id = ci.collectionId WHERE ci.tapeId = ? AND c.status = 'published' ORDER BY c.position`).bind(tape.id).all<{ slug: string; title: string }>(),
-  relatedStatement?.all<{ slug: string; title: string; year: number | null }>() ?? Promise.resolve({ results: [] as { slug: string; title: string; year: number | null }[] }),
-]);
 const viewerId = Astro.locals.user?.id;
-const engagement = !unpublished && viewerId ? await db().prepare('SELECT EXISTS(SELECT 1 FROM tape_like WHERE userId = ? AND tapeId = ?) AS liked, EXISTS(SELECT 1 FROM tape_owner WHERE userId = ? AND tapeId = ?) AS owned').bind(viewerId, tape.id, viewerId, tape.id).first<{ liked: number; owned: number }>() : null;
-const firstComments = !unpublished ? await listComments(db(), { tapeId: tape.id }, null, viewerId) : null;
-const publicReviews = !unpublished ? (await db().prepare("SELECT r.id, r.body, r.rating, r.createdAt, u.name AS authorName FROM review r JOIN user u ON u.id = r.userId WHERE r.tapeId = ? AND r.status = 'published' ORDER BY r.createdAt DESC, r.id DESC LIMIT 20").bind(tape.id).all<{ id: string; body: string; rating: number; createdAt: number; authorName: string }>()).results : [];
 const turnstileSiteKey = config().turnstile?.siteKey ?? null;
 ---
 <BaseLayout title={tape.title} description={description} canonicalPath={`/tapes/${slug}`} ogImage={ogImage} ogImageAlt={`ภาพแชร์เทป ${tape.title}`} ogType="music.album" noindex={unpublished}>
@@ -119,7 +102,7 @@ const turnstileSiteKey = config().turnstile?.siteKey ?? null;
     </section>
     <section id="collections" class="tab-panel" data-tab-panel>
       <h2>Collection</h2>
-      {collections.results.length ? <ul class="plain-list">{collections.results.map(item => <li><a href={`/collections/${encodeURIComponent(item.slug)}`}>{item.title}</a></li>)}</ul> : <p class="empty-state">เทปนี้ยังไม่อยู่ใน Collection</p>}
+      {collections.length ? <ul class="plain-list">{collections.map(item => <li><a href={`/collections/${encodeURIComponent(item.slug)}`}>{item.title}</a></li>)}</ul> : <p class="empty-state">เทปนี้ยังไม่อยู่ใน Collection</p>}
     </section>
     <section id="reviews" class="tab-panel" data-tab-panel><h2>รีวิวจากสมาชิก</h2>
       {publicReviews.length ? <ul class="plain-list">{publicReviews.map(review => <li class="section"><strong>{review.rating}/5 ดาว · {review.authorName}</strong><p>{review.body}</p></li>)}</ul> : <p class="empty-state">ยังไม่มีรีวิวที่ผ่านการตรวจ</p>}
@@ -130,7 +113,7 @@ const turnstileSiteKey = config().turnstile?.siteKey ?? null;
       {unpublished ? <p class="empty-state">เผยแพร่เทปก่อนจึงเปิดคอมเมนต์ได้</p> : <Comments turnstileSiteKey={turnstileSiteKey} tapeId={tape.id} initialItems={firstComments!.items} initialCursor={firstComments!.nextCursor} initialCount={tape.commentCount} authenticated={Boolean(viewerId)} banned={Boolean(Astro.locals.user?.commentBanned)} loginNext={Astro.url.pathname} client:visible />}
     </section>
   </Tabs>
-  {related.results.length > 0 && <section class="section" aria-labelledby="related-tapes-title"><h2 id="related-tapes-title">{tape.artists[0] ? `เทปอื่นของ ${tape.artists[0].name}` : 'เทปอื่นจากค่ายเดียวกัน'}</h2><ul class="plain-list">{related.results.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`}>{item.title}</a> <span class="mono muted">{item.year ?? '—'}</span></li>)}</ul></section>}
+  {related.length > 0 && <section class="section" aria-labelledby="related-tapes-title"><h2 id="related-tapes-title">{tape.artists[0] ? `เทปอื่นของ ${tape.artists[0].name}` : 'เทปอื่นจากค่ายเดียวกัน'}</h2><ul class="plain-list">{related.map(item => <li><a href={`/tapes/${encodeURIComponent(item.slug)}`}>{item.title}</a> <span class="mono muted">{item.year ?? '—'}</span></li>)}</ul></section>}
   <CreditLine createdByName={tape.createdByName} createdAt={tape.createdAt} updatedByName={tape.updatedByName} updatedAt={tape.updatedAt} />
   <script>import '../../scripts/lightbox';</script>
 </BaseLayout>

@@ -1,5 +1,7 @@
-import { decodeCursor, encodeCursor, type CatalogSort } from '../domain/cursor';
+import { decodeCursor, encodeCursor, type CatalogSort, type CursorKey } from '../domain/cursor';
 import type { ReleaseType } from '../domain/enums';
+import { jsonParam } from '../db/client';
+import type { SqlClient } from '../db/sql-client';
 
 export interface TapeListItem {
   id: string;
@@ -54,7 +56,7 @@ export interface TapePageOptions {
 
 type TapeRow = Omit<TapeListItem, 'artists'>;
 
-async function attachArtists(db: D1Database, rows: TapeRow[]): Promise<TapeListItem[]> {
+async function attachArtists(db: SqlClient, rows: TapeRow[]): Promise<TapeListItem[]> {
   if (!rows.length) return [];
   const placeholders = rows.map(() => '?').join(',');
   const related = await db.prepare(`SELECT ta.tapeId, a.name, a.slug FROM tape_artist ta JOIN artist a ON a.id = ta.artistId WHERE ta.tapeId IN (${placeholders}) ORDER BY ta.tapeId, ta.position`).bind(...rows.map(row => row.id)).all<{ tapeId: string; name: string; slug: string }>();
@@ -67,14 +69,14 @@ async function attachArtists(db: D1Database, rows: TapeRow[]): Promise<TapeListI
   return rows.map(row => ({ ...row, artists: byTape.get(row.id) ?? [] }));
 }
 
-export async function getTapeHighlights(db: D1Database, kind: 'updated' | 'owned', limit = 10): Promise<TapeListItem[]> {
+export async function getTapeHighlights(db: SqlClient, kind: 'updated' | 'owned', limit = 10): Promise<TapeListItem[]> {
   const order = kind === 'updated' ? 't.updatedAt DESC, t.id DESC' : 't.ownerCount DESC, t.publishedAt DESC, t.id DESC';
   const constraint = kind === 'owned' ? 'AND t.ownerCount > 0' : '';
   const result = await db.prepare(`SELECT t.id, t.slug, t.title, t.titleAlt, t.year, t.yearSort, t.releaseType, t.coverThumbKey, t.publishedAt, t.updatedAt, t.titleSort, t.ownerCount, l.name AS labelName, l.slug AS labelSlug FROM tape t LEFT JOIN label l ON l.id = t.labelId WHERE t.status = 'published' ${constraint} ORDER BY ${order} LIMIT ?`).bind(Math.min(Math.max(limit, 1), 50)).all<TapeRow>();
   return attachArtists(db, result.results);
 }
 
-export async function getTapePage(db: D1Database, options: TapePageOptions = {}): Promise<{ items: TapeListItem[]; nextCursor: string | null }> {
+export async function getTapePage(db: SqlClient, options: TapePageOptions = {}): Promise<{ items: TapeListItem[]; nextCursor: string | null }> {
   const sort = options.sort ?? 'new';
   const size = Math.min(Math.max(Math.floor(options.pageSize ?? 24), 1), 50);
   const order = sort === 'year' ? 't.yearSort ASC, t.id ASC' : sort === 'title' ? 't.titleSort ASC, t.id ASC' : 't.publishedAt DESC, t.id DESC';
@@ -112,7 +114,7 @@ export async function getTapePage(db: D1Database, options: TapePageOptions = {})
   return { items, nextCursor: hasMore && last && key != null ? encodeCursor(sort, key, last.id) : null };
 }
 
-export async function getTapeBySlug(db: D1Database, slug: string, admin = false): Promise<TapeDetail | null> {
+export async function getTapeBySlug(db: SqlClient, slug: string, admin = false): Promise<TapeDetail | null> {
   const row = await db.prepare(`
     SELECT t.*, l.name AS labelName, l.slug AS labelSlug,
       creator.name AS createdByName, editor.name AS updatedByName
@@ -133,4 +135,173 @@ export async function getTapeBySlug(db: D1Database, slug: string, admin = false)
     db.prepare('SELECT g.name, g.slug FROM tape_genre tg JOIN genre g ON g.id = tg.genreId WHERE tg.tapeId = ? ORDER BY g.position').bind(row.id).all<TapeDetail['genres'][number]>(),
   ]);
   return { ...row, artists: artists.results, images: images.results, tracks: tracks.results, genres: genres.results };
+}
+
+export interface RelatedTape { slug: string; title: string; year: number | null }
+
+/** Other published tapes by the artist with this slug, oldest first. */
+export async function listRelatedTapesByArtist(sql: SqlClient, artistSlug: string, excludeTapeId: string): Promise<RelatedTape[]> {
+  return (await sql.prepare(`SELECT t.slug, t.title, t.year FROM tape_artist ta JOIN artist a ON a.id = ta.artistId JOIN tape t ON t.id = ta.tapeId WHERE a.slug = ? AND t.status = 'published' AND t.id != ? ORDER BY t.yearSort, t.id LIMIT 8`).bind(artistSlug, excludeTapeId).all<RelatedTape>()).results;
+}
+
+/** Other published tapes on this label, oldest first. */
+export async function listRelatedTapesByLabel(sql: SqlClient, labelId: string, excludeTapeId: string): Promise<RelatedTape[]> {
+  return (await sql.prepare("SELECT slug, title, year FROM tape WHERE labelId = ? AND status = 'published' AND id != ? ORDER BY yearSort, id LIMIT 8").bind(labelId, excludeTapeId).all<RelatedTape>()).results;
+}
+
+export interface TapeViewerEngagement { liked: number; owned: number }
+
+/** Whether this user liked and owns the tape (0/1 flags), or null when the query returns no row. */
+export async function getTapeViewerEngagement(sql: SqlClient, userId: string, tapeId: string): Promise<TapeViewerEngagement | null> {
+  return sql.prepare('SELECT EXISTS(SELECT 1 FROM tape_like WHERE userId = ? AND tapeId = ?) AS liked, EXISTS(SELECT 1 FROM tape_owner WHERE userId = ? AND tapeId = ?) AS owned').bind(userId, tapeId, userId, tapeId).first<TapeViewerEngagement>();
+}
+
+/** The highest rowid in `tape` (drafts included), or null on an empty table. */
+export async function getMaxTapeRowid(sql: SqlClient): Promise<{ value: number | null } | null> {
+  return sql.prepare('SELECT max(rowid) AS value FROM tape').first<{ value: number | null }>();
+}
+
+/** The first published tape at or after `rowid`, in rowid order. */
+export async function getPublishedTapeSlugFromRowid(sql: SqlClient, rowid: number): Promise<{ slug: string } | null> {
+  return sql.prepare("SELECT slug FROM tape WHERE status = 'published' AND rowid >= ? ORDER BY rowid LIMIT 1").bind(rowid).first<{ slug: string }>();
+}
+
+/** The published tape with the lowest rowid. */
+export async function getFirstPublishedTapeSlug(sql: SqlClient): Promise<{ slug: string } | null> {
+  return sql.prepare("SELECT slug FROM tape WHERE status = 'published' ORDER BY rowid LIMIT 1").first<{ slug: string }>();
+}
+
+export interface UserTapeEntry { id: string; createdAt: number; slug: string; title: string; year: number | null; coverThumbKey: string | null }
+
+/** Up to 49 published tapes the user liked (`tape_like`) or owns (`tape_owner`), newest first, after `cursor` (one more than a page). */
+export async function listUserTapeEntries(sql: SqlClient, table: 'tape_like' | 'tape_owner', userId: string, cursor: { key: CursorKey; id: string } | null): Promise<UserTapeEntry[]> {
+  const extra = cursor ? 'AND (e.createdAt, e.tapeId) < (?, ?)' : '';
+  return (await sql.prepare(`SELECT e.tapeId AS id, e.createdAt, t.slug, t.title, t.year, t.coverThumbKey FROM ${table} e JOIN tape t ON t.id = e.tapeId WHERE e.userId = ? AND t.status = 'published' ${extra} ORDER BY e.createdAt DESC, e.tapeId DESC LIMIT 49`).bind(userId, ...(cursor ? [cursor.key, cursor.id] : [])).all<UserTapeEntry>()).results;
+}
+
+/** The tape's artist ids in credit order. */
+export async function listTapeArtistIds(sql: SqlClient, tapeId: string): Promise<string[]> {
+  return (await sql.prepare('SELECT artistId AS id FROM tape_artist WHERE tapeId = ? ORDER BY position').bind(tapeId).all<{ id: string }>()).results.map(row => row.id);
+}
+
+/** The tape's genre ids. */
+export async function listTapeGenreIds(sql: SqlClient, tapeId: string): Promise<string[]> {
+  return (await sql.prepare('SELECT genreId AS id FROM tape_genre WHERE tapeId = ?').bind(tapeId).all<{ id: string }>()).results.map(row => row.id);
+}
+
+export interface TapeTrackEditRow { songId: string; side: 'A' | 'B' | 'C' | 'D'; position: number; durationSec: number | null; note: string | null }
+
+/** The tape's tracks by side and position, as the admin editor edits them. */
+export async function listTapeTracksForEdit(sql: SqlClient, tapeId: string): Promise<TapeTrackEditRow[]> {
+  return (await sql.prepare('SELECT songId, side, position, durationSec, note FROM tape_track WHERE tapeId = ? ORDER BY side, position').bind(tapeId).all<TapeTrackEditRow>()).results;
+}
+
+export interface TapeImageEditRow { id: string; kind: 'front' | 'back' | 'inside' | 'cassette' | 'other'; fullKey: string; thumbKey: string; position: number }
+
+/** The tape's images in display order, as the admin editor edits them. */
+export async function listTapeImagesForEdit(sql: SqlClient, tapeId: string): Promise<TapeImageEditRow[]> {
+  return (await sql.prepare('SELECT id, kind, fullKey, thumbKey, position FROM tape_image WHERE tapeId = ? ORDER BY position').bind(tapeId).all<TapeImageEditRow>()).results;
+}
+
+export interface DraftTapeRow { id: string; title: string; updatedAt: number }
+
+/** The ten draft tapes that have waited longest since their last edit. */
+export async function listOldestDraftTapes(sql: SqlClient): Promise<DraftTapeRow[]> {
+  return (await sql.prepare("SELECT id, title, updatedAt FROM tape WHERE status = 'draft' ORDER BY updatedAt ASC, id ASC LIMIT 10").all<DraftTapeRow>()).results;
+}
+
+// Writes for the admin tape editor. Statement builders return prepared statements so saveTape and
+// deleteCatalogEntity keep every change to one tape in a single atomic batch.
+
+export interface TapeDraftInsert { id: string; slug: string; title: string; titleSort: string; userId: string; now: number }
+
+/** A new untitled-or-titled draft album. */
+export function insertTapeDraftStmt(sql: SqlClient, tape: TapeDraftInsert): D1PreparedStatement {
+  return sql.prepare("INSERT INTO tape (id, slug, title, titleSort, releaseType, status, createdBy, createdAt, updatedBy, updatedAt) VALUES (?, ?, ?, ?, 'album', 'draft', ?, ?, ?, ?)").bind(tape.id, tape.slug, tape.title, tape.titleSort, tape.userId, tape.now, tape.userId, tape.now);
+}
+
+export interface TapeSaveRow { id: string; slug: string; slugLocked: number; status: 'draft' | 'published'; publishedAt: number | null; labelId: string | null; coverImageId: string | null; ogImageKey: string | null; ogImageBytes: number; ogSourceImageId: string | null; ogSourceTitle: string | null }
+
+/** The stored fields saveTape compares the submitted tape against, or null. */
+export async function getTapeForSave(sql: SqlClient, id: string): Promise<TapeSaveRow | null> {
+  return sql.prepare('SELECT id, slug, slugLocked, status, publishedAt, labelId, coverImageId, ogImageKey, ogImageBytes, ogSourceImageId, ogSourceTitle FROM tape WHERE id = ?').bind(id).first<TapeSaveRow>();
+}
+
+/** The tape's current artist links (any order). */
+export async function listTapeArtistLinks(sql: SqlClient, tapeId: string): Promise<{ artistId: string }[]> {
+  return (await sql.prepare('SELECT artistId FROM tape_artist WHERE tapeId = ?').bind(tapeId).all<{ artistId: string }>()).results;
+}
+
+/** The tape's current genre links (any order). */
+export async function listTapeGenreLinks(sql: SqlClient, tapeId: string): Promise<{ genreId: string }[]> {
+  return (await sql.prepare('SELECT genreId FROM tape_genre WHERE tapeId = ?').bind(tapeId).all<{ genreId: string }>()).results;
+}
+
+/** The songs of the tape's current tracks (any order, repeats kept). */
+export async function listTapeTrackSongLinks(sql: SqlClient, tapeId: string): Promise<{ songId: string }[]> {
+  return (await sql.prepare('SELECT songId FROM tape_track WHERE tapeId = ?').bind(tapeId).all<{ songId: string }>()).results;
+}
+
+export interface TapeUpdate {
+  id: string; slug: string; slugLocked: number; title: string; titleAlt: string | null; titleSort: string; labelId: string | null;
+  year: number | null; yearSort: number; decade: number | null; releaseType: ReleaseType; catalogNo: string | null; description: string;
+  reelUrl: string | null; isRare: number; status: 'draft' | 'published'; publishedAt: number | null; coverImageId: string | null;
+  coverThumbKey: string | null; ogImageKey: string | null; ogImageBytes: number; ogSourceImageId: string | null; ogSourceTitle: string | null;
+  userId: string; now: number;
+}
+
+/** Overwrites every editable column of the tape. */
+export function updateTapeStmt(sql: SqlClient, tape: TapeUpdate): D1PreparedStatement {
+  return sql.prepare(`UPDATE tape SET slug = ?, slugLocked = ?, title = ?, titleAlt = ?, titleSort = ?, labelId = ?, year = ?, yearSort = ?, decade = ?, releaseType = ?, catalogNo = ?, description = ?, reelUrl = ?, isRare = ?, status = ?, publishedAt = ?, coverImageId = ?, coverThumbKey = ?, ogImageKey = ?, ogImageBytes = ?, ogSourceImageId = ?, ogSourceTitle = ?, updatedBy = ?, updatedAt = ? WHERE id = ?`).bind(tape.slug, tape.slugLocked, tape.title, tape.titleAlt, tape.titleSort, tape.labelId, tape.year, tape.yearSort, tape.decade, tape.releaseType, tape.catalogNo, tape.description, tape.reelUrl, tape.isRare, tape.status, tape.publishedAt, tape.coverImageId, tape.coverThumbKey, tape.ogImageKey, tape.ogImageBytes, tape.ogSourceImageId, tape.ogSourceTitle, tape.userId, tape.now, tape.id);
+}
+
+export function deleteTapeArtistsStmt(sql: SqlClient, tapeId: string): D1PreparedStatement {
+  return sql.prepare('DELETE FROM tape_artist WHERE tapeId = ?').bind(tapeId);
+}
+
+/** Links the artists in credit order; `isPublished` (0/1) and `yearSort` are denormalized from the tape. */
+export function insertTapeArtistsStmt(sql: SqlClient, tapeId: string, isPublished: number, yearSort: number, artistIds: string[]): D1PreparedStatement {
+  return sql.prepare('INSERT INTO tape_artist (tapeId, artistId, position, isPublished, yearSort) SELECT ?, value, CAST(key AS INTEGER), ?, ? FROM json_each(?)').bind(tapeId, isPublished, yearSort, jsonParam(artistIds));
+}
+
+export function deleteTapeGenresStmt(sql: SqlClient, tapeId: string): D1PreparedStatement {
+  return sql.prepare('DELETE FROM tape_genre WHERE tapeId = ?').bind(tapeId);
+}
+
+/** Links the genres; `isPublished` (0/1) and `publishedAt` are denormalized from the tape. */
+export function insertTapeGenresStmt(sql: SqlClient, tapeId: string, isPublished: number, publishedAt: number | null, genreIds: string[]): D1PreparedStatement {
+  return sql.prepare('INSERT INTO tape_genre (tapeId, genreId, isPublished, publishedAt) SELECT ?, value, ?, ? FROM json_each(?)').bind(tapeId, isPublished, publishedAt, jsonParam(genreIds));
+}
+
+export function deleteTapeTracksStmt(sql: SqlClient, tapeId: string): D1PreparedStatement {
+  return sql.prepare('DELETE FROM tape_track WHERE tapeId = ?').bind(tapeId);
+}
+
+export interface TapeTrackInsert { id: string; songId: string; side: 'A' | 'B' | 'C' | 'D'; position: number; durationSec?: number | null; note?: string | null }
+
+/** Inserts the tape's tracks (each with its new row id). */
+export function insertTapeTracksStmt(sql: SqlClient, tapeId: string, tracks: TapeTrackInsert[]): D1PreparedStatement {
+  return sql.prepare(`INSERT INTO tape_track (id, tapeId, songId, side, position, durationSec, note)
+      SELECT json_extract(value,'$.id'), ?, json_extract(value,'$.songId'), json_extract(value,'$.side'), json_extract(value,'$.position'), json_extract(value,'$.durationSec'), json_extract(value,'$.note') FROM json_each(?)`).bind(tapeId, jsonParam(tracks));
+}
+
+export interface TapeDeleteRow { id: string; title: string; slug: string; status: string; labelId: string | null; ogImageKey: string | null; ogImageBytes: number }
+
+/** The fields deleting a tape needs (title to confirm, slug, counters to fix, share image to remove), or null. */
+export async function getTapeForDelete(sql: SqlClient, id: string): Promise<TapeDeleteRow | null> {
+  return sql.prepare('SELECT id, title, slug, status, labelId, ogImageKey, ogImageBytes FROM tape WHERE id = ?').bind(id).first<TapeDeleteRow>();
+}
+
+/** The tape's artist ids (any order). */
+export async function listTapeArtistIdsUnordered(sql: SqlClient, tapeId: string): Promise<string[]> {
+  return (await sql.prepare('SELECT artistId AS id FROM tape_artist WHERE tapeId = ?').bind(tapeId).all<{ id: string }>()).results.map(row => row.id);
+}
+
+/** The song ids of the tape's tracks (any order, repeats kept). */
+export async function listTapeTrackSongIds(sql: SqlClient, tapeId: string): Promise<string[]> {
+  return (await sql.prepare('SELECT songId AS id FROM tape_track WHERE tapeId = ?').bind(tapeId).all<{ id: string }>()).results.map(row => row.id);
+}
+
+export function deleteTapeStmt(sql: SqlClient, id: string): D1PreparedStatement {
+  return sql.prepare('DELETE FROM tape WHERE id = ?').bind(id);
 }

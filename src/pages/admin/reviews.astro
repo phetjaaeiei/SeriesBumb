@@ -1,15 +1,13 @@
 ---
 import { db } from '../../platform/runtime';
 import AdminLayout from '../../components/layout/AdminLayout.astro';
-import ModerationQueue, { type ReviewQueueRow, type CorrectionQueueRow } from '../../components/admin/ModerationQueue';
+import ModerationQueue from '../../components/admin/ModerationQueue';
+import { loadAdminReviews } from '../../loaders/admin/reviews';
 
-const [reviewRows, correctionRows] = await Promise.all([
-  db().prepare("SELECT r.id, r.body, r.rating, u.name AS authorName, t.title AS tapeTitle, t.slug AS tapeSlug FROM review r JOIN user u ON u.id = r.userId JOIN tape t ON t.id = r.tapeId WHERE r.status = 'pending' ORDER BY r.createdAt, r.id LIMIT 50").all<ReviewQueueRow>(),
-  db().prepare("SELECT cs.id, cs.proposedChange, cs.sourceUrl, u.name AS authorName, cs.targetKind, COALESCE(a.name, t.title, s.title, 'รายการถูกลบ') AS targetTitle FROM catalog_submission cs JOIN user u ON u.id = cs.userId LEFT JOIN artist a ON cs.targetKind = 'artist' AND a.id = cs.targetId LEFT JOIN tape t ON cs.targetKind = 'tape' AND t.id = cs.targetId LEFT JOIN song s ON cs.targetKind = 'song' AND s.id = cs.targetId WHERE cs.status = 'pending' ORDER BY cs.createdAt, cs.id LIMIT 50").all<CorrectionQueueRow>(),
-]);
+const { reviews, corrections } = await loadAdminReviews(db());
 ---
 <AdminLayout title="ตรวจรีวิวและข้อเสนอ">
   <h1>ตรวจรีวิวและข้อเสนอ</h1>
   <p class="page-lede">ข้อความจากสมาชิกไม่เผยแพร่หรือแก้ข้อมูลคลังจนกว่าแอดมินจะตรวจ</p>
-  <ModerationQueue reviews={reviewRows.results} corrections={correctionRows.results} client:load />
+  <ModerationQueue reviews={reviews} corrections={corrections} client:load />
 </AdminLayout>

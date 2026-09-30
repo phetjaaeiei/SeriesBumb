@@ -1,25 +1,20 @@
+import { AUDIO_LIMITS } from '../domain/audio';
+import { getRecordId } from '../repositories/admin.repo';
+import {
+  deleteDeletingAudio, getAudioFileRow, getAudioUsageRows, insertAudioReservation, listAudioFiles, lockAudioForDelete, lockAudioForSigning,
+  lockPendingAudioUpload, markAudioCheckFailed, markCheckedAudioReady, markUploadedAudioReady, markUploadingAudioFailed, reserveAudioDownload,
+  restoreAudioSignState, type AudioFileRow,
+} from '../repositories/audio.repo';
 import { audioStore, supabaseAudioStore, type AudioEnvironment, type AudioStore, type DirectAudioStore } from '../storage/audio-store';
 import { AudioArchiveError, type AudioFile, type AudioProvider, type AudioUsage } from './audio-types';
 import { audioFormat, canonicalDriveUrl, validAudioSignature, validatedAudioStream } from './audio-validation';
 export { AudioArchiveError } from './audio-types';
 export type { AudioEnvironment } from '../storage/audio-store';
+export { AUDIO_LIMITS };
 
-export const AUDIO_LIMITS = {
-  supabase: { storage: 900_000_000, downloads: 4_000_000_000, file: 50_000_000, signedUpload: 52_428_800, requests: 20_000 },
-  firebase: { storage: 4_000_000_000, downloads: 40_000_000_000, file: 50_000_000, requests: 20_000 },
-} as const;
-
-interface AudioRow extends AudioFile { objectKey: string | null; updatedAt: number; signedAt: number | null }
-const FILE_FIELDS = 'id, title, filename, provider, size, contentType, createdAt, note, songId, tapeId, driveUrl, status';
 const MAX_FILES = 10_000;
 const SIGNED_UPLOAD_TTL_MS = 2 * 60 * 60_000;
 const SIGNED_UPLOAD_DELETE_GRACE_MS = 15 * 60_000;
-// Reserve the bucket's maximum per-file size even before signing, so any
-// pending file can receive a token later without exceeding the free cap.
-// Recheck the real bucket limit before every signature to detect config drift.
-// A deleting row without signedAt holds at most its size: it was verified ready,
-// never signed, or uploaded through the Worker's size-checked stream.
-const SUPABASE_CHARGED_SIZE = `CASE WHEN status = 'ready' OR (status = 'deleting' AND signedAt IS NULL) THEN size ELSE ${AUDIO_LIMITS.supabase.signedUpload} END`;
 
 function text(value: unknown, label: string, max: number, required = false): string | null {
   if (value === undefined || value === null || value === '') {
@@ -43,15 +38,9 @@ function enabled(env: AudioEnvironment, provider: AudioProvider): boolean {
 }
 
 export async function audioUsage(env: AudioEnvironment): Promise<AudioUsage[]> {
-  const results = await env.DB.batch([
-    env.DB.prepare(`SELECT provider, SUM(CASE WHEN status = 'ready' THEN size ELSE 0 END) AS usedBytes,
-      SUM(CASE WHEN status != 'ready' THEN CASE WHEN provider = 'supabase' THEN ${SUPABASE_CHARGED_SIZE} ELSE size END ELSE 0 END) AS reservedBytes FROM audio_file GROUP BY provider`),
-    env.DB.prepare('SELECT provider, SUM(bytes) AS bytes FROM audio_download_usage WHERE day >= ? GROUP BY provider').bind(downloadWindow().since),
-    env.DB.prepare('SELECT imageBytes FROM site_stats WHERE id = 1'),
-  ]);
-  const totals = results[0].results as { provider: AudioProvider; usedBytes: number; reservedBytes: number }[];
-  const downloads = results[1].results as { provider: AudioProvider; bytes: number }[];
-  const imageBytes = Number((results[2].results as { imageBytes: number }[])[0]?.imageBytes ?? 0);
+  const usage = await getAudioUsageRows(env.DB, downloadWindow().since);
+  const { totals, downloads } = usage;
+  const imageBytes = Number(usage.imageBytes ?? 0);
   return (['supabase', 'firebase', 'drive'] as const).map(provider => {
     const total = totals.find(row => row.provider === provider);
     const active = enabled(env, provider);
@@ -70,21 +59,20 @@ export async function audioUsage(env: AudioEnvironment): Promise<AudioUsage[]> {
 
 export async function listAudio(env: AudioEnvironment, query = '', cursor: string | null = null): Promise<{ files: AudioFile[]; nextCursor: string | null; usage: AudioUsage[] }> {
   if (query.length > 200) throw new AudioArchiveError(400, 'คำค้นยาวเกินไป');
-  const values: (string | number)[] = [];
-  const conditions: string[] = [];
-  if (query.trim()) { conditions.push("(title LIKE ? ESCAPE '\\' OR filename LIKE ? ESCAPE '\\')"); const search = `%${query.trim().replace(/[\\%_]/gu, '\\$&')}%`; values.push(search, search); }
+  const search = query.trim() ? `%${query.trim().replace(/[\\%_]/gu, '\\$&')}%` : null;
+  let before: [number, string] | null = null;
   if (cursor) {
     try {
       if (cursor.length > 300) throw new Error('invalid');
       const decoded: unknown = JSON.parse(atob(cursor));
       if (!Array.isArray(decoded) || decoded.length !== 2 || !Number.isSafeInteger(decoded[0]) || typeof decoded[1] !== 'string' || !/^[a-f0-9-]{36}$/u.test(decoded[1])) throw new Error('invalid');
-      conditions.push('(createdAt < ? OR (createdAt = ? AND id < ?))'); values.push(decoded[0], decoded[0], decoded[1]);
+      before = [decoded[0], decoded[1]];
     } catch { throw new AudioArchiveError(400, 'ตำแหน่งหน้ารายการไม่ถูกต้อง'); }
   }
-  const result = await env.DB.prepare(`SELECT ${FILE_FIELDS} FROM audio_file ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''} ORDER BY createdAt DESC, id DESC LIMIT 51`).bind(...values).all<AudioFile>();
-  const files = result.results.slice(0, 50);
+  const results = await listAudioFiles(env.DB, search, before);
+  const files = results.slice(0, 50);
   const last = files.at(-1);
-  return { files, nextCursor: result.results.length > 50 && last ? btoa(JSON.stringify([last.createdAt, last.id])) : null, usage: await audioUsage(env) };
+  return { files, nextCursor: results.length > 50 && last ? btoa(JSON.stringify([last.createdAt, last.id])) : null, usage: await audioUsage(env) };
 }
 
 export async function reserveAudio(env: AudioEnvironment, input: unknown, userId: string): Promise<{ file: AudioFile; uploadUrl?: string }> {
@@ -107,26 +95,22 @@ export async function reserveAudio(env: AudioEnvironment, input: unknown, userId
   const note = text(value.note, 'หมายเหตุ', 2000);
   const songId = text(value.songId, 'รหัสเพลง', 100);
   const tapeId = text(value.tapeId, 'รหัสเทป', 100);
-  if (songId && !await env.DB.prepare('SELECT id FROM song WHERE id = ?').bind(songId).first()) throw new AudioArchiveError(400, 'ไม่พบเพลงที่ต้องการเชื่อมโยง');
-  if (tapeId && !await env.DB.prepare('SELECT id FROM tape WHERE id = ?').bind(tapeId).first()) throw new AudioArchiveError(400, 'ไม่พบเทปที่ต้องการเชื่อมโยง');
+  if (songId && !await getRecordId(env.DB, 'song', songId)) throw new AudioArchiveError(400, 'ไม่พบเพลงที่ต้องการเชื่อมโยง');
+  if (tapeId && !await getRecordId(env.DB, 'tape', tapeId)) throw new AudioArchiveError(400, 'ไม่พบเทปที่ต้องการเชื่อมโยง');
   const id = crypto.randomUUID();
   const now = Date.now();
   const objectKey = provider === 'drive' ? null : `audio/${id}/${id}.${filename.split('.').at(-1)!.toLowerCase()}`;
   const status = provider === 'drive' ? 'ready' : 'pending';
   // One serialized D1 statement counts every reservation, so simultaneous tabs cannot oversubscribe.
-  const charge = provider === 'supabase' ? SUPABASE_CHARGED_SIZE : 'size';
-  const condition = provider === 'drive' ? '' : `AND (SELECT COALESCE(SUM(${charge}), 0) FROM audio_file WHERE provider = ?) + ? ${provider === 'firebase' ? '+ (SELECT imageBytes FROM site_stats WHERE id = 1)' : ''} <= ?`;
-  const bindings = [id, title, filename, provider, size, contentType, objectKey, driveUrl, note, songId, tapeId, status, userId, now, now, MAX_FILES];
-  if (provider !== 'drive') bindings.push(provider, provider === 'supabase' ? AUDIO_LIMITS.supabase.signedUpload : size, AUDIO_LIMITS[provider].storage);
-  const row = await env.DB.prepare(`INSERT INTO audio_file (id,title,filename,provider,size,contentType,objectKey,driveUrl,note,songId,tapeId,status,createdBy,createdAt,updatedAt)
-    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM audio_file) < ? ${condition} RETURNING ${FILE_FIELDS}`).bind(...bindings).first<AudioFile>();
+  const quota = provider === 'drive' ? null : { reserveBytes: provider === 'supabase' ? AUDIO_LIMITS.supabase.signedUpload : size, storageLimit: AUDIO_LIMITS[provider].storage };
+  const row = await insertAudioReservation(env.DB, { id, title, filename, provider, size, contentType, objectKey, driveUrl, note, songId, tapeId, status, createdBy: userId, now }, MAX_FILES, quota);
   if (!row) throw new AudioArchiveError(409, 'พื้นที่เก็บไฟล์หรือจำนวนรายการถึงเพดานแล้ว กรุณาลบรายการที่ไม่ใช้ก่อน');
   return { file: row, ...(provider === 'drive' ? {} : { uploadUrl: `/admin/api/audio/${id}/upload` }) };
 }
 
-async function fileRow(env: AudioEnvironment, id: string): Promise<AudioRow> {
+async function fileRow(env: AudioEnvironment, id: string): Promise<AudioFileRow> {
   if (!/^[a-f0-9-]{36}$/u.test(id)) throw new AudioArchiveError(404, 'ไม่พบไฟล์');
-  const row = await env.DB.prepare(`SELECT ${FILE_FIELDS}, objectKey, updatedAt, signedAt FROM audio_file WHERE id = ?`).bind(id).first<AudioRow>();
+  const row = await getAudioFileRow(env.DB, id);
   if (!row) throw new AudioArchiveError(404, 'ไม่พบไฟล์');
   return row;
 }
@@ -152,10 +136,7 @@ export async function signAudio(env: AudioEnvironment, id: string, getStore: (en
   // guard also blocks signing any legacy pending row if old data exceeds cap.
   let locked;
   try {
-    locked = await env.DB.prepare(`UPDATE audio_file SET status = 'uploading', signedAt = ?, updatedAt = ? WHERE id = ? AND provider = 'supabase'
-      AND status = ? AND signedAt IS ?
-      AND (SELECT COALESCE(SUM(${SUPABASE_CHARGED_SIZE}), 0) FROM audio_file WHERE provider = 'supabase') <= ? RETURNING id`)
-      .bind(signedAt, signedAt, id, row.status, row.signedAt, AUDIO_LIMITS.supabase.storage).first();
+    locked = await lockAudioForSigning(env.DB, id, signedAt, row.status, row.signedAt, AUDIO_LIMITS.supabase.storage);
   } catch (error) {
     console.error('audio_sign_lock_failed', error instanceof Error ? error.name : 'unknown');
     throw error;
@@ -167,8 +148,7 @@ export async function signAudio(env: AudioEnvironment, id: string, getStore: (en
   } catch (error) {
     if (!(error instanceof AudioArchiveError)) console.error('audio_sign_provider_failed', error instanceof Error ? error.name : 'unknown');
     // If no URL reached the caller, restore the previous reservation state.
-    await env.DB.prepare("UPDATE audio_file SET status = ?, signedAt = ?, updatedAt = ? WHERE id = ? AND status = 'uploading' AND signedAt = ?")
-      .bind(row.status, row.signedAt, Date.now(), id, signedAt).run();
+    await restoreAudioSignState(env.DB, id, row.status, row.signedAt, Date.now(), signedAt);
     throw error;
   }
 }
@@ -183,15 +163,15 @@ export async function finalizeAudio(env: AudioEnvironment, id: string, getStore:
   const metadata = await store.head(row.objectKey);
   if (!metadata) throw new AudioArchiveError(409, 'ยังไม่พบไฟล์ใน Supabase กรุณารอให้อัปโหลดเสร็จ');
   if (metadata.size !== row.size || metadata.contentType !== row.contentType) {
-    await env.DB.prepare("UPDATE audio_file SET status = 'failed', updatedAt = ? WHERE id = ? AND status IN ('uploading', 'failed')").bind(Date.now(), id).run();
+    await markAudioCheckFailed(env.DB, id, Date.now());
     throw new AudioArchiveError(400, 'ขนาดหรือชนิดไฟล์ใน Supabase ไม่ตรงกับที่จองไว้ กรุณาลบรายการนี้');
   }
   const prefix = await store.prefix(row.objectKey, row.size);
   if (!validAudioSignature(prefix, row.filename)) {
-    await env.DB.prepare("UPDATE audio_file SET status = 'failed', updatedAt = ? WHERE id = ? AND status IN ('uploading', 'failed')").bind(Date.now(), id).run();
+    await markAudioCheckFailed(env.DB, id, Date.now());
     throw new AudioArchiveError(400, 'เนื้อหาไฟล์ไม่ใช่ไฟล์เพลงชนิดที่ระบุ กรุณาลบรายการนี้');
   }
-  const ready = await env.DB.prepare(`UPDATE audio_file SET status = 'ready', updatedAt = ? WHERE id = ? AND status IN ('uploading', 'failed') RETURNING ${FILE_FIELDS}`).bind(Date.now(), id).first<AudioFile>();
+  const ready = await markCheckedAudioReady(env.DB, id, Date.now());
   if (ready) return ready;
   const current = await fileRow(env, id);
   if (current.status === 'ready') return current;
@@ -209,7 +189,7 @@ export async function uploadAudio(env: AudioEnvironment, id: string, request: Re
   if (request.headers.has('Content-Encoding')) throw new AudioArchiveError(400, 'ไม่รองรับไฟล์ที่บีบอัดระหว่างส่ง');
   const contentType = audioFormat(row.filename, request.headers.get('Content-Type') ?? '').contentType;
   if (contentType !== row.contentType) throw new AudioArchiveError(400, 'ชนิดไฟล์ไม่ตรงกับที่จองไว้');
-  const locked = await env.DB.prepare("UPDATE audio_file SET status = 'uploading', updatedAt = ? WHERE id = ? AND status = 'pending' RETURNING id").bind(Date.now(), id).first();
+  const locked = await lockPendingAudioUpload(env.DB, id, Date.now());
   if (!locked) throw new AudioArchiveError(409, 'ไฟล์นี้กำลังอัปโหลดอยู่แล้ว');
   const deadline = AbortSignal.timeout(120_000);
   try {
@@ -217,12 +197,12 @@ export async function uploadAudio(env: AudioEnvironment, id: string, request: Re
     deadline.throwIfAborted();
     await store.put(row.objectKey, body.stream, row.size, row.contentType, deadline);
     if (!body.isComplete()) { await body.stream.cancel().catch(() => undefined); throw new AudioArchiveError(502, 'ผู้ให้บริการรับไฟล์ไม่ครบ'); }
-    const ready = await env.DB.prepare(`UPDATE audio_file SET status = 'ready', updatedAt = ? WHERE id = ? AND status = 'uploading' RETURNING ${FILE_FIELDS}`).bind(Date.now(), id).first<AudioFile>();
+    const ready = await markUploadedAudioReady(env.DB, id, Date.now());
     if (!ready) throw new AudioArchiveError(409, 'สถานะไฟล์เปลี่ยนระหว่างอัปโหลด');
     return ready;
   } catch (error) {
     // Unknown remote state keeps its full reservation until an explicit successful delete.
-    await env.DB.prepare("UPDATE audio_file SET status = 'failed', updatedAt = ? WHERE id = ? AND status = 'uploading'").bind(Date.now(), id).run();
+    await markUploadingAudioFailed(env.DB, id, Date.now());
     if (error instanceof AudioArchiveError) throw error;
     throw new AudioArchiveError(502, 'อัปโหลดไม่สำเร็จ พื้นที่ยังถูกจองไว้ กรุณาลบรายการก่อนลองใหม่');
   }
@@ -234,11 +214,7 @@ export async function reserveDownload(env: AudioEnvironment, provider: 'supabase
   // Calendar-month resets can straddle a provider's billing cycle. Reserving over
   // 32 UTC date buckets safely covers every possible 31-day billing period.
   // The aggregate guard and UPSERT are one serialized statement, including races.
-  const result = await env.DB.prepare(`INSERT INTO audio_download_usage (provider,day,bytes,requests)
-    SELECT ?,?,?,1 WHERE (SELECT COALESCE(SUM(bytes), 0) FROM audio_download_usage WHERE provider = ? AND day >= ?) + ? <= ?
-      AND (SELECT COALESCE(SUM(requests), 0) FROM audio_download_usage WHERE provider = ? AND day >= ?) < ?
-    ON CONFLICT(provider,day) DO UPDATE SET bytes = bytes + excluded.bytes, requests = requests + 1 RETURNING bytes`)
-    .bind(provider, day, size, provider, since, size, limits.downloads, provider, since, limits.requests).first();
+  const result = await reserveAudioDownload(env.DB, provider, day, since, size, limits.downloads, limits.requests);
   if (!result) throw new AudioArchiveError(429, 'ถึงเพดานดาวน์โหลดในช่วง 32 วันที่ผ่านมาแล้ว ระบบหยุดเพื่อควบคุมค่าใช้จ่าย');
 }
 
@@ -283,10 +259,9 @@ export async function deleteAudio(env: AudioEnvironment, id: string, getStore = 
   if (row.status === 'uploading' && row.updatedAt > staleBefore) throw new AudioArchiveError(409, 'ไฟล์กำลังอัปโหลด กรุณารอให้เสร็จก่อนลบ หากค้างจะลบได้หลัง 15 นาที');
   const signedStaleBefore = now - SIGNED_UPLOAD_TTL_MS - SIGNED_UPLOAD_DELETE_GRACE_MS;
   // A verified ready object's token has expired by now, so it keeps charging only its size.
-  const locked = await env.DB.prepare(`UPDATE audio_file SET status = 'deleting', signedAt = CASE WHEN status = 'ready' THEN NULL ELSE signedAt END, updatedAt = ?
-    WHERE id = ? AND (signedAt IS NULL OR signedAt <= ?) AND (status != 'uploading' OR updatedAt <= ?) RETURNING id`).bind(now, id, signedStaleBefore, staleBefore).first();
+  const locked = await lockAudioForDelete(env.DB, id, now, signedStaleBefore, staleBefore);
   if (!locked) throw new AudioArchiveError(409, 'สถานะไฟล์เปลี่ยน กรุณาลองใหม่');
   if (row.provider !== 'drive') await getStore(env, row.provider, true).delete(row.objectKey!);
   // Retrying a failed deletion is safe; bytes are released only after remote success.
-  await env.DB.prepare("DELETE FROM audio_file WHERE id = ? AND status = 'deleting'").bind(id).run();
+  await deleteDeletingAudio(env.DB, id);
 }

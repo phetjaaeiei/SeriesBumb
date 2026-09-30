@@ -1,0 +1,10 @@
+// Parity harness seeder (local only). Shares the app's D1 database_id so both read the same local file.
+{
+  "name": "seriesbumb-parity-seed",
+  "main": "seed-worker.ts",
+  "compatibility_date": "2026-09-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "seriesbumb", "database_id": "7dc0ce4b-611d-4188-b6c9-9af328f305d3", "migrations_dir": "../../migrations" }
+  ]
+}

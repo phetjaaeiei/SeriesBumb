@@ -1,32 +1,13 @@
 ---
 import { db } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
-import { decodeCursor, encodeCursor } from '../../domain/cursor';
-import { isProvince } from '../../domain/provinces';
 import { artistStatusLabel, artistTypeLabel } from '../../domain/format';
 import { CATALOG_LETTERS } from '../../domain/thai';
-import type { ArtistStatus, ArtistType } from '../../domain/enums';
+import { loadArtists } from '../../loaders/artists';
 
 const params = Astro.url.searchParams;
-const rawProvince = params.get('province');
-const province = rawProvince && isProvince(rawProvince) ? rawProvince : null;
 const letters = CATALOG_LETTERS;
-const visibleArtist = "(publishedTapeCount > 0 OR EXISTS (SELECT 1 FROM song_artist sa JOIN song s ON s.id = sa.songId WHERE sa.artistId = artist.id AND s.isPublic = 1))";
-const defaultLetter = province ? null : await db().prepare(`SELECT nameSort FROM artist WHERE ${visibleArtist} ORDER BY nameSort, id LIMIT 1`).first<{ nameSort: string }>();
-const requested = params.get('l');
-const letter = province ? null : requested && letters.includes(requested) ? requested : defaultLetter?.nameSort.slice(1, 2) ?? null;
-const cursor = decodeCursor('title', params.get('cursor'));
-const where = [visibleArtist];
-const bindings: (string | number)[] = [];
-if (province) { where.push('province = ?'); bindings.push(province); }
-else if (letter && letter !== '0-9') { where.push('nameSort >= ? AND nameSort < ?'); bindings.push(`${/[A-Z]/u.test(letter) ? '2' : '1'}${letter.toLowerCase()}`, `${/[A-Z]/u.test(letter) ? '2' : '1'}${letter.toLowerCase()}\uffff`); }
-else if (letter === '0-9') { where.push("nameSort >= '0' AND nameSort < '1'"); }
-if (cursor) { where.push('(nameSort, id) > (?, ?)'); bindings.push(cursor.key, cursor.id); }
-const rows = (await db().prepare(`SELECT id, slug, name, artistType, status, province, publishedTapeCount, nameSort FROM artist WHERE ${where.join(' AND ')} ORDER BY nameSort, id LIMIT 51`).bind(...bindings).all<{ id: string; slug: string; name: string; artistType: ArtistType | null; status: ArtistStatus; province: string | null; publishedTapeCount: number; nameSort: string }>()).results;
-const hasMore = rows.length > 50;
-const artists = rows.slice(0, 50);
-const last = artists.at(-1);
-const next = hasMore && last ? encodeCursor('title', last.nameSort, last.id) : null;
+const { province, letter, artists, next } = await loadArtists(db(), params);
 const nextParams = new URLSearchParams();
 if (province) nextParams.set('province', province);
 else if (letter) nextParams.set('l', letter);

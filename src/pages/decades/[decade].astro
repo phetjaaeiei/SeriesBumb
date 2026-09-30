@@ -2,12 +2,11 @@
 import { db } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
 import TapeResults from '../../components/ui/TapeResults.astro';
-import { getTapePage } from '../../repositories/tapes.repo';
+import { loadDecade } from '../../loaders/decades';
 const value = Astro.params.decade ?? '';
-if (!/^(19[5-9]|20[0-2])0s$/u.test(value)) return Astro.rewrite('/404');
-const decade = Number(value.slice(0, 4));
-const sort = Astro.url.searchParams.get('sort') === 'year' ? 'year' : 'new';
-const page = await getTapePage(db(), { decade, sort, cursor: Astro.url.searchParams.get('cursor') });
+const model = await loadDecade(db(), value, Astro.url.searchParams);
+if (!model) return Astro.rewrite('/404');
+const { sort, page } = model;
 const nextParams = new URLSearchParams(Astro.url.searchParams); nextParams.delete('cursor');
 ---
 <BaseLayout title={`เทปยุค ${value}`} description={`เทปเพลงไทยยุค ${value} ในคลังซีรี่ย์บั้ม`} canonicalPath={`/decades/${value}${sort === 'year' ? '?sort=year' : ''}`} noindex={Astro.url.searchParams.size > 0}>

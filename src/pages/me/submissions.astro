@@ -1,17 +1,14 @@
 ---
 import { db } from '../../platform/runtime';
 import BaseLayout from '../../components/layout/BaseLayout.astro';
-const userId = Astro.locals.user!.id;
-const [reviews, corrections] = await Promise.all([
-  db().prepare('SELECT r.id, r.status, r.rating, r.createdAt, t.title, t.slug FROM review r JOIN tape t ON t.id = r.tapeId WHERE r.userId = ? ORDER BY r.createdAt DESC LIMIT 50').bind(userId).all<{ id: string; status: string; rating: number; createdAt: number; title: string; slug: string }>(),
-  db().prepare("SELECT cs.id, cs.status, cs.proposedChange, cs.createdAt, COALESCE(a.name, t.title, s.title, 'รายการถูกลบ') AS title FROM catalog_submission cs LEFT JOIN artist a ON cs.targetKind = 'artist' AND a.id = cs.targetId LEFT JOIN tape t ON cs.targetKind = 'tape' AND t.id = cs.targetId LEFT JOIN song s ON cs.targetKind = 'song' AND s.id = cs.targetId WHERE cs.userId = ? ORDER BY cs.createdAt DESC LIMIT 50").bind(userId).all<{ id: string; status: string; proposedChange: string; createdAt: number; title: string }>(),
-]);
+import { loadMeSubmissions } from '../../loaders/me-submissions';
+const { reviews, corrections } = await loadMeSubmissions(db(), Astro.locals.user!);
 const statusLabel: Record<string, string> = { pending: 'รอตรวจ', published: 'เผยแพร่แล้ว', accepted: 'รับข้อเสนอแล้ว', rejected: 'ไม่ผ่านการตรวจ' };
 ---
 <BaseLayout title="ข้อเสนอของฉัน" noindex>
   <nav class="breadcrumb" aria-label="เส้นทาง"><a href="/me">ของฉัน</a><span>/</span>ข้อเสนอของฉัน</nav>
   <h1>ข้อเสนอของฉัน</h1>
   <p class="page-lede">ติดตามรีวิวและข้อเสนอแก้ข้อมูลที่ส่งให้แอดมินตรวจ</p>
-  <section class="section"><h2>รีวิว</h2>{reviews.results.length ? <ul class="plain-list">{reviews.results.map(row => <li><a href={`/tapes/${encodeURIComponent(row.slug)}`}>{row.title}</a> · {row.rating}/5 ดาว · {statusLabel[row.status] || row.status}</li>)}</ul> : <p class="empty-state">ยังไม่ได้ส่งรีวิว</p>}</section>
-  <section class="section"><h2>ข้อเสนอแก้ข้อมูล</h2>{corrections.results.length ? <ul class="plain-list">{corrections.results.map(row => <li><strong>{row.title}</strong> · {statusLabel[row.status] || row.status}<p class="soft">{row.proposedChange}</p></li>)}</ul> : <p class="empty-state">ยังไม่ได้เสนอแก้ข้อมูล</p>}</section>
+  <section class="section"><h2>รีวิว</h2>{reviews.length ? <ul class="plain-list">{reviews.map(row => <li><a href={`/tapes/${encodeURIComponent(row.slug)}`}>{row.title}</a> · {row.rating}/5 ดาว · {statusLabel[row.status] || row.status}</li>)}</ul> : <p class="empty-state">ยังไม่ได้ส่งรีวิว</p>}</section>
+  <section class="section"><h2>ข้อเสนอแก้ข้อมูล</h2>{corrections.length ? <ul class="plain-list">{corrections.map(row => <li><strong>{row.title}</strong> · {statusLabel[row.status] || row.status}<p class="soft">{row.proposedChange}</p></li>)}</ul> : <p class="empty-state">ยังไม่ได้เสนอแก้ข้อมูล</p>}</section>
 </BaseLayout>

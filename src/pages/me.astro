@@ -3,41 +3,13 @@ import { db, imageBaseUrl } from '../platform/runtime';
 import BaseLayout from '../components/layout/BaseLayout.astro';
 import Tabs from '../components/ui/Tabs.astro';
 import Placeholder from '../components/ui/Placeholder.astro';
-import { decodeCursor, encodeCursor } from '../domain/cursor';
 import { formatYear } from '../domain/format';
 import { imageUrl } from '../domain/urls';
+import { loadMe, type MeTab as Tab } from '../loaders/me';
 
 const user = Astro.locals.user;
 if (!user) return Astro.redirect('/login?next=%2Fme', 302);
-const userId = user.id;
-type Tab = 'liked-tapes' | 'liked-songs' | 'owned';
-type TapeEntry = { id: string; createdAt: number; slug: string; title: string; year: number | null; coverThumbKey: string | null };
-type SongEntry = { id: string; createdAt: number; slug: string; title: string; publishedTapeCount: number };
-const requestedTab = Astro.url.searchParams.get('tab');
-const activeTab: Tab = requestedTab === 'liked-songs' || requestedTab === 'owned' ? requestedTab : 'liked-tapes';
-const cursor = decodeCursor('new', Astro.url.searchParams.get('cursor'));
-
-async function tapePage(table: 'tape_like' | 'tape_owner', pageCursor: typeof cursor) {
-  const extra = pageCursor ? 'AND (e.createdAt, e.tapeId) < (?, ?)' : '';
-  const rows = (await db().prepare(`SELECT e.tapeId AS id, e.createdAt, t.slug, t.title, t.year, t.coverThumbKey FROM ${table} e JOIN tape t ON t.id = e.tapeId WHERE e.userId = ? AND t.status = 'published' ${extra} ORDER BY e.createdAt DESC, e.tapeId DESC LIMIT 49`).bind(userId, ...(pageCursor ? [pageCursor.key, pageCursor.id] : [])).all<TapeEntry>()).results;
-  const items = rows.slice(0, 48);
-  const last = items.at(-1);
-  return { items, next: rows.length > 48 && last ? encodeCursor('new', last.createdAt, last.id) : null };
-}
-
-async function songPage(pageCursor: typeof cursor) {
-  const extra = pageCursor ? 'AND (e.createdAt, e.songId) < (?, ?)' : '';
-  const rows = (await db().prepare(`SELECT e.songId AS id, e.createdAt, s.slug, s.title, s.publishedTapeCount FROM song_like e JOIN song s ON s.id = e.songId WHERE e.userId = ? AND (s.isPublic = 1 OR s.publishedTapeCount > 0) ${extra} ORDER BY e.createdAt DESC, e.songId DESC LIMIT 49`).bind(userId, ...(pageCursor ? [pageCursor.key, pageCursor.id] : [])).all<SongEntry>()).results;
-  const items = rows.slice(0, 48);
-  const last = items.at(-1);
-  return { items, next: rows.length > 48 && last ? encodeCursor('new', last.createdAt, last.id) : null };
-}
-
-const [likedTapes, likedSongs, owned] = await Promise.all([
-  tapePage('tape_like', activeTab === 'liked-tapes' ? cursor : null),
-  songPage(activeTab === 'liked-songs' ? cursor : null),
-  tapePage('tape_owner', activeTab === 'owned' ? cursor : null),
-]);
+const { likedTapes, likedSongs, owned } = await loadMe(db(), Astro.url.searchParams, user);
 const nextLink = (tab: Tab, value: string) => `/me?tab=${tab}&cursor=${encodeURIComponent(value)}#${tab}`;
 ---
 <BaseLayout title="ของฉัน" noindex>
